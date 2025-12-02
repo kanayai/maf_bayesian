@@ -32,7 +32,9 @@ for file_load_angle, file_ext in zip( sorted(data_path_h.glob("input_load_angle_
     load_angle = np.loadtxt(file_load_angle, delimiter=",")
     if (np.abs(np.rad2deg(load_angle[0,1]) - np.array(angles)) < 1e-6).any():
         input_xy_exp.append(load_angle)
-        data_exp_h.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
+        # input_xy_exp.append(load_angle)
+        # Store all columns (Left, Center, Right) instead of mean
+        data_exp_h.append(np.loadtxt(file_ext, delimiter=","))
 
 data_exp_v = []
 for file_load_angle, file_ext in zip( sorted(data_path_v.glob("input_load_angle_exp_*")),
@@ -40,7 +42,102 @@ for file_load_angle, file_ext in zip( sorted(data_path_v.glob("input_load_angle_
     load_angle = np.loadtxt(file_load_angle, delimiter=",")
     if (np.abs(np.rad2deg(load_angle[0,1]) - np.array(angles)) < 1e-6).any():
         # input_xy_exp.append(load_angle)
-        data_exp_v.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
+        # Store all columns (Left, Center, Right) instead of mean
+        data_exp_v.append(np.loadtxt(file_ext, delimiter=","))
+
+# Plot experimental data (Individual Positions)
+# Colors represent Angles: Red=45, Green=90, Blue=135
+# Markers represent Positions: Circle=Left, Square=Center, Triangle=Right
+plt.figure(figsize=(15, 6))
+position_labels = ['Left', 'Center', 'Right']
+# Colors for ANGLES now
+angle_colors = {45: 'r', 90: 'g', 135: 'b'} 
+# Markers for POSITIONS now
+pos_markers = ['o', 's', '^'] 
+
+# Horizontal Extension
+plt.subplot(1, 2, 1)
+for i in range(len(data_exp_h)):
+    load = input_xy_exp[i][:, 0]
+    angle = np.rad2deg(input_xy_exp[i][0, 1])
+    angle_key = int(round(angle))
+    c = angle_colors.get(angle_key, 'k') # Default to black if angle not found
+    
+    # Plot each column (position) separately
+    for col in range(3):
+        plt.plot(data_exp_h[i][:, col], load, color=c, marker=pos_markers[col], linestyle='-', alpha=0.3, markersize=6)
+
+plt.xlabel('Horizontal Extension [mm]')
+plt.ylabel('Load [kN]')
+plt.title('Horizontal Extension (Color=Angle, Marker=Pos)')
+plt.grid(True)
+
+# Create a custom legend
+from matplotlib.lines import Line2D
+# Angle legend (Colors)
+custom_lines_ang = [Line2D([0], [0], color='k', lw=0, label='Angles:'),
+                    Line2D([0], [0], color=angle_colors[45], lw=2, label='45°'),
+                    Line2D([0], [0], color=angle_colors[90], lw=2, label='90°'),
+                    Line2D([0], [0], color=angle_colors[135], lw=2, label='135°')]
+# Position legend (Markers)
+custom_lines_pos = [Line2D([0], [0], color='k', lw=0, label='Positions:'),
+                    Line2D([0], [0], color='k', marker=pos_markers[0], linestyle='None', label='Left'),
+                    Line2D([0], [0], color='k', marker=pos_markers[1], linestyle='None', label='Center'),
+                    Line2D([0], [0], color='k', marker=pos_markers[2], linestyle='None', label='Right')]
+
+plt.legend(handles=custom_lines_ang + custom_lines_pos, loc='best')
+
+# Vertical Extension
+plt.subplot(1, 2, 2)
+for i in range(len(data_exp_v)):
+    load = input_xy_exp[i][:, 0]
+    angle = np.rad2deg(input_xy_exp[i][0, 1])
+    angle_key = int(round(angle))
+    c = angle_colors.get(angle_key, 'k')
+    
+    for col in range(3):
+        plt.plot(data_exp_v[i][:, col], load, color=c, marker=pos_markers[col], linestyle='-', alpha=0.3, markersize=6)
+
+plt.xlabel('Vertical Extension [mm]')
+plt.ylabel('Load [kN]')
+plt.title('Vertical Extension (Color=Angle, Marker=Pos)')
+plt.legend(handles=custom_lines_ang + custom_lines_pos, loc='best')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Plot AVERAGED experimental data (Mean across positions for each experiment)
+plt.figure(figsize=(12, 5))
+# Horizontal Extension
+plt.subplot(1, 2, 1)
+for i in range(len(data_exp_h)):
+    load = input_xy_exp[i][:, 0]
+    angle = np.rad2deg(input_xy_exp[i][0, 1])
+    # Take mean across columns (positions)
+    mean_ext = data_exp_h[i].mean(axis=1)
+    plt.plot(mean_ext, load, 'o-', label=f'{angle:.0f}°')
+
+plt.xlabel('Horizontal Extension [mm]')
+plt.ylabel('Load [kN]')
+plt.title('Horizontal Extension (Mean across positions)')
+plt.grid(True)
+
+# Vertical Extension
+plt.subplot(1, 2, 2)
+for i in range(len(data_exp_v)):
+    load = input_xy_exp[i][:, 0]
+    angle = np.rad2deg(input_xy_exp[i][0, 1])
+    # Take mean across columns (positions)
+    mean_ext = data_exp_v[i].mean(axis=1)
+    plt.plot(mean_ext, load, 'o-', label=f'{angle:.0f}°')
+
+plt.xlabel('Vertical Extension [mm]')
+plt.ylabel('Load [kN]')
+plt.title('Vertical Extension (Mean across positions)')
+plt.legend() # Legend might be crowded, but shows angle for each test
+plt.grid(True)
+plt.tight_layout()
+plt.show()
     
 # simulation data
 input_xy_sim = jnp.array(np.loadtxt(data_path_h / "input_load_angle_sim.txt", delimiter=","))
@@ -62,7 +159,11 @@ add_bias_E1 = False
 # whether to add bias_alpha
 add_bias_alpha = False
 # direction = data_path.stem[-1]
-mcmc = run_inference_hv(model_n_hv, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, 
+# Prepare data for inference (take mean across sensors)
+data_exp_h_mean = [d.mean(axis=1) for d in data_exp_h]
+data_exp_v_mean = [d.mean(axis=1) for d in data_exp_v]
+
+mcmc = run_inference_hv(model_n_hv, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v, 
                      add_bias_E1=add_bias_E1, add_bias_alpha=add_bias_alpha)
 samples = mcmc.get_samples()
 
