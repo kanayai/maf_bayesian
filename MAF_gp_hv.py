@@ -3,6 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import h5py
+import numpyro
 import datetime
 from pathlib import Path
 
@@ -140,6 +141,7 @@ plt.tight_layout()
 plt.show()
     
 # simulation data
+# Convert to JAX arrays (jnp) for NumPyro compatibility (allows auto-differentiation and XLA compilation)
 input_xy_sim = jnp.array(np.loadtxt(data_path_h / "input_load_angle_sim.txt", delimiter=","))
 input_theta_sim = jnp.array(np.loadtxt(data_path_h / "input_theta_sim.txt", delimiter=","))
 data_sim_h = jnp.array(np.loadtxt(data_path_h / "data_extension_sim.txt", delimiter=",")).mean(axis=1)
@@ -147,9 +149,16 @@ data_sim_h = jnp.array(np.loadtxt(data_path_h / "data_extension_sim.txt", delimi
 data_sim_v = jnp.array(np.loadtxt(data_path_v / "data_extension_sim.txt", delimiter=",")).mean(axis=1)
 
 
-# %%
-# numpyro.render_model(model, model_args=(input_xy_exp, input_xy_sim, input_theta_sim, data_exp, data_sim))
-# data_exp_h
+# Render the model structure
+# Note: This requires graphviz to be installed (brew install graphviz)
+try:
+    graph = numpyro.render_model(model_n_hv, model_args=(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v), render_params=True)
+    graph.render('model_structure', view=False, format='png')
+    print("Model structure saved to model_structure.png")
+except Exception as e:
+    print(f"Could not render model: {e}")
+
+    
 
 # %%
 # do inference
