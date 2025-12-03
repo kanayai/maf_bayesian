@@ -121,7 +121,7 @@ rng_key = random.PRNGKey(0)
 rng_key, rng_key_prior, rng_key_post = random.split(rng_key, 3)
 
 # prediction points
-samples_load = jnp.linspace(0, 100, 100)
+samples_load = jnp.linspace(0, 10, 100)
 test_xy = []
 for i in range(len(samples_load)):
     test_xy.append(jnp.array([samples_load[i], jnp.deg2rad(angle_value)]))

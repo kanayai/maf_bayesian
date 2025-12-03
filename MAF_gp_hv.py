@@ -198,8 +198,8 @@ add_bias_E1 = False
 # whether to add bias_alpha
 add_bias_alpha = False
 # direction = data_path.stem[-1]
-# Using small sample counts for testing purposes as requested
-mcmc = run_inference_hv(model_n_hv, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v, add_bias_E1, add_bias_alpha, num_warmup=10, num_samples=10)
+# Using defaults from maf_gp.py (which are now 5000/5000)
+mcmc = run_inference_hv(model_n_hv, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v, add_bias_E1, add_bias_alpha)
 samples = mcmc.get_samples()
 
 # %%
@@ -270,6 +270,3 @@ for i in range(len(keys)):
     ax[i].set_xlabel(keys[i])
     dic[keys[i]] = samples[keys[i]]
 fig.tight_layout()
-
-
-
