@@ -25,26 +25,47 @@ data_path_v = Path("./data_extension_v")
 # data to use
 angles = [45, 90, 135] 
 
-# experimental data
-input_xy_exp = []
-data_exp_h = []
-for file_load_angle, file_ext in zip( sorted(data_path_h.glob("input_load_angle_exp_*")),
-                sorted(data_path_h.glob("data_extension_exp_*")) ):
-    load_angle = np.loadtxt(file_load_angle, delimiter=",")
-    if (np.abs(np.rad2deg(load_angle[0,1]) - np.array(angles)) < 1e-6).any():
-        input_xy_exp.append(load_angle)
-        # input_xy_exp.append(load_angle)
-        # Store all columns (Left, Center, Right) instead of mean
-        data_exp_h.append(np.loadtxt(file_ext, delimiter=","))
+# Helper function to load experimental data
+def load_experiment_data(data_path, target_angles):
+    """
+    Loads experimental data from the specified path, filtering by target angles.
+    
+    Args:
+        data_path (Path): Path to the directory containing data files.
+        target_angles (list): List of angles (in degrees) to include.
+        
+    Returns:
+        inputs: List of load/angle arrays (input_xy).
+        extensions: List of extension data arrays (data_extension).
+    """
+    inputs = []
+    extensions = []
+    
+    # Get sorted file lists to ensure matching pairs of input and data files
+    angle_files = sorted(data_path.glob("input_load_angle_exp_*"))
+    ext_files   = sorted(data_path.glob("data_extension_exp_*"))
+    
+    for angle_file, ext_file in zip(angle_files, ext_files):
+        # Load angle data (contains load and angle information)
+        load_angle = np.loadtxt(angle_file, delimiter=",")
+        
+        # Check if the angle matches one of our targets
+        # Using isclose for robust floating point comparison against the list of target angles
+        current_angle = np.rad2deg(load_angle[0, 1])
+        if np.any(np.isclose(current_angle, target_angles, atol=1e-6)):
+            inputs.append(load_angle)
+            # Store all columns (Left, Center, Right) instead of mean
+            extensions.append(np.loadtxt(ext_file, delimiter=","))
+            
+    return inputs, extensions
 
-data_exp_v = []
-for file_load_angle, file_ext in zip( sorted(data_path_v.glob("input_load_angle_exp_*")),
-                sorted(data_path_v.glob("data_extension_exp_*")) ):
-    load_angle = np.loadtxt(file_load_angle, delimiter=",")
-    if (np.abs(np.rad2deg(load_angle[0,1]) - np.array(angles)) < 1e-6).any():
-        # input_xy_exp.append(load_angle)
-        # Store all columns (Left, Center, Right) instead of mean
-        data_exp_v.append(np.loadtxt(file_ext, delimiter=","))
+# Load experimental data
+# 1. Load Horizontal Data (and capture the inputs)
+input_xy_exp, data_exp_h = load_experiment_data(data_path_h, angles)
+
+# 2. Load Vertical Data
+# Note: We ignore the inputs here (_), assuming they match the horizontal experiments
+_, data_exp_v = load_experiment_data(data_path_v, angles)
 
 # Plot experimental data (Individual Positions)
 # Colors represent Angles: Red=45, Green=90, Blue=135
@@ -141,22 +162,30 @@ plt.tight_layout()
 plt.show()
     
 # simulation data
+def load_sim_file(path, filename):
+    """Helper to load simulation data directly into a JAX array."""
+    return jnp.array(np.loadtxt(path / filename, delimiter=","))
+
 # Convert to JAX arrays (jnp) for NumPyro compatibility (allows auto-differentiation and XLA compilation)
-input_xy_sim = jnp.array(np.loadtxt(data_path_h / "input_load_angle_sim.txt", delimiter=","))
-input_theta_sim = jnp.array(np.loadtxt(data_path_h / "input_theta_sim.txt", delimiter=","))
-data_sim_h = jnp.array(np.loadtxt(data_path_h / "data_extension_sim.txt", delimiter=",")).mean(axis=1)
+input_xy_sim = load_sim_file(data_path_h, "input_load_angle_sim.txt")
+input_theta_sim = load_sim_file(data_path_h, "input_theta_sim.txt")
+data_sim_h = load_sim_file(data_path_h, "data_extension_sim.txt").mean(axis=1)
+data_sim_v = load_sim_file(data_path_v, "data_extension_sim.txt").mean(axis=1)
 
-data_sim_v = jnp.array(np.loadtxt(data_path_v / "data_extension_sim.txt", delimiter=",")).mean(axis=1)
 
+
+# Prepare data for inference (take mean across sensors)
+data_exp_h_mean = [d.mean(axis=1) for d in data_exp_h]
+data_exp_v_mean = [d.mean(axis=1) for d in data_exp_v]
 
 # Render the model structure
 # Note: This requires graphviz to be installed (brew install graphviz)
-try:
-    graph = numpyro.render_model(model_n_hv, model_args=(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v), render_params=True)
-    graph.render('model_structure', view=False, format='png')
-    print("Model structure saved to model_structure.png")
-except Exception as e:
-    print(f"Could not render model: {e}")
+#try:
+#    graph = numpyro.render_model(model_n_hv, model_args=(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v), render_params=True)
+#    graph.render('model_structure', view=False, format='png')
+#    print("Model structure saved to model_structure.png")
+#except Exception as e:
+#    print(f"Could not render model: {e}")
 
     
 
@@ -168,10 +197,6 @@ add_bias_E1 = False
 # whether to add bias_alpha
 add_bias_alpha = False
 # direction = data_path.stem[-1]
-# Prepare data for inference (take mean across sensors)
-data_exp_h_mean = [d.mean(axis=1) for d in data_exp_h]
-data_exp_v_mean = [d.mean(axis=1) for d in data_exp_v]
-
 mcmc = run_inference_hv(model_n_hv, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v, 
                      add_bias_E1=add_bias_E1, add_bias_alpha=add_bias_alpha)
 samples = mcmc.get_samples()

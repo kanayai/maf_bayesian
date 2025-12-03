@@ -15,3 +15,4 @@ wheels/
 
 # Results
 results_mcmc/*.h5
+model_structure*
