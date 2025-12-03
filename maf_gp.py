@@ -556,7 +556,7 @@ def model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp
         obs=data_v,
     )
 
-def run_inference_hv(model, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, add_bias_E1=False, add_bias_alpha=False, num_warmup=1000, num_samples=1000):
+def run_inference_hv(model, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, add_bias_E1=False, add_bias_alpha=False, num_warmup=1000, num_samples=5000):
     """
     function to run the inference with both horizontal and vertical data 
     """
@@ -587,13 +587,16 @@ def posterior_predict(rng_key, input_xy_exp, input_xy_sim, input_theta_exp, inpu
 
     # covariance matrix for data
     cov_matrix_data = cov_matrix_emulator(input_xy, input_theta, input_xy, input_theta, stdev_emulator, length_xy, length_theta) 
-    diag_line = jnp.concatenate([(stdev_measure**2 * input_xy_exp[:,0]), jnp.zeros(input_xy_sim.shape[0]+1)])
+    # Cast shape to int to avoid TracerIntegerConversionError
+    zeros_padding = jnp.zeros(int(input_xy_sim.shape[0]) + 1)
+    diag_line = jnp.concatenate([(stdev_measure**2 * input_xy_exp[:,0]), zeros_padding])
     cov_matrix_measure = jnp.diag(diag_line)
     cov_matrix_data += cov_matrix_measure
     cov_matrix_data += jnp.diag(jnp.ones(cov_matrix_data.shape[0]) * 1e-10)
 
     # covariance matrix for the interpolation points
-    test_theta_p = jnp.tile(test_theta, (test_xy.shape[0],1))
+    # Cast shape to int
+    test_theta_p = jnp.tile(test_theta, (int(test_xy.shape[0]), 1))
     cov_matrix_interp = cov_matrix_emulator(test_xy, test_theta_p, test_xy, test_theta_p, stdev_emulator, length_xy, length_theta)
 
     # covariance matrix between data and interpolation points

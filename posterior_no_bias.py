@@ -13,9 +13,8 @@ import numpyro.distributions as dist
 from numpyro.infer import Predictive
 from pathlib import Path
 import arviz as az
-import h5py
 from tqdm import tqdm
-from maf_gp import model, model_n, cov_matrix_emulator, prior_predict, posterior_predict
+from maf_gp import model_n_hv, posterior_predict
 
 jax.config.update("jax_enable_x64", True)
 matplotlib.rcParams["axes.formatter.limits"] = (-4,4)
@@ -45,7 +44,7 @@ data_path = Path("./data_extension_v")
 # data for which loading angles to use (need to change according to requirement)
 angles = [45, 90, 135] 
 # loading angle need to predict
-angle_value = 135
+angle_value = 45
 # figure save format, dpi
 fig_format = 'jpeg'
 dpi = 300
@@ -67,29 +66,50 @@ print(f"Direction: {direction}")
 
 
 # experimental data
-input_xy_exp_l = []
-data_exp_l = []
-for file_load_angle, file_ext in zip( sorted(data_path.glob("input_load_angle_exp_*")),
-                sorted(data_path.glob("data_extension_exp_*")) ):
+input_xy_exp_h = []
+data_exp_h = []
+input_xy_exp_v = []
+data_exp_v = []
+
+# Load Horizontal Data
+data_path_h = Path("data_extension_h")
+for file_load_angle, file_ext in zip( sorted(data_path_h.glob("input_load_angle_exp_*")),
+                sorted(data_path_h.glob("data_extension_exp_*")) ):
     load_angle = np.loadtxt(file_load_angle, delimiter=",")
     if (np.abs(np.rad2deg(load_angle[0,1]) - np.array(angles)) < 1e-6).any():
-        input_xy_exp_l.append(load_angle)
-        data_exp_l.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
+        input_xy_exp_h.append(load_angle)
+        data_exp_h.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
 
-if len(input_xy_exp_l) > 0: 
-    input_xy_exp = jnp.concatenate(input_xy_exp_l, axis=0)
-    data_exp = jnp.concatenate(data_exp_l, axis=0)
+# Load Vertical Data
+data_path_v = Path("data_extension_v")
+for file_load_angle, file_ext in zip( sorted(data_path_v.glob("input_load_angle_exp_*")),
+                sorted(data_path_v.glob("data_extension_exp_*")) ):
+    load_angle = np.loadtxt(file_load_angle, delimiter=",")
+    if (np.abs(np.rad2deg(load_angle[0,1]) - np.array(angles)) < 1e-6).any():
+        input_xy_exp_v.append(load_angle)
+        data_exp_v.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
 
+if len(input_xy_exp_h) > 0: 
+    input_xy_exp = jnp.concatenate(input_xy_exp_h, axis=0)
+    # Note: model_n_hv expects lists of arrays for data_exp if we want to match how it was likely trained
+    # But let's check if we need to concatenate them. 
+    # Looking at MAF_gp_hv.py, it passes data_exp_h_mean which is a LIST of arrays.
+    # So we should keep them as lists.
+    
 # simulation data
-input_xy_sim = jnp.array(np.loadtxt(data_path / "input_load_angle_sim.txt", delimiter=","))
-input_theta_sim = jnp.array(np.loadtxt(data_path / "input_theta_sim.txt", delimiter=","))
-data_sim = jnp.array(np.loadtxt(data_path / "data_extension_sim.txt", delimiter=",").mean(axis=1))
+input_xy_sim = jnp.array(np.loadtxt(data_path_h / "input_load_angle_sim.txt", delimiter=","))
+input_theta_sim = jnp.array(np.loadtxt(data_path_h / "input_theta_sim.txt", delimiter=","))
+data_sim_h = jnp.array(np.loadtxt(data_path_h / "data_extension_sim.txt", delimiter=",").mean(axis=1))
+data_sim_v = jnp.array(np.loadtxt(data_path_v / "data_extension_sim.txt", delimiter=",").mean(axis=1))
 
-# experiment date for the prediction loading angle
+# experiment date for the prediction loading angle (plotting)
+# We use the 'direction' variable to decide which one to plot
 input_xy_exp_plt = []
 data_exp_plt = []
-for file_load_angle, file_ext in zip( sorted(data_path.glob("input_load_angle_exp_*")),
-                             sorted(data_path.glob("data_extension_exp_*")) ):
+data_path_plt = data_path_v if direction == 'v' else data_path_h
+
+for file_load_angle, file_ext in zip( sorted(data_path_plt.glob("input_load_angle_exp_*")),
+                             sorted(data_path_plt.glob("data_extension_exp_*")) ):
     load_angle = np.loadtxt(file_load_angle, delimiter=",")
     if np.abs(np.rad2deg(load_angle[0,1]) - angle_value) < 1e-6:
         input_xy_exp_plt.append(load_angle)
@@ -129,8 +149,9 @@ test_xy = jnp.stack(test_xy)
 
 # Prior prediction
 print("Running prior prediction...")
-prior_predictive = Predictive(model, num_samples=500)
-prior_samples = prior_predictive(rng_key_prior, input_xy_exp_l, input_xy_sim, input_theta_sim, data_exp_l, data_sim)
+prior_predictive = Predictive(model_n_hv, num_samples=500)
+# Pass both horizontal and vertical data
+prior_samples = prior_predictive(rng_key_prior, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v)
 
 # Extract prior parameters
 prior_mean_emulator = prior_samples["mu_emulator"]
@@ -144,22 +165,22 @@ prior_theta = jnp.stack([prior_samples["E_1"], prior_samples["E_2"],
                          prior_samples["v_12"], prior_samples["v_23"], 
                          prior_samples["G_12"]], axis=1)
 
-prior_predictions = []
-for i in tqdm(range(prior_theta.shape[0])):
-    theta_i = prior_theta[i]
-    # Construct input_theta_exp for this sample (tiled for each experiment data point)
-    # input_xy_exp is concatenated, so we tile theta_i to match its length
-    input_theta_exp = jnp.tile(theta_i, (input_xy_exp.shape[0], 1))
+# Vectorized prediction function
+def predict_batch(rng_key, theta, mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure):
+    def single_predict(key, t, me, se, lx, lt, sm):
+        input_theta_exp = jnp.tile(t, (input_xy_exp.shape[0], 1))
+        # For posterior_predict, we still use the single direction data/model logic
+        # We need to decide which 'data_exp' and 'data_sim' to pass based on 'direction'
+        data_exp_target = jnp.concatenate(data_exp_v, axis=0) if direction == 'v' else jnp.concatenate(data_exp_h, axis=0)
+        data_sim_target = data_sim_v if direction == 'v' else data_sim_h
+        
+        return posterior_predict(key, input_xy_exp, input_xy_sim, input_theta_exp, input_theta_sim, 
+                                 data_exp_target, data_sim_target, test_xy, t, me, se, lx, lt, sm, direction=direction)[2]
     
-    _, _, pred = posterior_predict(random.fold_in(rng_key_prior, i), 
-                                   input_xy_exp, input_xy_sim, input_theta_exp, input_theta_sim, 
-                                   data_exp, data_sim, test_xy, theta_i, 
-                                   prior_mean_emulator[i], prior_stdev_emulator[i], 
-                                   prior_length_xy[i], prior_length_theta[i], prior_stdev_measure[i], 
-                                   direction=direction)
-    prior_predictions.append(pred)
+    return vmap(single_predict)(random.split(rng_key, theta.shape[0]), theta, mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure)
 
-prior_predictions = jnp.stack(prior_predictions)
+prior_predictions = predict_batch(rng_key_prior, prior_theta, prior_mean_emulator, prior_stdev_emulator, prior_length_xy, prior_length_theta, prior_stdev_measure)
+
 mean_prediction_prior = jnp.mean(prior_predictions, axis=0)
 percentiles_prior = jnp.percentile(prior_predictions, jnp.array([5.0, 95.0]), axis=0)
 
@@ -201,20 +222,19 @@ else:
     indices = []
 
 predictions_post = []
-for idx in tqdm(indices):
-    theta_i = post_theta[idx]
-    input_theta_exp = jnp.tile(theta_i, (input_xy_exp.shape[0], 1))
+if len(indices) > 0:
+    # Slice the parameters for the selected indices
+    post_mean_emulator_sel = post_mean_emulator[indices]
+    post_stdev_emulator_sel = post_stdev_emulator[indices]
+    post_stdev_measure_sel = post_stdev_measure[indices]
+    post_length_xy_sel = post_length_xy[indices]
+    post_length_theta_sel = post_length_theta[indices]
+    post_theta_sel = post_theta[indices]
     
-    _, _, pred = posterior_predict(random.fold_in(rng_key_post, idx), 
-                                   input_xy_exp, input_xy_sim, input_theta_exp, input_theta_sim, 
-                                   data_exp, data_sim, test_xy, theta_i, 
-                                   post_mean_emulator[idx], post_stdev_emulator[idx], 
-                                   post_length_xy[idx], post_length_theta[idx], post_stdev_measure[idx], 
-                                   direction=direction)
-    predictions_post.append(pred)
+    predictions_post = predict_batch(rng_key_post, post_theta_sel, post_mean_emulator_sel, post_stdev_emulator_sel, 
+                                     post_length_xy_sel, post_length_theta_sel, post_stdev_measure_sel)
 
 if len(predictions_post) > 0:
-    predictions_post = jnp.stack(predictions_post)
     mean_prediction_post = jnp.mean(predictions_post, axis=0)
     percentiles_post = jnp.percentile(predictions_post, jnp.array([5.0, 95.0]), axis=0)
 else:

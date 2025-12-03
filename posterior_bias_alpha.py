@@ -12,9 +12,9 @@ import numpyro.distributions as dist
 from numpyro.infer import Predictive
 from pathlib import Path
 import arviz as az
-import h5py
+import arviz as az
 from tqdm import tqdm
-from maf_gp import model, model_n, cov_matrix_emulator, prior_predict, posterior_predict
+from maf_gp import model_n_hv, posterior_predict
 
 jax.config.update("jax_enable_x64", True)
 matplotlib.rcParams["axes.formatter.limits"] = (-4,4)
@@ -69,36 +69,52 @@ direction = data_path.stem[-1]
 print(f"Direction: {direction}")
 
 # experimental data
-input_xy_exp_l = []
-data_exp_l = []
-for file_load_angle, file_ext in zip( sorted(data_path.glob("input_load_angle_exp_*")),
-                sorted(data_path.glob("data_extension_exp_*")) ):
+# experimental data
+input_xy_exp_h = []
+data_exp_h = []
+input_xy_exp_v = []
+data_exp_v = []
+
+# Load Horizontal Data
+data_path_h = Path("data_extension_h")
+for file_load_angle, file_ext in zip( sorted(data_path_h.glob("input_load_angle_exp_*")),
+                sorted(data_path_h.glob("data_extension_exp_*")) ):
     load_angle = np.loadtxt(file_load_angle, delimiter=",")
     if (np.abs(np.rad2deg(load_angle[0,1]) - np.array(angles)) < 1e-6).any():
-        input_xy_exp_l.append(load_angle)
-        data_exp_l.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
+        input_xy_exp_h.append(load_angle)
+        data_exp_h.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
 
-if len(input_xy_exp_l) > 0: 
-    input_xy_exp = jnp.concatenate(input_xy_exp_l, axis=0)
-    data_exp = jnp.concatenate(data_exp_l, axis=0)
+# Load Vertical Data
+data_path_v = Path("data_extension_v")
+for file_load_angle, file_ext in zip( sorted(data_path_v.glob("input_load_angle_exp_*")),
+                sorted(data_path_v.glob("data_extension_exp_*")) ):
+    load_angle = np.loadtxt(file_load_angle, delimiter=",")
+    if (np.abs(np.rad2deg(load_angle[0,1]) - np.array(angles)) < 1e-6).any():
+        input_xy_exp_v.append(load_angle)
+        data_exp_v.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
+
+if len(input_xy_exp_h) > 0: 
+    input_xy_exp = jnp.concatenate(input_xy_exp_h, axis=0)
     
-num_exp = len(input_xy_exp_l)
-data_size_exp = [i.shape[0] for i in input_xy_exp_l]
+num_exp = len(input_xy_exp_h)
 
-# experiment date for the prediction loading angle
+# simulation data
+input_xy_sim = jnp.array(np.loadtxt(data_path_h / "input_load_angle_sim.txt", delimiter=","))
+input_theta_sim = jnp.array(np.loadtxt(data_path_h / "input_theta_sim.txt", delimiter=","))
+data_sim_h = jnp.array(np.loadtxt(data_path_h / "data_extension_sim.txt", delimiter=",").mean(axis=1))
+data_sim_v = jnp.array(np.loadtxt(data_path_v / "data_extension_sim.txt", delimiter=",").mean(axis=1))
+
+# experiment date for the prediction loading angle (plotting)
 input_xy_exp_plt = []
 data_exp_plt = []
-for file_load_angle, file_ext in zip( sorted(data_path.glob("input_load_angle_exp_*")),
-                             sorted(data_path.glob("data_extension_exp_*")) ):
+data_path_plt = data_path_v if direction == 'v' else data_path_h
+
+for file_load_angle, file_ext in zip( sorted(data_path_plt.glob("input_load_angle_exp_*")),
+                             sorted(data_path_plt.glob("data_extension_exp_*")) ):
     load_angle = np.loadtxt(file_load_angle, delimiter=",")
     if np.abs(np.rad2deg(load_angle[0,1]) - angle_value) < 1e-6:
         input_xy_exp_plt.append(load_angle)
-        data_exp_plt.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))    
-
-# simulation data
-input_xy_sim = jnp.array(np.loadtxt(data_path / "input_load_angle_sim.txt", delimiter=","))
-input_theta_sim = jnp.array(np.loadtxt(data_path / "input_theta_sim.txt", delimiter=","))
-data_sim = jnp.array(np.loadtxt(data_path / "data_extension_sim.txt", delimiter=",").mean(axis=1))
+        data_exp_plt.append(np.loadtxt(file_ext, delimiter=",").mean(axis=1))
 
 
 # Plot prior and posterior distributions
@@ -165,7 +181,7 @@ x_labels_b = []
 dic_b = {}
 bias_exists = "b_1_alpha" in f
 if bias_exists:
-    for i in range(len(input_xy_exp_l)):
+    for i in range(len(input_xy_exp_h)):
         keys_b.append("b_"+str(i+1)+"_alpha")
         x_labels_b.append("$b_{\\alpha,"+str(i+1)+"}$ [rad]")
         dic_b["$b_{\\alpha,"+str(i+1)+"}$ [rad]"] = f[keys_b[i]]
@@ -282,8 +298,8 @@ test_xy = jnp.stack(test_xy)
 
 # Prior prediction
 print("Running prior prediction...")
-prior_predictive = Predictive(model, num_samples=500)
-prior_samples = prior_predictive(rng_key_prior, input_xy_exp_l, input_xy_sim, input_theta_sim, data_exp_l, data_sim, add_bias_alpha=True)
+prior_predictive = Predictive(model_n_hv, num_samples=500)
+prior_samples = prior_predictive(rng_key_prior, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, add_bias_alpha=True)
 
 # Extract prior parameters
 prior_mean_emulator = prior_samples["mu_emulator"]
@@ -297,35 +313,48 @@ prior_theta = jnp.stack([prior_samples["E_1"], prior_samples["E_2"],
                          prior_samples["v_12"], prior_samples["v_23"], 
                          prior_samples["G_12"]], axis=1)
 
-prior_predictions = []
-for i in tqdm(range(prior_theta.shape[0])):
-    theta_i = prior_theta[i]
-    
-    # Construct input_xy_exp for this sample with bias
-    # Note: bias is added to angle (index 1) of input_xy_exp
-    input_xy_exp_biased = []
+# Vectorized prediction function
+def predict_batch_biased(rng_key, theta, mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure, samples_dict):
+    def single_predict(key, t, me, se, lx, lt, sm, bias_vals):
+        # Construct biased input_xy_exp
+        # We need to reconstruct the list of inputs with bias added
+        input_xy_exp_biased_list = []
+        for k in range(num_exp):
+            xy_b = input_xy_exp_h[k] # Base inputs
+            # Add bias to angle (index 1)
+            # bias_vals[k] corresponds to b_{k+1}_alpha
+            xy_b = xy_b.at[:,1].add(bias_vals[k])
+            input_xy_exp_biased_list.append(xy_b)
+        input_xy_exp_biased = jnp.concatenate(input_xy_exp_biased_list, axis=0)
+        
+        input_theta_exp = jnp.tile(t, (input_xy_exp_biased.shape[0], 1))
+        
+        # Add sampled bias for prediction
+        key, subkey = random.split(key)
+        bias_new = dist.Normal(0, 0.01).sample(subkey)
+        test_xy_b = test_xy.at[:,1].add(bias_new)
+        
+        # Select target data based on direction
+        data_exp_target = jnp.concatenate(data_exp_v, axis=0) if direction == 'v' else jnp.concatenate(data_exp_h, axis=0)
+        data_sim_target = data_sim_v if direction == 'v' else data_sim_h
+
+        return posterior_predict(key, input_xy_exp_biased, input_xy_sim, input_theta_exp, input_theta_sim, 
+                                 data_exp_target, data_sim_target, test_xy_b, t, me, se, lx, lt, sm, direction=direction)[2]
+
+    # Extract bias values for all samples
+    # bias_vals will be shape (num_samples, num_exp)
+    bias_vals_list = []
     for k in range(num_exp):
         bias_key = "b_"+str(k+1)+"_alpha"
-        xy_b = input_xy_exp_l[k]
-        if bias_key in prior_samples:
-            bias_val = prior_samples[bias_key][i]
-            xy_b = xy_b.at[:,1].add(bias_val)
-        input_xy_exp_biased.append(xy_b)
-    input_xy_exp_biased = jnp.concatenate(input_xy_exp_biased, axis=0)
+        if bias_key in samples_dict:
+            bias_vals_list.append(samples_dict[bias_key])
+        else:
+            bias_vals_list.append(jnp.zeros(theta.shape[0]))
+    bias_vals = jnp.stack(bias_vals_list, axis=1)
     
-    input_theta_exp = jnp.tile(theta_i, (input_xy_exp_biased.shape[0], 1))
-    
-    # Add sampled bias for prediction
-    bias_new = dist.Normal(0, 0.01).sample(random.fold_in(rng_key_prior, i))
-    test_xy_b = test_xy.at[:,1].add(bias_new)
-    
-    _, _, pred = posterior_predict(random.fold_in(rng_key_prior, i), 
-                                   input_xy_exp_biased, input_xy_sim, input_theta_exp, input_theta_sim, 
-                                   data_exp, data_sim, test_xy_b, theta_i, 
-                                   prior_mean_emulator[i], prior_stdev_emulator[i], 
-                                   prior_length_xy[i], prior_length_theta[i], prior_stdev_measure[i], 
-                                   direction=direction)
-    prior_predictions.append(pred)
+    return vmap(single_predict)(random.split(rng_key, theta.shape[0]), theta, mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure, bias_vals)
+
+prior_predictions = predict_batch_biased(rng_key_prior, prior_theta, prior_mean_emulator, prior_stdev_emulator, prior_length_xy, prior_length_theta, prior_stdev_measure, prior_samples)
 
 prior_predictions = jnp.stack(prior_predictions)
 mean_prediction_prior = jnp.mean(prior_predictions, axis=0)
@@ -368,36 +397,28 @@ else:
     indices = []
 
 predictions_post = []
-for idx in tqdm(indices):
-    theta_i = post_theta[idx]
+if len(indices) > 0:
+    # Slice parameters
+    post_mean_emulator_sel = post_mean_emulator[indices]
+    post_stdev_emulator_sel = post_stdev_emulator[indices]
+    post_stdev_measure_sel = post_stdev_measure[indices]
+    post_length_xy_sel = post_length_xy[indices]
+    post_length_theta_sel = post_length_theta[indices]
+    post_theta_sel = post_theta[indices]
     
-    # Construct input_xy_exp for this sample with bias
-    input_xy_exp_biased = []
+    # Slice bias values from 'f' dictionary
+    # We need to pass a sliced dictionary or handle slicing inside the helper
+    # Let's create a sliced dictionary for bias keys
+    samples_dict_sel = {}
     for k in range(num_exp):
         bias_key = "b_"+str(k+1)+"_alpha"
-        xy_b = input_xy_exp_l[k]
         if bias_key in f:
-            bias_val = f[bias_key][idx]
-            xy_b = xy_b.at[:,1].add(bias_val)
-        input_xy_exp_biased.append(xy_b)
-    input_xy_exp_biased = jnp.concatenate(input_xy_exp_biased, axis=0)
-    
-    input_theta_exp = jnp.tile(theta_i, (input_xy_exp_biased.shape[0], 1))
-    
-    # Add sampled bias for prediction
-    bias_new = dist.Normal(0, 0.01).sample(random.fold_in(rng_key_post, idx))
-    test_xy_b = test_xy.at[:,1].add(bias_new)
-    
-    _, _, pred = posterior_predict(random.fold_in(rng_key_post, idx), 
-                                   input_xy_exp_biased, input_xy_sim, input_theta_exp, input_theta_sim, 
-                                   data_exp, data_sim, test_xy_b, theta_i, 
-                                   post_mean_emulator[idx], post_stdev_emulator[idx], 
-                                   post_length_xy[idx], post_length_theta[idx], post_stdev_measure[idx], 
-                                   direction=direction)
-    predictions_post.append(pred)
+            samples_dict_sel[bias_key] = f[bias_key][indices]
+            
+    predictions_post = predict_batch_biased(rng_key_post, post_theta_sel, post_mean_emulator_sel, post_stdev_emulator_sel, 
+                                            post_length_xy_sel, post_length_theta_sel, post_stdev_measure_sel, samples_dict_sel)
 
 if len(predictions_post) > 0:
-    predictions_post = jnp.stack(predictions_post)
     mean_prediction_post = jnp.mean(predictions_post, axis=0)
     percentiles_post = jnp.percentile(predictions_post, jnp.array([5.0, 95.0]), axis=0)
 else:
