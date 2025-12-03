@@ -203,32 +203,38 @@ samples = mcmc.get_samples()
 
 # %%
 # save posterior samples
-date_str = datetime.datetime.now().strftime("_%Y_%m_%d_%H_%M_%S_")
-file_path = Path("results_mcmc")
-file_path.mkdir(exist_ok=True)
-if len(angles) == 3:
-    suffix = "hv"
-else:
-    suffix = "hv"
-    for i in angles:
-        suffix = suffix + '_' + str(i)
+# Helper to save posterior samples
+def save_posterior_samples(samples, angles, add_bias_E1, add_bias_alpha, output_dir="results_mcmc"):
+    """Saves posterior samples to an HDF5 file with a timestamped filename."""
+    date_str = datetime.datetime.now().strftime("_%Y_%m_%d_%H_%M_%S_")
+    output_path = Path(output_dir)
+    output_path.mkdir(exist_ok=True)
 
-if not add_bias_E1 and not add_bias_alpha:
-    prefix = "no_bias_"
-else:
-    prefix = "bias_"
+    # Construct filename suffix based on angles
+    if len(angles) == 3:
+        suffix = "hv"
+    else:
+        suffix = "hv" + "".join([f"_{i}" for i in angles])
 
-if add_bias_E1:
-    prefix = prefix + "E1_"
-if add_bias_alpha:
-    prefix = prefix + "alpha_"
+    # Construct filename prefix based on bias settings
+    prefix = "bias_" if (add_bias_E1 or add_bias_alpha) else "no_bias_"
+    if add_bias_E1:
+        prefix += "E1_"
+    if add_bias_alpha:
+        prefix += "alpha_"
 
-file_path =  file_path.joinpath(prefix + suffix + date_str + "MAF_linear.h5")
+    filename = f"{prefix}{suffix}{date_str}MAF_linear.h5"
+    file_path = output_path / filename
+
+    # Save to HDF5
+    with h5py.File(file_path, 'w') as f:
+        for key, value in samples.items():
+            f.create_dataset(key, data=value)
     
-f = h5py.File(file_path, 'w')
-for key in samples.keys():
-    f.create_dataset(key, data=samples[key])
-f.close()
+    print(f"Posterior samples saved to {file_path}")
+
+# save posterior samples
+save_posterior_samples(samples, angles, add_bias_E1, add_bias_alpha)
 
 # %%
 # plot prior-posterior distributions
