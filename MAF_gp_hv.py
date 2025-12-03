@@ -2,6 +2,7 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import arviz as az
 import h5py
 import numpyro
 import datetime
@@ -197,44 +198,55 @@ add_bias_E1 = False
 # whether to add bias_alpha
 add_bias_alpha = False
 # direction = data_path.stem[-1]
-mcmc = run_inference_hv(model_n_hv, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v, 
-                     add_bias_E1=add_bias_E1, add_bias_alpha=add_bias_alpha)
+# Using small sample counts for testing purposes as requested
+mcmc = run_inference_hv(model_n_hv, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_mean, data_exp_v_mean, data_sim_h, data_sim_v, add_bias_E1, add_bias_alpha, num_warmup=10, num_samples=10)
 samples = mcmc.get_samples()
 
 # %%
-# save posterior samples
-# Helper to save posterior samples
-def save_posterior_samples(samples, angles, add_bias_E1, add_bias_alpha, output_dir="results_mcmc"):
-    """Saves posterior samples to an HDF5 file with a timestamped filename."""
-    date_str = datetime.datetime.now().strftime("_%Y_%m_%d_%H_%M_%S_")
-    output_path = Path(output_dir)
-    output_path.mkdir(exist_ok=True)
-
-    # Construct filename suffix based on angles
-    if len(angles) == 3:
-        suffix = "hv"
-    else:
-        suffix = "hv" + "".join([f"_{i}" for i in angles])
-
-    # Construct filename prefix based on bias settings
-    prefix = "bias_" if (add_bias_E1 or add_bias_alpha) else "no_bias_"
-    if add_bias_E1:
-        prefix += "E1_"
-    if add_bias_alpha:
-        prefix += "alpha_"
-
-    filename = f"{prefix}{suffix}{date_str}MAF_linear.h5"
-    file_path = output_path / filename
-
-    # Save to HDF5
-    with h5py.File(file_path, 'w') as f:
-        for key, value in samples.items():
-            f.create_dataset(key, data=value)
+def save_posterior_samples(mcmc, file_path):
+    """
+    Save posterior samples to a NetCDF file using ArviZ.
+    """
+    # Create directory if it doesn't exist
+    file_path.parent.mkdir(parents=True, exist_ok=True)
     
-    print(f"Posterior samples saved to {file_path}")
+    # Convert to InferenceData
+    # We can add more information like prior, posterior_predictive, etc. if available
+    # For now, we just convert the MCMC object which contains posterior samples
+    idata = az.from_numpyro(mcmc)
+    
+    # Save to NetCDF
+    # Change extension to .nc if it was .h5
+    if file_path.suffix == '.h5':
+        file_path = file_path.with_suffix('.nc')
+        
+    print(f"Saving posterior samples to {file_path}...")
+    az.to_netcdf(idata, file_path)
+    print("Done.")
+
+# Prepare filename for saving
+output_dir = "results_mcmc"
+date_str = datetime.datetime.now().strftime("_%Y_%m_%d_%H_%M_%S_")
+output_path = Path(output_dir)
+
+# Construct filename suffix based on angles
+if len(angles) == 3:
+    suffix = "hv"
+else:
+    suffix = "hv" + "".join([f"_{i}" for i in angles])
+
+# Construct filename prefix based on bias settings
+prefix = "bias_" if (add_bias_E1 or add_bias_alpha) else "no_bias_"
+if add_bias_E1:
+    prefix += "E1_"
+if add_bias_alpha:
+    prefix += "alpha_"
+
+filename = f"{prefix}{suffix}{date_str}MAF_linear.h5" # Start with .h5, will be changed to .nc by the function
+file_path = output_path / filename
 
 # save posterior samples
-save_posterior_samples(samples, angles, add_bias_E1, add_bias_alpha)
+save_posterior_samples(mcmc, file_path)
 
 # %%
 # plot prior-posterior distributions
