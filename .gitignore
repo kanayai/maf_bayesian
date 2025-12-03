@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# System files
+.DS_Store
+**/.DS_Store
+
+# Results
+results_mcmc/*.h5
