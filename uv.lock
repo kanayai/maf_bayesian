@@ -3,6 +3,27 @@ revision = 3
 requires-python = ">=3.13"
 
 [[package]]
+name = "arviz"
+version = "0.22.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "h5netcdf" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pandas" },
+    { name = "scipy" },
+    { name = "setuptools" },
+    { name = "typing-extensions" },
+    { name = "xarray" },
+    { name = "xarray-einstats" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/31/24/727d666e137f0b8c4a4fdc3dc91484ab2ed1206ac61733b2688efa85b5e7/arviz-0.22.0.tar.gz", hash = "sha256:d9df7592f1ce77ce69f7504dba13f8d550204c49c23e54849861dbcb2c640954", size = 1591019, upload-time = "2025-07-09T10:07:21.525Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/81/38/5a3ee119be7f9f94f03a7626ee8edc52c9c9a9720cb020fa1f01fc87d4f2/arviz-0.22.0-py3-none-any.whl", hash = "sha256:336a3a4b1aa981997945f9ca104ca9f827e9c943f13760b18bf645ee5b12d56d", size = 1672062, upload-time = "2025-07-09T10:07:19.643Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2025.11.12"
 source = { registry = "https://pypi.org/simple" }
@@ -209,6 +230,19 @@ wheels = [
 ]
 
 [[package]]
+name = "h5netcdf"
+version = "1.7.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "h5py" },
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/62/45/03d9869c27ec515b80f82c0096ac1786c94e0c34f99a13419f2fca974b2f/h5netcdf-1.7.3.tar.gz", hash = "sha256:f62a0e77d1e2a6cd8b9d8120d5b62b6a015dc7c6185768a01e983c77c0b794e3", size = 71334, upload-time = "2025-10-21T14:01:33.323Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d6/49/1f35189c1ca136b2f041b72402f2eb718bdcb435d9e88729fe6f6909c45d/h5netcdf-1.7.3-py3-none-any.whl", hash = "sha256:b1967678127d55009edd4c7e36cb322a7b66bdade37a2e229d857f5ecf375c01", size = 56355, upload-time = "2025-10-21T14:01:32.283Z" },
+]
+
+[[package]]
 name = "h5py"
 version = "3.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -339,6 +373,7 @@ name = "maf-bayesian-main"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "arviz" },
     { name = "datetime" },
     { name = "h5py" },
     { name = "jax" },
@@ -349,17 +384,15 @@ dependencies = [
     { name = "pandas" },
     { name = "pathlib" },
     { name = "psycopg2-binary" },
-    { name = "pyhelpers" },
     { name = "pyproj" },
     { name = "requests" },
-    { name = "seaborn" },
     { name = "shapely" },
     { name = "sqlalchemy" },
-    { name = "tqdm" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "arviz", specifier = ">=0.17.0" },
     { name = "datetime", specifier = ">=5.5" },
     { name = "h5py", specifier = ">=3.14.0" },
     { name = "jax", specifier = ">=0.7.2" },
@@ -370,14 +403,10 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pathlib", specifier = ">=1.0.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
-    { name = "pyhelpers", specifier = ">=1.3.1" },
-    { name = "pyhelpers", specifier = ">=2.3.1" },
     { name = "pyproj", specifier = ">=3.7.2" },
     { name = "requests", specifier = ">=2.32.5" },
-    { name = "seaborn", specifier = ">=0.13.2" },
     { name = "shapely", specifier = ">=2.1.2" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
-    { name = "tqdm", specifier = ">=4.67.1" },
 ]
 
 [[package]]
@@ -666,16 +695,6 @@ wheels = [
 ]
 
 [[package]]
-name = "psycopg2"
-version = "2.9.11"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/89/8d/9d12bc8677c24dad342ec777529bce705b3e785fa05d85122b5502b9ab55/psycopg2-2.9.11.tar.gz", hash = "sha256:964d31caf728e217c697ff77ea69c2ba0865fa41ec20bb00f0977e62fdcc52e3", size = 379598, upload-time = "2025-10-10T11:14:46.075Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/5a/18c8cb13fc6908dc41a483d2c14d927a7a3f29883748747e8cb625da6587/psycopg2-2.9.11-cp313-cp313-win_amd64.whl", hash = "sha256:8dc379166b5b7d5ea66dcebf433011dfc51a7bb8a5fc12367fa05668e5fc53c8", size = 2714048, upload-time = "2025-10-10T11:10:19.816Z" },
-    { url = "https://files.pythonhosted.org/packages/47/08/737aa39c78d705a7ce58248d00eeba0e9fc36be488f9b672b88736fbb1f7/psycopg2-2.9.11-cp314-cp314-win_amd64.whl", hash = "sha256:f10a48acba5fe6e312b891f290b4d2ca595fc9a06850fe53320beac353575578", size = 2803738, upload-time = "2025-10-10T11:10:23.196Z" },
-]
-
-[[package]]
 name = "psycopg2-binary"
 version = "2.9.11"
 source = { registry = "https://pypi.org/simple" }
@@ -703,24 +722,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/97/77/21b0ea2e1a73aa5fa9222b2a6b8ba325c43c3a8d54272839c991f2345656/psycopg2_binary-2.9.11-cp314-cp314-musllinux_1_2_riscv64.whl", hash = "sha256:32770a4d666fbdafab017086655bcddab791d7cb260a16679cc5a7338b64343b", size = 3044737, upload-time = "2025-10-30T02:55:35.69Z" },
     { url = "https://files.pythonhosted.org/packages/67/69/f36abe5f118c1dca6d3726ceae164b9356985805480731ac6712a63f24f0/psycopg2_binary-2.9.11-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:c3cb3a676873d7506825221045bd70e0427c905b9c8ee8d6acd70cfcbd6e576d", size = 3347643, upload-time = "2025-10-10T11:13:53.499Z" },
     { url = "https://files.pythonhosted.org/packages/e1/36/9c0c326fe3a4227953dfb29f5d0c8ae3b8eb8c1cd2967aa569f50cb3c61f/psycopg2_binary-2.9.11-cp314-cp314-win_amd64.whl", hash = "sha256:4012c9c954dfaccd28f94e84ab9f94e12df76b4afb22331b1f0d3154893a6316", size = 2803913, upload-time = "2025-10-10T11:13:57.058Z" },
-]
-
-[[package]]
-name = "pyhelpers"
-version = "2.3.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "psycopg2" },
-    { name = "pyproj" },
-    { name = "requests" },
-    { name = "shapely" },
-    { name = "sqlalchemy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/a3/7387de7259269da6bcb4da8b0111446cd12dbda89cd4d3dd3ca58a0a49b1/pyhelpers-2.3.1.tar.gz", hash = "sha256:446a6fef1b543a52d2307be584e68a79149706a744fa41af072471a245a7d0bc", size = 181877, upload-time = "2025-11-28T00:10:14.637Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/bd/5248260415b8489ed3f6ecd9785712f4b7a8a4dc50e41afcd0d0402f50d7/pyhelpers-2.3.1-py3-none-any.whl", hash = "sha256:efe9bc47a8d7674669414a76694b281b3061a157cb7ac6b1cc3b7377d872fc39", size = 200570, upload-time = "2025-11-28T00:10:11.812Z" },
 ]
 
 [[package]]
@@ -867,17 +868,12 @@ wheels = [
 ]
 
 [[package]]
-name = "seaborn"
-version = "0.13.2"
+name = "setuptools"
+version = "80.9.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "matplotlib" },
-    { name = "numpy" },
-    { name = "pandas" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/86/59/a451d7420a77ab0b98f7affa3a1d78a313d2f7281a57afb1a34bae8ab412/seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7", size = 1457696, upload-time = "2024-01-25T13:21:52.551Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/5d/3bf57dcd21979b887f014ea83c24ae194cfcd12b9e0fda66b957c69d1fca/setuptools-80.9.0.tar.gz", hash = "sha256:f36b47402ecde768dbfafc46e8e4207b4360c654f1f3bb84475f0a28628fb19c", size = 1319958, upload-time = "2025-05-27T00:56:51.443Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/83/11/00d3c3dfc25ad54e731d91449895a79e4bf2384dc3ac01809010ba88f6d5/seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987", size = 294914, upload-time = "2024-01-25T13:21:49.598Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl", hash = "sha256:062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922", size = 1201486, upload-time = "2025-05-27T00:56:49.664Z" },
 ]
 
 [[package]]
@@ -990,6 +986,34 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/15/22/9ee70a2574a4f4599c47dd506532914ce044817c7752a79b6a51286319bc/urllib3-2.5.0.tar.gz", hash = "sha256:3fc47733c7e419d4bc3f6b3dc2b4f890bb743906a30d56ba4a5bfa4bbff92760", size = 393185, upload-time = "2025-06-18T14:07:41.644Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/c2/fe1e52489ae3122415c51f387e221dd0773709bad6c6cdaa599e8a2c5185/urllib3-2.5.0-py3-none-any.whl", hash = "sha256:e6b01673c0fa6a13e374b50871808eb3bf7046c4b125b216f6bf1cc604cff0dc", size = 129795, upload-time = "2025-06-18T14:07:40.39Z" },
+]
+
+[[package]]
+name = "xarray"
+version = "2025.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/39/ad/b072c970cfb2e2724509bf1e8d7fb4084cc186a90d486c9ac4a48ff83186/xarray-2025.11.0.tar.gz", hash = "sha256:d7a4aa4500edbfd60676b1613db97da309ab144cac0bcff0cbf483c61c662af1", size = 3072276, upload-time = "2025-11-17T16:12:09.167Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/b4/cfa7aa56807dd2d9db0576c3440b3acd51bae6207338ec5610d4878e5c9b/xarray-2025.11.0-py3-none-any.whl", hash = "sha256:986893b995de4a948429356a3897d78e634243c1cac242bd59d03832b9d72dd1", size = 1375447, upload-time = "2025-11-17T16:12:07.123Z" },
+]
+
+[[package]]
+name = "xarray-einstats"
+version = "0.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "xarray" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f1/10/ef474494a7f2102ec4c02352c723fa282c6237b600565eb82ee354291211/xarray_einstats-0.9.1.tar.gz", hash = "sha256:39b373deed43592c41d3fbf8863af62e19e01c1ae553ae5ff059a8df78d995c6", size = 33327, upload-time = "2025-06-18T15:53:28.499Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/17/8b/ed2f0f49385c3d7739cd4699954add26e8f09a372a0c3f04f2bde32fcea2/xarray_einstats-0.9.1-py3-none-any.whl", hash = "sha256:777339524e85d066f2ef9ed1e3a3fb63aead4c1065fd1406f30dfa4de58ce063", size = 39043, upload-time = "2025-06-18T15:53:24.088Z" },
 ]
 
 [[package]]
