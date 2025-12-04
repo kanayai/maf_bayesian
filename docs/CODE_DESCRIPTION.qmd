@@ -1,0 +1,63 @@
+---
+title: "Codebase Description"
+format:
+  html:
+    theme: cosmo
+    toc: true
+  pdf:
+    geometry:
+      - top=30mm
+      - left=30mm
+---
+
+# Codebase Description
+
+This document provides a detailed overview of the key Python scripts in the `maf_gp_bayesian` project.
+
+## Core Library
+
+### [`maf_gp.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/maf_gp.py)
+This is the **core library** file containing the definitions for the Gaussian Process (GP) models, covariance functions, and inference utilities using `numpyro` and `jax`.
+
+*   **`cov_matrix_emulator`**: Defines the squared exponential covariance kernel used for the GP emulator.
+*   **`model`**: The base Bayesian model definition for a single output direction. It defines priors for material parameters (`E1`, `E2`, `v12`, `v23`, `G12`) and hyperparameters.
+*   **`model_n_hv`**: An advanced model that handles **both horizontal and vertical** extension data simultaneously. It includes reparameterization for better MCMC sampling efficiency and supports optional bias terms for `E1` and `alpha`.
+*   **`run_inference_hv`**: A helper function to set up and run the NUTS (No-U-Turn Sampler) MCMC inference engine using `numpyro`.
+*   **`posterior_predict`**: A function to generate predictions from the trained GP model given a set of parameters. It computes the mean and standard deviation of the posterior predictive distribution.
+
+## Inference Scripts
+
+### [`MAF_gp_hv.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/MAF_gp_hv.py)
+This is the **main execution script** for running the Bayesian inference.
+
+*   **Data Loading**: Loads experimental data for both horizontal (`data_extension_h`) and vertical (`data_extension_v`) directions, as well as simulation data.
+*   **Visualization**: Plots the raw experimental data (Load vs. Extension) color-coded by angle and marker-coded by position.
+*   **Inference**: Calls `run_inference_hv` (using `model_n_hv`) to perform MCMC sampling.
+*   **Saving**: Saves the resulting posterior samples to a NetCDF/HDF5 file in the `results_mcmc` directory.
+
+## Posterior Analysis Scripts
+
+These scripts are used to analyze the results of the MCMC inference (saved in `results_mcmc`), generate plots, and perform posterior predictive checks.
+
+### [`posterior_no_bias.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/posterior_no_bias.py)
+Analyzes results from the model **without bias** terms.
+
+*   **Loads Results**: Automatically finds and loads the latest `no_bias_hv_*.nc` file.
+*   **Prior Prediction**: Runs a prior predictive check using `model_n_hv` to see what the model predicts before seeing any data.
+*   **Posterior Prediction**: Uses the saved posterior samples to predict the system response (Load vs. Extension) and compares it against the experimental data.
+*   **Plotting**: Generates plots for prior/posterior predictions and parameter distributions.
+*   **Optimization**: Uses `jax.vmap` for fast vectorized predictions.
+
+### [`posterior_bias_alpha.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/posterior_bias_alpha.py)
+Analyzes results from the model **with bias on the angle (`alpha`)**.
+
+*   **Bias Handling**: Specifically handles the `b_alpha` bias terms found in the posterior samples.
+*   **Prediction**: Adds the inferred bias to the input angles during prediction to account for systematic experimental errors in the loading angle.
+*   **Plotting**: Includes additional plots for the posterior distribution of the bias terms (`b_alpha`).
+
+### [`posterior_bias_E1.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/posterior_bias_E1.py)
+Analyzes results from the model **with bias on the Young's Modulus (`E1`)**.
+
+*   **Bias Handling**: Handles `b_E1` bias terms.
+*   **Prediction**: Adjusts the `E1` parameter by the inferred bias for each experiment during prediction.
+*   **Plotting**: Includes plots for the posterior distribution of the `E1` bias terms.

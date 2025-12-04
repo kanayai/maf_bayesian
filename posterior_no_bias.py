@@ -151,7 +151,7 @@ test_xy = jnp.stack(test_xy)
 print("Running prior prediction...")
 prior_predictive = Predictive(model_n_hv, num_samples=500)
 # Pass both horizontal and vertical data
-prior_samples = prior_predictive(rng_key_prior, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v)
+prior_samples = prior_predictive(rng_key_prior, input_xy_exp_h, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v)
 
 # Extract prior parameters
 prior_mean_emulator = prior_samples["mu_emulator"]

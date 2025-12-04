@@ -1,0 +1,137 @@
+---
+title: "Model Analysis: maf_gp.py"
+format:
+  html:
+    theme: cosmo
+    toc: true
+  pdf:
+    geometry:
+      - top=30mm
+      - left=30mm
+---
+
+# Model Analysis: `maf_gp.py`
+
+This document provides a detailed comparison of the three model definitions in `maf_gp.py` (`model`, `model_n`, and `model_n_hv`) and an in-depth analysis of the likelihood function, specifically for the multi-output case.
+
+## 1. Model Comparison
+
+The file contains three distinct model formulations. The key differences lie in their **parameterization strategy** (Centered vs. Non-Centered), **data handling** (Single vs. Multi-output), and **prior distributions**.
+
+| Feature | `model` | `model_n` | `model_n_hv` |
+| :--- | :--- | :--- | :--- |
+| **Type** | Baseline | Reparameterized | Multi-Output Reparameterized |
+| **Parameterization** | **Centered**<br>Parameters sampled directly from priors. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. |
+| **Outputs** | Single (Implicitly Horizontal) | Single (Switchable H/V) | **Dual (Horizontal & Vertical)** |
+| **Mean Function** | $P \sin(\alpha)$ | $P \sin(\alpha)$ OR $P \cos(\alpha)$ | $P \sin(\alpha)$ AND $P \cos(\alpha)$ |
+| **Priors** | Set A | Set A | **Set B (Updated)** |
+
+### Detailed Prior Comparison
+
+A critical difference is that `model_n_hv` uses a different set of physical priors compared to `model` and `model_n`.
+
+| Parameter | `model` / `model_n` (Set A) | `model_n_hv` (Set B) | Change Analysis |
+| :--- | :--- | :--- | :--- |
+| **$E_1$** | $161,000 \pm 2,000$ | $165,000 \pm 6,050$ | **Mean $\uparrow$, Uncertainty $\uparrow \times 3$** |
+| **$E_2$** | $11,380 \pm 100$ | $11,500 \pm 250$ | Mean $\uparrow$, Uncertainty $\uparrow$ |
+| **$\nu_{12}$** | $0.32 \pm 0.01$ | $0.36 \pm 0.005$ | **Mean $\uparrow$, Uncertainty $\downarrow \times 0.5$** |
+| **$\nu_{23}$** | $0.43 \pm 0.01$ | $0.41 \pm 0.01$ | Mean $\downarrow$ |
+| **$G_{12}$** | $5,170 \pm 70$ | $5,000 \pm 80$ | Mean $\downarrow$ |
+
+> [!NOTE]
+> `model_n_hv` assumes significantly higher uncertainty for $E_1$ but tighter constraints on $\nu_{12}$.
+
+### Hyperparameter Priors
+
+In addition to the physical parameters, the model also estimates hyperparameters governing the Gaussian Process emulator and measurement noise. These are consistent across all models (though `model_n` and `model_n_hv` use reparameterization).
+
+| Hyperparameter | Description | Prior Distribution |
+| :--- | :--- | :--- |
+| **$\mu_{emulator}$** | GP Mean Offset | $\mathcal{N}(0, 0.01)$ |
+| **$\sigma_{emulator}$** | GP Amplitude | $\text{Exponential}(20.0)$ |
+| **$\sigma_{measure}$** | Measurement Noise | $\text{Exponential}(100.0)$ |
+| **$\lambda_P$** | Length Scale (Load) | $\text{LogNormal}(1.5, 0.5)$ |
+| **$\lambda_\alpha$** | Length Scale (Angle) | $\text{LogNormal}(0.34, 0.5)$ |
+| **$\lambda_{E1}$** | Length Scale ($E_1$) | $\text{LogNormal}(11.0, 0.5)$ |
+| **$\lambda_{E2}$** | Length Scale ($E_2$) | $\text{LogNormal}(8.3, 0.5)$ |
+| **$\lambda_{\nu12}$** | Length Scale ($\nu_{12}$) | $\text{LogNormal}(-0.80, 0.5)$ |
+| **$\lambda_{\nu23}$** | Length Scale ($\nu_{23}$) | $\text{LogNormal}(-0.80, 0.5)$ |
+| **$\lambda_{G12}$** | Length Scale ($G_{12}$) | $\text{LogNormal}(7.7, 0.5)$ |
+
+*Note: The length scales $\lambda$ determine how quickly the model discrepancy changes with respect to changes in inputs or parameters. A small length scale implies a "wiggly" function, while a large one implies a smooth function.*
+
+
+## 2. Likelihood Analysis
+
+All models use a **Gaussian Process (GP) Likelihood**. The observed data $\mathbf{y}$ is modeled as coming from a Multivariate Normal distribution:
+
+$$ \mathbf{y} \sim \mathcal{N}(\boldsymbol{\mu}(\mathbf{x}, \theta), \mathbf{K}(\mathbf{x}, \theta) + \mathbf{\Sigma}_\epsilon) $$
+
+Where:
+
+*   $\boldsymbol{\mu}(\mathbf{x}, \theta)$: The physics-based mean function (Finite Element surrogate).
+*   $\mathbf{K}(\mathbf{x}, \theta)$: The GP covariance matrix representing emulator uncertainty (bias).
+*   $\mathbf{\Sigma}_\epsilon$: Measurement noise.
+
+### The `model_n_hv` Likelihood (Dual Output)
+
+The `model_n_hv` function is unique because it performs **Multi-Output Inference**. It evaluates the likelihood of observing both Horizontal ($H$) and Vertical ($V$) extensions simultaneously for a given set of material parameters.
+
+#### A. Conditional Independence
+The model assumes that given the true material parameters $\theta$ and the GP emulator state, the residuals for Horizontal and Vertical data are independent. The total log-likelihood is the sum of the individual log-likelihoods:
+
+$$ \log P(\mathbf{y}_h, \mathbf{y}_v | \theta) = \log P(\mathbf{y}_h | \theta) + \log P(\mathbf{y}_v | \theta) $$
+
+In the code:
+```python
+# Sample Horizontal
+numpyro.sample("data_h", dist.MultivariateNormal(loc=mean_vector_h, covariance_matrix=cov_matrix), obs=data_h)
+
+# Sample Vertical
+numpyro.sample("data_v", dist.MultivariateNormal(loc=mean_vector_v, covariance_matrix=cov_matrix), obs=data_v)
+```
+
+#### B. Physical Coupling (The "Why")
+Although the likelihood statements are separate, the inference is **strongly coupled** via the shared parameters:
+
+1.  **Shared Physics ($\theta$)**: The same $E_1, E_2, \dots$ must explain both the shear deformation ($H$) and the normal deformation ($V$).
+    *   $\boldsymbol{\mu}_h = \text{Emulator}(\theta) \cdot P \sin(\alpha)$
+    *   $\boldsymbol{\mu}_v = \text{Emulator}(\theta) \cdot P \cos(\alpha)$
+    *   *Effect*: This constrains the parameter space significantly. A parameter set that fits $H$ well but $V$ poorly will have a low total likelihood.
+
+2.  **Shared Emulator Structure ($\mathbf{K}$)**:
+    *   The covariance matrix $\mathbf{K}$ is identical for both outputs.
+    *   *Effect*: The model assumes the "smoothness" and "scale" of the model discrepancy is similar for both directions.
+
+3.  **Shared Noise Model**:
+    *   A single `sigma_measure` is used for both.
+    *   *Effect*: Assumes similar sensor noise characteristics for both measurement types.
+
+### 3. Code Implementation Details
+
+#### Centered vs. Non-Centered Parameterization
+**Centered (`model`)**:
+```python
+# Harder for MCMC to sample if geometry is complex
+x = numpyro.sample("x", dist.Normal(mu, sigma))
+```
+
+**Non-Centered (`model_n`, `model_n_hv`)**:
+```python
+# Easier for MCMC (Standard Normal)
+x_n = numpyro.sample("x_n", dist.Normal(0, 1))
+x = mu + sigma * x_n
+numpyro.deterministic("x", x)
+```
+*Why?* This decouples the dependency between the mean/scale and the sample value, avoiding "funnel" pathologies in the posterior geometry, leading to more efficient sampling.
+
+#### Directional Logic
+*   **`model`**: Hardcoded to $\sin(\alpha)$ (Horizontal).
+*   **`model_n`**: Checks `if direction == 'h'` to choose between $\sin$ and $\cos$.
+*   **`model_n_hv`**: Computes **both** and samples **both**.
+
+```python
+# model_n_hv logic
+mean_vector_h = mean_emulator * input_xy[:,0] * jnp.sin(input_xy[:,1])
+mean_vector_v = mean_emulator * input_xy[:,0] * jnp.cos(input_xy[:,1])
+```
