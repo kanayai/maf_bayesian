@@ -1,0 +1,82 @@
+---
+title: "Statistical Modeling Analysis: posterior_no_bias.py"
+format:
+  html:
+    theme: cosmo
+    toc: true
+  pdf:
+    geometry:
+      - top=30mm
+      - left=30mm
+---
+
+# Statistical Modeling Analysis: `posterior_no_bias.py`
+
+This script performs **Bayesian Calibration** and **Posterior Prediction** for a material model using Gaussian Processes (GP). It does not run the MCMC inference itself (which is assumed to be done previously and saved); instead, it loads those results to perform analysis and prediction.
+
+## 1. Data Loading & Preparation
+The script loads three types of data:
+
+- **Experimental Data (`data_extension_h/v`)**: Real-world measurements of Load vs. Extension at various angles (45°, 90°, 135°).
+- **Simulation Data (`input_*_sim.txt`)**: Results from a Finite Element (FE) model run at known parameter settings. This serves as the "ground truth" for the physics model surrogate.
+- **Posterior Samples (`results_mcmc/*.nc`)**: The results of a previously run MCMC inference, containing thousands of samples of the material parameters ($\theta$) that best fit the experimental data.
+
+## 2. Statistical Model Definition
+The script uses `model_n_hv` from `maf_gp.py`.
+
+- **Type**: Gaussian Process Emulator with Multi-Output (Horizontal & Vertical).
+- **Goal**: To predict the system response $y$ (extension) given inputs $x$ (load, angle) and parameters $\theta$ (E1, E2, etc.).
+- **Structure**:
+  $$ y(\mathbf{x}) = \mu(\mathbf{x}, \theta) + \delta(\mathbf{x}) + \epsilon $$
+  - $\mu(\mathbf{x}, \theta)$: Physics-based mean trend (from FE surrogate).
+  - $\delta(\mathbf{x}) \sim \mathcal{GP}(0, k(\mathbf{x}, \mathbf{x}'))$: GP bias term (corrects for systematic model errors).
+  - $\epsilon \sim \mathcal{N}(0, \sigma^2_{measure})$: Random measurement noise.
+
+### 2.1 Covariance Kernel
+The GP uses a **Squared Exponential Kernel** with separate length scales for inputs $\mathbf{x}$ and parameters $\theta$:
+
+$$ k(\mathbf{z}, \mathbf{z}') = \sigma_{emulator}^2 \exp\left( - \sum_{i} \frac{(z_i - z_i')^2}{\lambda_i^2} \right) $$
+
+Where $\mathbf{z} = [\mathbf{x}, \theta]$ is the combined input vector.
+
+- $\sigma_{emulator}$: Amplitude of the GP (model discrepancy magnitude).
+- $\lambda_i$: Correlation length scales for each dimension (Load, Angle, E1, E2, etc.).
+
+### 2.2 Multi-Output Likelihood
+The model assumes conditional independence between Horizontal ($H$) and Vertical ($V$) outputs given the parameters:
+
+$$ P(\mathbf{y}_h, \mathbf{y}_v | \theta, \phi) = \mathcal{N}(\mathbf{y}_h | \boldsymbol{\mu}_h, \mathbf{K} + \mathbf{\Sigma}_\epsilon) \times \mathcal{N}(\mathbf{y}_v | \boldsymbol{\mu}_v, \mathbf{K} + \mathbf{\Sigma}_\epsilon) $$
+
+Where the mean functions differ by direction:
+
+- $\boldsymbol{\mu}_h = \mu_{emulator} \cdot P \cdot \sin(\alpha)$
+- $\boldsymbol{\mu}_v = \mu_{emulator} \cdot P \cdot \cos(\alpha)$
+
+## 3. Prior Prediction
+Before looking at the posterior samples, the script runs a **Prior Predictive Check**.
+
+- **Action**: It samples parameters $\theta$ from their *prior distributions* (before seeing data) and pushes them through the `model_n_hv`.
+- **Purpose**: To verify that the model assumptions cover the range of observed data. If the prior predictions don't overlap with the experimental data, the priors are likely too restrictive or the model is fundamentally wrong.
+- **Code**: `Predictive(model_n_hv, num_samples=500)`
+
+## 4. Posterior Prediction
+This is the core statistical output of the script.
+
+- **Action**: It takes the "learned" parameters from the MCMC results (`idata`) and uses them to predict the material behavior at a specific test angle (e.g., 45°).
+- **Method**:
+  1.  **Subsampling**: Selects a random subset (e.g., 500) of the posterior samples to reduce computation time.
+  2.  **GP Conditional Prediction**: For each sample $\theta_i$, it computes the GP posterior mean and variance at test points $\mathbf{x}^*$:
+      $$ \mu_{post}(\mathbf{x}^*) = \mu(\mathbf{x}^*) + \mathbf{k}_*^T (\mathbf{K} + \mathbf{\Sigma}_\epsilon)^{-1} (\mathbf{y} - \mu(\mathbf{X})) $$
+      $$ \Sigma_{post}(\mathbf{x}^*) = k(\mathbf{x}^*, \mathbf{x}^*) - \mathbf{k}_*^T (\mathbf{K} + \mathbf{\Sigma}_\epsilon)^{-1} \mathbf{k}_* $$
+  3.  **Aggregation**: It computes the mean and 90% confidence intervals (5th and 95th percentiles) of these predictions.
+- **Key Function**: `posterior_predict` (from `maf_gp.py`) implements these GP conditional distribution equations.
+
+## 5. Visualization
+The script generates three key plots:
+
+1.  **Parameter Posteriors**: Histograms of the calibrated parameters ($E_1, E_2, \dots$).
+2.  **Prior Prediction**: Shaded region showing what the model expected *before* calibration.
+3.  **Posterior Prediction**: Shaded region showing the model's predictions *after* calibration, overlaid with the experimental data points.
+
+## Summary
+In statistical terms, this script is performing **Model Validation** and **Uncertainty Quantification**. It answers the question: *"Given the data we observed, and assuming our physics model is mostly correct but imperfect, what is the likely behavior of the material at this specific loading angle, and how confident are we?"*

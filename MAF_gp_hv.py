@@ -270,3 +270,4 @@ for i in range(len(keys)):
     ax[i].set_xlabel(keys[i])
     dic[keys[i]] = samples[keys[i]]
 fig.tight_layout()
+ 

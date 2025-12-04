@@ -391,31 +391,31 @@ def model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp
     E1_n = numpyro.sample("E_1_n", dist.Normal())
     #E1 = 148800. + 2000. * E1_n
     #E1 = 161000. + 4000. * E1_n
-    E1 = 165000. + 6050. * E1_n
+    E1 = 154900. + 5050. * E1_n
     numpyro.deterministic('E_1', E1)
     
     E2_n = numpyro.sample("E_2_n", dist.Normal())
     #E2 = 9190. + 200. * E2_n
     #E2 = 11380. + 200. * E2_n
-    E2 = 11500. + 250. * E2_n
+    E2 = 10285. + 650. * E2_n
     numpyro.deterministic('E_2', E2)
 
     v12_n = numpyro.sample("v_12_n", dist.Normal())
     #v12 = 0.34 + 0.01 * v12_n
     #v12 = 0.32 + 0.01 * v12_n
-    v12 = 0.36 + 0.005 * v12_n
+    v12 = 0.33 + 0.015 * v12_n
     numpyro.deterministic('v_12', v12)
     
     v23_n = numpyro.sample("v_23_n", dist.Normal())
     #v23 = 0.44 + 0.01 * v23_n
     #v23 = 0.43 + 0.01 * v23_n
-    v23 = 0.41 + 0.01 * v23_n
+    v23 = 0.435 + 0.0125 * v23_n
     numpyro.deterministic("v_23", v23)
     
     G12_n = numpyro.sample("G_12_n", dist.Normal())
     #G12 = 5060. + 70. * G12_n
     #G12 = 5170. + 70. * G12_n
-    G12 = 5000. + 80. * G12_n
+    G12 = 5115. + 98. * G12_n
     numpyro.deterministic("G_12", G12)
 
     theta = jnp.array([E1, E2, v12, v23, G12])
@@ -556,7 +556,7 @@ def model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp
         obs=data_v,
     )
 
-def run_inference_hv(model, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, add_bias_E1=False, add_bias_alpha=False, num_warmup=1000, num_samples=5000):
+def run_inference_hv(model, rng_key, input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, add_bias_E1=False, add_bias_alpha=False, num_warmup=2000, num_samples=5000):
     """
     function to run the inference with both horizontal and vertical data 
     """
