@@ -47,7 +47,11 @@ The project supports three model types, configurable in `configs/default_config.
 Modify `configs/default_config.py` to set:
 - **Model**: Choose between `model`, `model_n`, or `model_n_hv`.
 - **Priors**: Define priors for physical parameters, hyperparameters, and bias terms using `numpyro.distributions`.
+- **Priors**: Define priors for physical parameters, hyperparameters, and bias terms using `numpyro.distributions`.
 - **Data**: Select angles and data paths.
+- **Analysis Settings**:
+    - `prediction_interval`: Confidence level for prediction plots (default 0.95).
+    - `prediction_samples`: Number of samples to use for prediction (default 500).
 
 ### 2. Execution
 Run the inference pipeline:
@@ -58,7 +62,7 @@ This script loads data, runs the MCMC sampling based on your config, and saves t
 
 ### 3. Analysis (`analyze.py`)
 
-The analysis script generates comprehensive visualizations and statistics:
+The analysis script generates comprehensive visualizations and statistics, saved in timestamped folders within `figures/` (e.g., `figures/analysis_model_n_hv_20231027_123045/`).
 
 *   **Categorized Posterior Plots**:
     *   **Physical Parameters**: `E_1`, `E_2`, `v_12`, `v_23`, `G_12` (ordered).
@@ -69,6 +73,9 @@ The analysis script generates comprehensive visualizations and statistics:
 *   **Prediction Plots**:
     *   **Prior Prediction**: Green dashed intervals.
     *   **Posterior Prediction**: Blue solid intervals.
+    *   **Prior Prediction**: Green dashed intervals.
+    *   **Posterior Prediction**: Blue solid intervals.
+    *   **Dual Direction**: Automatically generates plots for both **Normal** (formerly Vertical) and **Shear** (formerly Horizontal) extension.
     *   **Combined Plot**: Data + Prior + Posterior predictions.
 *   **Statistics**:
     *   CSV files (`inference_*_stats.csv`) containing Mean, Variance, and Std for all parameters.

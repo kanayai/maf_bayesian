@@ -129,7 +129,7 @@ window.Quarto = {
 <h2 class="anchored" data-anchor-id="statistical-model-definition">2. Statistical Model Definition</h2>
 <p>The script uses <code>model_n_hv</code> from <code>maf_gp.py</code>.</p>
 <ul>
-<li><strong>Type</strong>: Gaussian Process Emulator with Multi-Output (Horizontal &amp; Vertical).</li>
+<li><strong>Type</strong>: Gaussian Process Emulator with Multi-Output (Shear &amp; Normal).</li>
 <li><strong>Goal</strong>: To predict the system response <span class="math inline">\(y\)</span> (extension) given inputs <span class="math inline">\(x\)</span> (load, angle) and parameters <span class="math inline">\(\theta\)</span> (E1, E2, etc.).</li>
 <li><strong>Structure</strong>: <span class="math display">\[ y(\mathbf{x}) = \mu(\mathbf{x}, \theta) + \delta(\mathbf{x}) + \epsilon \]</span>
 <ul>
@@ -150,7 +150,7 @@ window.Quarto = {
 </section>
 <section id="multi-output-likelihood" class="level3">
 <h3 class="anchored" data-anchor-id="multi-output-likelihood">2.2 Multi-Output Likelihood</h3>
-<p>The model assumes conditional independence between Horizontal (<span class="math inline">\(H\)</span>) and Vertical (<span class="math inline">\(V\)</span>) outputs given the parameters:</p>
+<p>The model assumes conditional independence between Shear (<span class="math inline">\(S\)</span>) and Normal (<span class="math inline">\(N\)</span>) outputs given the parameters:</p>
 <p><span class="math display">\[ P(\mathbf{y}_h, \mathbf{y}_v | \theta, \phi) = \mathcal{N}(\mathbf{y}_h | \boldsymbol{\mu}_h, \mathbf{K} + \mathbf{\Sigma}_\epsilon) \times \mathcal{N}(\mathbf{y}_v | \boldsymbol{\mu}_v, \mathbf{K} + \mathbf{\Sigma}_\epsilon) \]</span></p>
 <p>Where the mean functions differ by direction:</p>
 <ul>
@@ -177,7 +177,7 @@ window.Quarto = {
 <ol type="1">
 <li><strong>Subsampling</strong>: Selects a random subset (e.g., 500) of the posterior samples to reduce computation time.</li>
 <li><strong>GP Conditional Prediction</strong>: For each sample <span class="math inline">\(\theta_i\)</span>, it computes the GP posterior mean and variance at test points <span class="math inline">\(\mathbf{x}^*\)</span>: <span class="math display">\[ \mu_{post}(\mathbf{x}^*) = \mu(\mathbf{x}^*) + \mathbf{k}_*^T (\mathbf{K} + \mathbf{\Sigma}_\epsilon)^{-1} (\mathbf{y} - \mu(\mathbf{X})) \]</span> <span class="math display">\[ \Sigma_{post}(\mathbf{x}^*) = k(\mathbf{x}^*, \mathbf{x}^*) - \mathbf{k}_*^T (\mathbf{K} + \mathbf{\Sigma}_\epsilon)^{-1} \mathbf{k}_* \]</span></li>
-<li><strong>Aggregation</strong>: It computes the mean and 90% confidence intervals (5th and 95th percentiles) of these predictions.</li>
+<li><strong>Aggregation</strong>: It computes the mean and a configurable prediction interval (default 95%) of these predictions.</li>
 </ol></li>
 <li><strong>Key Function</strong>: <code>posterior_predict</code> (from <code>maf_gp.py</code>) implements these GP conditional distribution equations.</li>
 </ul>

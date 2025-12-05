@@ -24,7 +24,7 @@ The script loads three types of data:
 ## 2. Statistical Model Definition
 The script uses `model_n_hv` from `maf_gp.py`.
 
-- **Type**: Gaussian Process Emulator with Multi-Output (Horizontal & Vertical).
+- **Type**: Gaussian Process Emulator with Multi-Output (Shear & Normal).
 - **Goal**: To predict the system response $y$ (extension) given inputs $x$ (load, angle) and parameters $\theta$ (E1, E2, etc.).
 - **Structure**:
   $$ y(\mathbf{x}) = \mu(\mathbf{x}, \theta) + \delta(\mathbf{x}) + \epsilon $$
@@ -43,7 +43,7 @@ Where $\mathbf{z} = [\mathbf{x}, \theta]$ is the combined input vector.
 - $\lambda_i$: Correlation length scales for each dimension (Load, Angle, E1, E2, etc.).
 
 ### 2.2 Multi-Output Likelihood
-The model assumes conditional independence between Horizontal ($H$) and Vertical ($V$) outputs given the parameters:
+The model assumes conditional independence between Shear ($S$) and Normal ($N$) outputs given the parameters:
 
 $$ P(\mathbf{y}_h, \mathbf{y}_v | \theta, \phi) = \mathcal{N}(\mathbf{y}_h | \boldsymbol{\mu}_h, \mathbf{K} + \mathbf{\Sigma}_\epsilon) \times \mathcal{N}(\mathbf{y}_v | \boldsymbol{\mu}_v, \mathbf{K} + \mathbf{\Sigma}_\epsilon) $$
 
@@ -68,7 +68,7 @@ This is the core statistical output of the script.
   2.  **GP Conditional Prediction**: For each sample $\theta_i$, it computes the GP posterior mean and variance at test points $\mathbf{x}^*$:
       $$ \mu_{post}(\mathbf{x}^*) = \mu(\mathbf{x}^*) + \mathbf{k}_*^T (\mathbf{K} + \mathbf{\Sigma}_\epsilon)^{-1} (\mathbf{y} - \mu(\mathbf{X})) $$
       $$ \Sigma_{post}(\mathbf{x}^*) = k(\mathbf{x}^*, \mathbf{x}^*) - \mathbf{k}_*^T (\mathbf{K} + \mathbf{\Sigma}_\epsilon)^{-1} \mathbf{k}_* $$
-  3.  **Aggregation**: It computes the mean and 90% confidence intervals (5th and 95th percentiles) of these predictions.
+  3.  **Aggregation**: It computes the mean and a configurable prediction interval (default 95%) of these predictions.
 - **Key Function**: `posterior_predict` (from `maf_gp.py`) implements these GP conditional distribution equations.
 
 ## 5. Visualization

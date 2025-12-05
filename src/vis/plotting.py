@@ -11,7 +11,7 @@ matplotlib.rcParams["font.family"] = 'sans-serif'
 
 def plot_experimental_data(data_dict, save_path=None):
     """
-    Plots experimental data (Horizontal and Vertical) with color-coded angles and position markers.
+    Plots experimental data (Shear and Normal) with color-coded angles and position markers.
     """
     input_xy_exp = data_dict["input_xy_exp"]
     data_exp_h = data_dict["data_exp_h_raw"]
@@ -40,9 +40,9 @@ def plot_experimental_data(data_dict, save_path=None):
         ax.set_title(title)
         ax.grid(True)
 
-    # Plot Horizontal
+    # Plot Shear
     ax1 = plt.subplot(1, 2, 1)
-    plot_direction(ax1, data_exp_h, 'Horizontal Extension', 'Horizontal Extension [mm]')
+    plot_direction(ax1, data_exp_h, 'Shear Extension', 'Shear Extension [mm]')
     
     # Custom Legend
     custom_lines_ang = [Line2D([0], [0], color='k', lw=0, label='Angles:'),
@@ -56,9 +56,9 @@ def plot_experimental_data(data_dict, save_path=None):
     
     ax1.legend(handles=custom_lines_ang + custom_lines_pos, loc='best')
 
-    # Plot Vertical
+    # Plot Normal
     ax2 = plt.subplot(1, 2, 2)
-    plot_direction(ax2, data_exp_v, 'Vertical Extension', 'Vertical Extension [mm]')
+    plot_direction(ax2, data_exp_v, 'Normal Extension', 'Normal Extension [mm]')
     ax2.legend(handles=custom_lines_ang + custom_lines_pos, loc='best')
 
     plt.tight_layout()
@@ -132,17 +132,17 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
         plt.show()
     plt.close()
 
-def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None):
+def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None, interval_label="90% interval"):
     """
-    Plots prediction (mean + 90% interval) against experimental data.
+    Plots prediction (mean + interval) against experimental data.
     """
     fig, ax = plt.subplots(figsize=(5,5), constrained_layout=True)
     
     # Interval
-    ax.fill_betweenx(samples_load, percentiles[0, :], percentiles[1, :], color="lightblue", label="90% interval")
+    ax.fill_betweenx(samples_load, percentiles[0, :], percentiles[1, :], color="lightblue", label=interval_label)
     
     # Mean
-    ax.plot(mean_pred, samples_load, "blue", ls="solid", lw=2.0, label="Mean prediction")
+    ax.plot(mean_pred, samples_load, "blue", ls="solid", lw=0.5, label="Mean prediction")
     
     # Data
     sz=2
@@ -164,7 +164,7 @@ def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data
         plt.show()
     plt.close()
 
-def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct_post, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None):
+def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct_post, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None, interval_label="95% interval"):
     """
     Plots combined prediction (Prior + Posterior + Data).
     Prior: Green dashed
@@ -173,11 +173,11 @@ def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct
     fig, ax = plt.subplots(figsize=(5,5), constrained_layout=True)
     
     # Prior
-    ax.fill_betweenx(samples_load, pct_prior[0, :], pct_prior[1, :], alpha=0.75, color="lightgreen", label='Prior 95% interval')
+    ax.fill_betweenx(samples_load, pct_prior[0, :], pct_prior[1, :], alpha=0.75, color="lightgreen", label=f'Prior {interval_label}')
     ax.plot(mean_prior, samples_load, c="green", ls="dashed", lw=1., label='Prior mean')
     
     # Posterior
-    ax.fill_betweenx(samples_load, pct_post[0, :], pct_post[1, :], alpha=1, color="lightblue", label="Posterior 95% interval")
+    ax.fill_betweenx(samples_load, pct_post[0, :], pct_post[1, :], alpha=1, color="lightblue", label=f'Posterior {interval_label}')
     ax.plot(mean_post, samples_load, c="blue", ls="solid", lw=0.5, label="Posterior mean")
     
     # Data
