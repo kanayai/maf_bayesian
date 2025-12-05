@@ -11,21 +11,23 @@ config = {
     "data": {
         "base_path": "./data", # Root data directory
         "angles": [45, 90, 135], # Angles to load
-        "prediction_angle": 45, # Angle for prediction/plotting
+        "prediction_angle": [45, 90, 135], # Angle for prediction/plotting
         "direction": "v", # 'h' or 'v' for single direction models/plots
+        "prediction_interval": 0.95, # Prediction interval coverage (e.g., 0.95 for 95%)
+        "prediction_samples": 1000, # Number of samples for prediction
     },
 
     # MCMC settings
     "mcmc": {
         "num_warmup": 3000,
-        "num_samples": 6000,
+        "num_samples": 5000,
         "num_chains": 2,
         "thinning": 5,
     },
 
     # Bias flags
     "bias": {
-        "add_bias_E1": True,
+        "add_bias_E1": False,
         "add_bias_alpha": False,
     },
 

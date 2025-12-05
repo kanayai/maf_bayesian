@@ -21,7 +21,7 @@ This is the **core library** file containing the definitions for the Gaussian Pr
 
 *   **`cov_matrix_emulator`**: Defines the squared exponential covariance kernel used for the GP emulator.
 *   **`model`**: The base Bayesian model definition for a single output direction. It defines priors for material parameters (`E1`, `E2`, `v12`, `v23`, `G12`) and hyperparameters.
-*   **`model_n_hv`**: An advanced model that handles **both horizontal and vertical** extension data simultaneously. It includes reparameterization for better MCMC sampling efficiency and supports optional bias terms for `E1` and `alpha`.
+*   **`model_n_hv`**: An advanced model that handles **both shear and normal** extension data simultaneously. It includes reparameterization for better MCMC sampling efficiency and supports optional bias terms for `E1` and `alpha`.
 *   **`run_inference_hv`**: A helper function to set up and run the NUTS (No-U-Turn Sampler) MCMC inference engine using `numpyro`.
 *   **`posterior_predict`**: A function to generate predictions from the trained GP model given a set of parameters. It computes the mean and standard deviation of the posterior predictive distribution.
 
@@ -30,7 +30,7 @@ This is the **core library** file containing the definitions for the Gaussian Pr
 ### [`MAF_gp_hv.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/MAF_gp_hv.py)
 This is the **main execution script** for running the Bayesian inference.
 
-*   **Data Loading**: Loads experimental data for both horizontal (`data_extension_h`) and vertical (`data_extension_v`) directions, as well as simulation data.
+*   **Data Loading**: Loads experimental data for both shear (`data_extension_h`) and normal (`data_extension_v`) directions, as well as simulation data.
 *   **Visualization**: Plots the raw experimental data (Load vs. Extension) color-coded by angle and marker-coded by position.
 *   **Inference**: Calls `run_inference_hv` (using `model_n_hv`) to perform MCMC sampling.
 *   **Saving**: Saves the resulting posterior samples to a NetCDF/HDF5 file in the `results_mcmc` directory.

@@ -22,7 +22,7 @@ The file contains three distinct model formulations. The key differences lie in 
 | :--- | :--- | :--- | :--- |
 | **Type** | Baseline | Reparameterized | Multi-Output Reparameterized |
 | **Parameterization** | **Centered**<br>Parameters sampled directly from priors. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. |
-| **Outputs** | Single (Implicitly Horizontal) | Single (Switchable H/V) | **Dual (Horizontal & Vertical)** |
+| **Outputs** | Single (Implicitly Shear) | Single (Switchable S/N) | **Dual (Shear & Normal)** |
 | **Mean Function** | $P \sin(\alpha)$ | $P \sin(\alpha)$ OR $P \cos(\alpha)$ | $P \sin(\alpha)$ AND $P \cos(\alpha)$ |
 | **Priors** | Set A | Set A | **Set B (Updated)** |
 
@@ -92,20 +92,22 @@ Where:
 
 ### The `model_n_hv` Likelihood (Dual Output)
 
-The `model_n_hv` function is unique because it performs **Multi-Output Inference**. It evaluates the likelihood of observing both Horizontal ($H$) and Vertical ($V$) extensions simultaneously for a given set of material parameters.
+The `model_n_hv` function is unique because it performs **Multi-Output Inference**. It evaluates the likelihood of observing both Shear ($S$) and Normal ($N$) extensions simultaneously for a given set of material parameters.
 
 #### A. Conditional Independence
-The model assumes that given the true material parameters $\theta$ and the GP emulator state, the residuals for Horizontal and Vertical data are independent. The total log-likelihood is the sum of the individual log-likelihoods:
+The model assumes that given the true material parameters $\theta$ and the GP emulator state, the residuals for Shear and Normal data are independent. The total log-likelihood is the sum of the individual log-likelihoods:
 
 $$ \log P(\mathbf{y}_h, \mathbf{y}_v | \theta) = \log P(\mathbf{y}_h | \theta) + \log P(\mathbf{y}_v | \theta) $$
 
 In the code:
 ```python
-# Sample Horizontal
-numpyro.sample("data_h", dist.MultivariateNormal(loc=mean_vector_h, covariance_matrix=cov_matrix), obs=data_h)
+# Sample Shear
+mu_s, sigma_s = gp_predict(..., direction='h') # Shear (formerly Horizontal)
+# Likelihood(Data_Shear | mu_s, sigma_s)
 
-# Sample Vertical
-numpyro.sample("data_v", dist.MultivariateNormal(loc=mean_vector_v, covariance_matrix=cov_matrix), obs=data_v)
+# Sample Normal
+mu_n, sigma_n = gp_predict(..., direction='v') # Normal (formerly Vertical)
+# Likelihood(Data_Normal | mu_n, sigma_n)
 ```
 
 #### B. Physical Coupling (The "Why")
@@ -143,7 +145,7 @@ numpyro.deterministic("x", x)
 *Why?* This decouples the dependency between the mean/scale and the sample value, avoiding "funnel" pathologies in the posterior geometry, leading to more efficient sampling.
 
 #### Directional Logic
-*   **`model`**: Hardcoded to $\sin(\alpha)$ (Horizontal).
+*   **`model`**: Hardcoded to $\sin(\alpha)$ (Shear).
 *   **`model_n`**: Checks `if direction == 'h'` to choose between $\sin$ and $\cos$.
 *   **`model_n_hv`**: Computes **both** and samples **both**.
 

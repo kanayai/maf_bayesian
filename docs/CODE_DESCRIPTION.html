@@ -99,7 +99,7 @@ ul.task-list li input[type="checkbox"] {
 <ul>
 <li><strong><code>cov_matrix_emulator</code></strong>: Defines the squared exponential covariance kernel used for the GP emulator.</li>
 <li><strong><code>model</code></strong>: The base Bayesian model definition for a single output direction. It defines priors for material parameters (<code>E1</code>, <code>E2</code>, <code>v12</code>, <code>v23</code>, <code>G12</code>) and hyperparameters.</li>
-<li><strong><code>model_n_hv</code></strong>: An advanced model that handles <strong>both horizontal and vertical</strong> extension data simultaneously. It includes reparameterization for better MCMC sampling efficiency and supports optional bias terms for <code>E1</code> and <code>alpha</code>.</li>
+<li><strong><code>model_n_hv</code></strong>: An advanced model that handles <strong>both shear and normal</strong> extension data simultaneously. It includes reparameterization for better MCMC sampling efficiency and supports optional bias terms for <code>E1</code> and <code>alpha</code>.</li>
 <li><strong><code>run_inference_hv</code></strong>: A helper function to set up and run the NUTS (No-U-Turn Sampler) MCMC inference engine using <code>numpyro</code>.</li>
 <li><strong><code>posterior_predict</code></strong>: A function to generate predictions from the trained GP model given a set of parameters. It computes the mean and standard deviation of the posterior predictive distribution.</li>
 </ul>
@@ -111,7 +111,7 @@ ul.task-list li input[type="checkbox"] {
 <h3 class="anchored" data-anchor-id="maf_gp_hv.py"><a href="file:///Users/kai21/Projects/Research/certest/maf_bayesian/MAF_gp_hv.py"><code>MAF_gp_hv.py</code></a></h3>
 <p>This is the <strong>main execution script</strong> for running the Bayesian inference.</p>
 <ul>
-<li><strong>Data Loading</strong>: Loads experimental data for both horizontal (<code>data_extension_h</code>) and vertical (<code>data_extension_v</code>) directions, as well as simulation data.</li>
+<li><strong>Data Loading</strong>: Loads experimental data for both shear (<code>data_extension_h</code>) and normal (<code>data_extension_v</code>) directions, as well as simulation data.</li>
 <li><strong>Visualization</strong>: Plots the raw experimental data (Load vs.&nbsp;Extension) color-coded by angle and marker-coded by position.</li>
 <li><strong>Inference</strong>: Calls <code>run_inference_hv</code> (using <code>model_n_hv</code>) to perform MCMC sampling.</li>
 <li><strong>Saving</strong>: Saves the resulting posterior samples to a NetCDF/HDF5 file in the <code>results_mcmc</code> directory.</li>

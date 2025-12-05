@@ -1,3 +1,4 @@
+
 import arviz as az
 import jax.numpy as jnp
 import jax.random as random
@@ -6,11 +7,12 @@ import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
 from numpyro.infer import Predictive
+from datetime import datetime
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
 from src.core.models import model_n_hv, posterior_predict
-from src.vis.plotting import plot_experimental_data, plot_posterior_distributions, plot_prediction
+from src.vis.plotting import plot_experimental_data, plot_posterior_distributions, plot_prediction, plot_combined_prediction
 
 def main():
     print("Starting analysis...")
@@ -19,8 +21,13 @@ def main():
     data_dict = load_all_data(config)
     
     # 2. Plot Experimental Data
-    figures_dir = Path("figures")
-    figures_dir.mkdir(exist_ok=True)
+    # Setup output directory
+    model_type = config.get("model_type", "unknown")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    figures_dir = Path("figures") / f"analysis_{model_type}_{timestamp}"
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Saving figures to {figures_dir}")
+    
     plot_experimental_data(data_dict, save_path=figures_dir / "experimental_data.png")
     
     # 3. Load Latest Results
@@ -68,8 +75,7 @@ def main():
     # For reparameterized priors (model_n_hv), the physical params E_1 etc are:
     # val = mean + scale * N(0,1) -> val ~ N(mean, scale)
     
-    import jax.scipy.stats.norm as norm
-    import jax.scipy.stats.expon as expon
+    from scipy.stats import norm, expon, lognorm
     
     priors_config = config["priors"]
     
@@ -102,7 +108,16 @@ def main():
         # In model_n_hv: lambda_P is sampled as Normal(0, 1).
         # So if we plot lambda_P, the prior is N(0, 1).
         if key.startswith("lambda_"):
-            return norm.pdf(x_vals, loc=0.0, scale=1.0)
+            # lambda ~ LogNormal(mean, scale)
+            # In scipy.stats.lognorm(s, scale):
+            # s = sigma (scale in config)
+            # scale = exp(mu) (exp(mean) in config)
+            if key in priors_config["hyper"]["length_scales"]:
+                p = priors_config["hyper"]["length_scales"][key]
+                s = p["scale"]
+                scale = np.exp(p["mean"])
+                return lognorm.pdf(x_vals, s=s, scale=scale)
+            return None
             
         # Emulator Mean/Scale
         # mu_emulator: Normal(mean, scale)
@@ -145,7 +160,12 @@ def main():
             if "alpha" in key: return expon.pdf(x_vals, scale=np.deg2rad(10)) # 1/rate = scale. rate=1/val -> scale=val
             
         # Normalized params (_n)
-        if key.endswith("_n"):
+        if key.startswith("lambda_"):
+            if key in priors_config["hyper"]["length_scales"]:
+                p = priors_config["hyper"]["length_scales"][key]
+                s = p["scale"]
+                scale = np.exp(p["mean"])
+                return lognorm.pdf(x_vals, s=s, scale=scale)
             return norm.pdf(x_vals, loc=0.0, scale=1.0)
             
         return None
@@ -174,8 +194,7 @@ def main():
         print(f"Saved stats to {figures_dir / filename}")
 
     # Filename suffix
-    from datetime import datetime
-    suffix = datetime.now().strftime("%Y%m%d_%H%M")
+    suffix = timestamp
 
     # Enforce order for physical params
     # E_1, E_2, v_12, v_23, G_12
@@ -207,115 +226,175 @@ def main():
     print("Generating prediction plots...")
     
     # Setup prediction points
-    angle_value = config["data"]["prediction_angle"]
-    samples_load = jnp.linspace(0, 10, 100)
-    test_xy = jnp.stack([jnp.array([l, jnp.deg2rad(angle_value)]) for l in samples_load])
+    preds_angle_cfg = config["data"]["prediction_angle"]
+    angles_to_predict = preds_angle_cfg if isinstance(preds_angle_cfg, list) else [preds_angle_cfg]
     
-    # --- Generate Prior Samples for Prediction ---
+    # Prediction Intervals
+    pi_coverage = config["data"].get("prediction_interval", 0.95)
+    alpha = (1.0 - pi_coverage) / 2.0
+    q_lower = alpha * 100.0
+    q_upper = (1.0 - alpha) * 100.0
+    interval_label = f"{int(pi_coverage*100)}% interval"
+    
+    num_pred_samples = config["data"].get("prediction_samples", 500)
+    print(f"Using {pi_coverage*100:.0f}% prediction intervals ({q_lower:.1f}% - {q_upper:.1f}%) with {num_pred_samples} samples")
+    print(f"Predicting for angles: {angles_to_predict}")
+    
+    samples_load = jnp.linspace(0, 10, 100)
+    # test_xy is angle dependent, moved inside loop
+    
+    # --- Generate Prior Samples for Prediction (ONCE) ---
     print("Generating prior samples for prediction...")
     rng_key = random.PRNGKey(0)
     rng_key, rng_key_prior, rng_key_post = random.split(rng_key, 3)
     
     # We need to run Predictive to get priors for all variables
-    prior_predictive = Predictive(model_n_hv, num_samples=500)
+    prior_predictive = Predictive(model_n_hv, num_samples=num_pred_samples)
     prior_samples_all = prior_predictive(rng_key_prior, input_xy_exp, input_xy_sim, input_theta_sim, 
                                      data_exp_h, data_exp_v, data_sim_h, data_sim_v, config)
     
-    # --- Prior Prediction ---
-    print("Running prior prediction...")
+    # Extract only what we need for prediction (exclude lambdas if they are not needed by predict_batch, 
+    # but actualy predict_batch needs everything).
+    # We will pass the full dictionary or extracted arrays?
+    # posterior_predict signature:
+    # (rng_key, input_xy_exp, input_xy_sim, input_theta_exp, input_theta_sim, data_exp, data_sim, test_xy, test_theta, 
+    #  mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure, direction='h')
     
-    # Extract prior params for prediction function
-    def extract_params(s):
-        return (s["E_1"], s["E_2"], s["v_12"], s["v_23"], s["G_12"],
-                s["mu_emulator"], s["sigma_emulator"], s["sigma_measure"],
-                s["lambda_P"], s["lambda_alpha"], s["lambda_E1"], s["lambda_E2"],
-                s["lambda_v12"], s["lambda_v23"], s["lambda_G12"])
+    # Helper to extract params from samples dict
+    def extract_params(samples_dict, idxs=None):
+        if idxs is None: idxs = jnp.arange(samples_dict["E_1"].shape[0])
+        
+        # Physical
+        E_1 = samples_dict["E_1"][idxs]
+        E_2 = samples_dict["E_2"][idxs]
+        v_12 = samples_dict["v_12"][idxs]
+        v_23 = samples_dict["v_23"][idxs]
+        G_12 = samples_dict["G_12"][idxs]
+        test_theta = jnp.stack([E_1, E_2, v_12, v_23, G_12], axis=1) # (N, 5)
+        
+        # Hyper
+        mu_emulator = samples_dict["mu_emulator"][idxs]
+        sigma_emulator = samples_dict["sigma_emulator"][idxs]
+        sigma_measure = samples_dict["sigma_measure"][idxs]
+        
+        # Length scales
+        l_P = samples_dict["lambda_P"][idxs]
+        l_alpha = samples_dict["lambda_alpha"][idxs]
+    
+        # Check if these keys exist in samples_dict before accessing
+        l_E1 = samples_dict["lambda_E1"][idxs] if "lambda_E1" in samples_dict else jnp.zeros_like(l_P) # Placeholder if not present
+        l_E2 = samples_dict["lambda_E2"][idxs] if "lambda_E2" in samples_dict else jnp.zeros_like(l_P)
+        l_v12 = samples_dict["lambda_v12"][idxs] if "lambda_v12" in samples_dict else jnp.zeros_like(l_P)
+        l_v23 = samples_dict["lambda_v23"][idxs] if "lambda_v23" in samples_dict else jnp.zeros_like(l_P)
+        l_G12 = samples_dict["lambda_G12"][idxs] if "lambda_G12" in samples_dict else jnp.zeros_like(l_P)
+        
+        length_xy = jnp.stack([l_P, l_alpha], axis=1)
+        length_theta = jnp.stack([l_E1, l_E2, l_v12, l_v23, l_G12], axis=1)
+        
+        return test_theta, mu_emulator, sigma_emulator, length_xy, length_theta, sigma_measure
 
-    prior_extracted = extract_params(prior_samples_all)
+    # Extract Prior Params
+    prior_params_tuple = extract_params(prior_samples_all)
+
+    # --- Posterior Prediction Setup (ONCE) ---
+    # Use a subset of samples
+    num_samples = min(num_pred_samples, samples["E_1"].shape[0])
+    indices = np.random.choice(samples["E_1"].shape[0], num_samples, replace=False)
     
-    # Vectorized prediction helper
-    def predict_batch(rng_key, theta_vals, hyper_vals):
-        (E1, E2, v12, v23, G12, mu, sigma_e, sigma_m, lP, la, lE1, lE2, lv12, lv23, lG12) = theta_vals + hyper_vals
+    post_params_tuple = extract_params(samples, indices)
+    
+    print("Running predictions per angle...")
+    
+    # Helper to batched predict
+    def predict_batch(params_tuple, direction, current_test_xy):
+        test_theta, mu_em, sig_em, len_xy, len_th, sig_meas = params_tuple
         
-        theta = jnp.stack([E1, E2, v12, v23, G12], axis=1)
-        length_xy = jnp.stack([lP, la], axis=1)
-        length_theta = jnp.stack([lE1, lE2, lv12, lv23, lG12], axis=1)
+        # Vectorize posterior_predict over samples
+        # posterior_predict(rng_key, ..., test_theta, mean_emulator, ..., direction)
         
-        def single_predict(key, t, me, se, lx, lt, sm):
-            # Tile theta for experimental data size (using first dataset as reference size)
-            # Note: This assumes all exp datasets share the same theta (no bias or handled outside)
-            # In posterior_predict, input_theta_exp is passed.
-            # For simplicity, we assume no bias here or that theta includes bias if needed.
-            # But posterior_predict takes input_theta_exp.
-            # We will tile 't' to match input_xy_exp size.
-            
-            # We need to handle the list of inputs for input_xy_exp
-            # posterior_predict expects concatenated arrays?
-            # Let's check posterior_predict signature: 
-            # input_xy_exp, input_xy_sim, input_theta_exp, input_theta_sim...
-            
-            # We need to concatenate the experimental inputs for the prediction function
+        # We fix the experimental/simulation inputs (they are constant/global)
+        # We vary the parameters (test_theta, etc.)
+        
+        def single_pred(rng, t_th, m_em, s_em, l_xy, l_th, s_meas):
+            # Tile theta for experimental data size
             input_xy_exp_concat = jnp.concatenate(input_xy_exp, axis=0)
-            input_theta_exp_concat = jnp.tile(t, (input_xy_exp_concat.shape[0], 1))
+            input_theta_exp_concat = jnp.tile(t_th, (input_xy_exp_concat.shape[0], 1))
             
-            # Target data for conditioning
-            direction = config["data"]["direction"]
+            # Target data for conditioning based on direction
             data_exp_target = jnp.concatenate(data_exp_v, axis=0) if direction == 'v' else jnp.concatenate(data_exp_h, axis=0)
             data_sim_target = data_sim_v if direction == 'v' else data_sim_h
             
-            return posterior_predict(key, input_xy_exp_concat, input_xy_sim, input_theta_exp_concat, input_theta_sim, 
-                                     data_exp_target, data_sim_target, test_xy, t, me, se, lx, lt, sm, direction=direction)[2]
+            return posterior_predict(rng, input_xy_exp_concat, input_xy_sim, input_theta_exp_concat, input_theta_sim, 
+                                     data_exp_target, data_sim_target, current_test_xy, t_th, 
+                                     m_em, s_em, l_xy, l_th, s_meas, direction=direction)
+                                   
+        # vmap over the 0-th dimension of all mapped args
+        batch_pred = vmap(single_pred)(random.split(random.PRNGKey(1), test_theta.shape[0]), 
+                                     test_theta, mu_em, sig_em, len_xy, len_th, sig_meas)
+                                     
+        # Returns: mean_post, stdev_post, sample_post
+        return batch_pred
 
-        return vmap(single_predict)(random.split(rng_key, theta.shape[0]), theta, mu, sigma_e, length_xy, length_theta, sigma_m)
-
-    prior_preds = predict_batch(rng_key_prior, prior_extracted[:5], prior_extracted[5:])
-    mean_prior = jnp.mean(prior_preds, axis=0)
-    pct_prior = jnp.percentile(prior_preds, jnp.array([5.0, 95.0]), axis=0)
-    
-    # --- Posterior Prediction ---
-    print("Running posterior prediction...")
-    # Use a subset of samples
-    num_samples = min(500, samples["E_1"].shape[0])
-    indices = np.random.choice(samples["E_1"].shape[0], num_samples, replace=False)
-    
-    post_extracted = [samples[k][indices] for k in ["E_1", "E_2", "v_12", "v_23", "G_12",
-                                                    "mu_emulator", "sigma_emulator", "sigma_measure",
-                                                    "lambda_P", "lambda_alpha", "lambda_E1", "lambda_E2",
-                                                    "lambda_v12", "lambda_v23", "lambda_G12"]]
-    
-    post_preds = predict_batch(rng_key_post, post_extracted[:5], post_extracted[5:])
-    mean_post = jnp.mean(post_preds, axis=0)
-    pct_post = jnp.percentile(post_preds, jnp.array([5.0, 95.0]), axis=0)
-    
-    # --- Plotting ---
-    from src.vis.plotting import plot_combined_prediction
-    
-    # Prepare data for plotting (filtering by angle)
-    input_xy_exp_plt = []
-    data_exp_plt = []
-    direction = config["data"]["direction"]
-    data_exp_raw = data_dict["data_exp_v_raw"] if direction == 'v' else data_dict["data_exp_h_raw"]
-    
-    for i, inp in enumerate(input_xy_exp):
-        ang = np.rad2deg(inp[0, 1])
-        if np.isclose(ang, angle_value, atol=1e-1):
-            input_xy_exp_plt.append(inp)
-            data_exp_plt.append(data_exp_raw[i]) # Use raw data (all sensors) for plotting
+    for angle_value in angles_to_predict:
+        print(f"\n=== Predicting for Angle {angle_value} ===")
+        
+        test_xy = jnp.stack([jnp.array([l, jnp.deg2rad(angle_value)]) for l in samples_load])
+        
+        # Re-load data for this specific angle to get the points for plotting
+        # Create a temp config with only this angle
+        import copy
+        temp_config = copy.deepcopy(config)
+        temp_config["data"]["angles"] = [angle_value]
+        data_current_angle = load_all_data(temp_config)
+        
+        for direction in ['v', 'h']:
+            dir_label = "Normal" if direction == 'v' else "Shear"
+            dir_file_tag = "normal" if direction == 'v' else "shear"
+            print(f"  --- {dir_label} Direction ---")
             
-    # 1. Posterior Prediction Plot
-    plot_prediction(samples_load, mean_post, pct_post, input_xy_exp_plt, data_exp_plt, angle_value, "Posterior Prediction", 
-                    save_path=figures_dir / f"prediction_posterior_{angle_value}_{suffix}.png")
+            # Data for plotting
+            data_exp_plt = data_current_angle[f"data_exp_{direction}_raw"]
+            input_xy_exp_plt = data_current_angle["input_xy_exp"]
+            
+            # 1. Prior Prediction
+            print("    Running prior prediction...")
+            # We already have prior samples. Just propagate.
+            _, _, prior_y_samples = predict_batch(prior_params_tuple, direction, test_xy)
+            
+            mean_prior = jnp.mean(prior_y_samples, axis=0) # (100,)
+            pct_prior = jnp.percentile(prior_y_samples, q=jnp.array([q_lower, q_upper]), axis=0)
+            
+            # 2. Posterior Prediction
+            print("    Running posterior prediction...")
+            _, _, post_y_samples = predict_batch(post_params_tuple, direction, test_xy)
+            
+            mean_post = jnp.mean(post_y_samples, axis=0)
+            pct_post = jnp.percentile(post_y_samples, q=jnp.array([q_lower, q_upper]), axis=0)
+            
+            # 3. Plots
+            print(f"    Generating plots for {dir_label}...")
+            
+            # Posterior Prediction Plot
+            plot_prediction(samples_load, mean_post, pct_post, input_xy_exp_plt, data_exp_plt, angle_value, 
+                            f"Posterior Prediction ({dir_label})", 
+                            save_path=figures_dir / f"prediction_posterior_{angle_value}_{dir_file_tag}_{suffix}.png",
+                            interval_label=interval_label)
 
-    # 2. Prior Prediction Plot (using same function, labeled as Prior)
-    plot_prediction(samples_load, mean_prior, pct_prior, input_xy_exp_plt, data_exp_plt, angle_value, "Prior Prediction", 
-                    save_path=figures_dir / f"prediction_prior_{angle_value}_{suffix}.png")
-                    
-    # 3. Combined Prediction Plot
-    plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct_post, 
-                             input_xy_exp_plt, data_exp_plt, angle_value, "Predictions",
-                             save_path=figures_dir / f"prediction_combined_{angle_value}_{suffix}.png")
+            # Prior Prediction Plot
+            plot_prediction(samples_load, mean_prior, pct_prior, input_xy_exp_plt, data_exp_plt, angle_value, 
+                            f"Prior Prediction ({dir_label})", 
+                            save_path=figures_dir / f"prediction_prior_{angle_value}_{dir_file_tag}_{suffix}.png",
+                            interval_label=interval_label)
+                            
+            # Combined Prediction Plot
+            plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct_post, 
+                                     input_xy_exp_plt, data_exp_plt, angle_value, 
+                                     f"Predictions ({dir_label})",
+                                     save_path=figures_dir / f"prediction_combined_{angle_value}_{dir_file_tag}_{suffix}.png",
+                                     interval_label=interval_label)
     
     print("Analysis complete.")
 
 if __name__ == "__main__":
     main()
+
