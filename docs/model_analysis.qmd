@@ -60,6 +60,23 @@ In addition to the physical parameters, the model also estimates hyperparameters
 
 *Note: The length scales $\lambda$ determine how quickly the model discrepancy changes with respect to changes in inputs or parameters. A small length scale implies a "wiggly" function, while a large one implies a smooth function.*
 
+### Bias Modeling
+
+The code also supports adding bias terms to account for systematic discrepancies in specific parameters. This is modeled hierarchically:
+
+1.  **Global Scale Parameter**: A global scale $\sigma_b$ is sampled from an Exponential prior.
+2.  **Experiment-Specific Bias**: For each experiment $i$, a specific bias $b_i$ is sampled from $\mathcal{N}(0, \sigma_b)$.
+3.  **Application**:
+    *   **$E_1$ Bias**: Added to the parameter samples for each experiment before emulation.
+    *   **$\alpha$ Bias**: Added to the angle input for each experiment.
+
+| Bias Type | Prior for Scale $\sigma_b$ | Implied Mean of Scale | Physical Interpretation |
+| :--- | :--- | :--- | :--- |
+| **$E_1$ Bias** ($b_{E1}$) | $\text{Exponential}(0.001)$ | $1,000 \text{ MPa}$ | Accounts for variability in stiffness between experiments. |
+| **$\alpha$ Bias** ($b_{\alpha}$) | $\text{Exponential}(1 / \text{rad}(10^\circ))$ | $0.1745 \text{ rad} \approx 10^\circ$ | Accounts for misalignment of the specimen fibers. |
+
+*Note: The rate parameter for $\alpha$ bias is $1 / (10 \cdot \frac{\pi}{180}) \approx 5.73$.*
+
 
 ## 2. Likelihood Analysis
 
