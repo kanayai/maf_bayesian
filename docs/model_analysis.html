@@ -117,6 +117,7 @@ window.Quarto = {
   <ul class="collapse">
   <li><a href="#detailed-prior-comparison" id="toc-detailed-prior-comparison" class="nav-link" data-scroll-target="#detailed-prior-comparison">Detailed Prior Comparison</a></li>
   <li><a href="#hyperparameter-priors" id="toc-hyperparameter-priors" class="nav-link" data-scroll-target="#hyperparameter-priors">Hyperparameter Priors</a></li>
+  <li><a href="#bias-modeling" id="toc-bias-modeling" class="nav-link" data-scroll-target="#bias-modeling">Bias Modeling</a></li>
   </ul></li>
   <li><a href="#likelihood-analysis" id="toc-likelihood-analysis" class="nav-link" data-scroll-target="#likelihood-analysis">2. Likelihood Analysis</a>
   <ul class="collapse">
@@ -327,6 +328,50 @@ window.Quarto = {
 </tbody>
 </table>
 <p><em>Note: The length scales <span class="math inline">\(\lambda\)</span> determine how quickly the model discrepancy changes with respect to changes in inputs or parameters. A small length scale implies a “wiggly” function, while a large one implies a smooth function.</em></p>
+</section>
+<section id="bias-modeling" class="level3">
+<h3 class="anchored" data-anchor-id="bias-modeling">Bias Modeling</h3>
+<p>The code also supports adding bias terms to account for systematic discrepancies in specific parameters. This is modeled hierarchically:</p>
+<ol type="1">
+<li><strong>Global Scale Parameter</strong>: A global scale <span class="math inline">\(\sigma_b\)</span> is sampled from an Exponential prior.</li>
+<li><strong>Experiment-Specific Bias</strong>: For each experiment <span class="math inline">\(i\)</span>, a specific bias <span class="math inline">\(b_i\)</span> is sampled from <span class="math inline">\(\mathcal{N}(0, \sigma_b)\)</span>.</li>
+<li><strong>Application</strong>:
+<ul>
+<li><strong><span class="math inline">\(E_1\)</span> Bias</strong>: Added to the parameter samples for each experiment before emulation.</li>
+<li><strong><span class="math inline">\(\alpha\)</span> Bias</strong>: Added to the angle input for each experiment.</li>
+</ul></li>
+</ol>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Bias Type</th>
+<th style="text-align: left;">Prior for Scale <span class="math inline">\(\sigma_b\)</span></th>
+<th style="text-align: left;">Implied Mean of Scale</th>
+<th style="text-align: left;">Physical Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><strong><span class="math inline">\(E_1\)</span> Bias</strong> (<span class="math inline">\(b_{E1}\)</span>)</td>
+<td style="text-align: left;"><span class="math inline">\(\text{Exponential}(0.001)\)</span></td>
+<td style="text-align: left;"><span class="math inline">\(1,000 \text{ MPa}\)</span></td>
+<td style="text-align: left;">Accounts for variability in stiffness between experiments.</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><strong><span class="math inline">\(\alpha\)</span> Bias</strong> (<span class="math inline">\(b_{\alpha}\)</span>)</td>
+<td style="text-align: left;"><span class="math inline">\(\text{Exponential}(1 / \text{rad}(10^\circ))\)</span></td>
+<td style="text-align: left;"><span class="math inline">\(0.1745 \text{ rad} \approx 10^\circ\)</span></td>
+<td style="text-align: left;">Accounts for misalignment of the specimen fibers.</td>
+</tr>
+</tbody>
+</table>
+<p><em>Note: The rate parameter for <span class="math inline">\(\alpha\)</span> bias is <span class="math inline">\(1 / (10 \cdot \frac{\pi}{180}) \approx 5.73\)</span>.</em></p>
 </section>
 </section>
 <section id="likelihood-analysis" class="level2">

@@ -17,15 +17,15 @@ config = {
 
     # MCMC settings
     "mcmc": {
-        "num_warmup": 2000,
-        "num_samples": 5000,
+        "num_warmup": 3000,
+        "num_samples": 6000,
         "num_chains": 2,
-        "thinning": 2,
+        "thinning": 5,
     },
 
     # Bias flags
     "bias": {
-        "add_bias_E1": False,
+        "add_bias_E1": True,
         "add_bias_alpha": False,
     },
 
@@ -46,11 +46,11 @@ config = {
             },
             # For standard model (not reparameterized)
             "standard": {
-                "E_1":  dist.Normal(161000., 2000.),
-                "E_2":  dist.Normal(11380., 100.),
-                "v_12": dist.Normal(0.32, 0.01),
-                "v_23": dist.Normal(0.43, 0.01),
-                "G_12": dist.Normal(5170., 70.),
+                "E_1":  dist.Normal(154900., 5050.),
+                "E_2":  dist.Normal(10285., 650.),
+                "v_12": dist.Normal(0.33, 0.015),
+                "v_23": dist.Normal(0.435, 0.0125),
+                "G_12": dist.Normal(5115., 98.),
             }
         },
 
@@ -84,7 +84,7 @@ config = {
 
         # Bias Priors
         "bias_priors": {
-            "sigma_b_E1": dist.Exponential(0.0001),
+            "sigma_b_E1": dist.Exponential(0.001),
             "sigma_b_alpha": dist.Exponential(1/np.deg2rad(10))
         }
     }
