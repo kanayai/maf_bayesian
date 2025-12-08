@@ -153,3 +153,34 @@ numpyro.deterministic("x", x)
 mean_vector_h = mean_emulator * input_xy[:,0] * jnp.sin(input_xy[:,1])
 mean_vector_v = mean_emulator * input_xy[:,0] * jnp.cos(input_xy[:,1])
 ```
+
+### Additive Noise Model (Optional)
+
+By default, the codebase assumes a measurement noise variance proportional to load (`noise_model: "proportional"`):
+$$ \sigma_{\text{noise}}^2 = \sigma_{\text{measure}}^2 \cdot P $$
+where $P$ is the load.
+
+An optional **Additive Noise Model** (`noise_model: "additive"`) is available to handle cases where noise persists at zero load:
+$$ \sigma_{\text{noise}}^2 = \sigma_{\text{measure}}^2 \cdot P + \sigma_{\text{base}}^2 $$
+
+-   **$\sigma_{\text{base}}$**: Represents the "base" or "background" noise variance that is independent of load.
+-   **Configuration**: This can be enabled in `defaults_config.py` by setting `"data": {"noise_model": "additive"}`.
+-   **Prior**: The prior for $\sigma_{\text{base}}$ can be configured under `"priors" -> "simga_measure_base"`.
+
+### Understanding Priors for Additive Noise
+
+When using the additive noise model, you might notice that `sigma_measure` (proportional) and `sigma_measure_base` (constant) can have similar numerical priors (e.g., `Exponential(100)`), despite representing different physical concepts. This is due to the units involved in the variance equation:
+
+$$ \sigma_{\text{total}}^2 = \sigma_{\text{measure}}^2 \cdot P + \sigma_{\text{base}}^2 $$
+
+1.  **$\sigma_{\text{base}}$ (Base Noise)**:
+    *   This term has the **same units as the data** (e.g., mm).
+    *   If measurement noise is small (e.g., $\approx 0.01$ mm), then $\sigma_{\text{base}} \approx 0.01$.
+    *   A prior like `Exponential(100)` implies a mean of $1/100 = 0.01$, which is appropriate for this small scale.
+
+2.  **$\sigma_{\text{measure}}$ (Proportional Term)**:
+    *   This term is multiplied by Load ($P$).
+    *   For the units to be consistent ($\text{mm}^2$), $\sigma_{\text{measure}}^2$ must have units of $\text{mm}^2 / \text{kN}$.
+    *   If the typical Load $P \approx 10$ kN, then $\sigma_{\text{measure}}^2 \cdot 10 \approx \sigma_{\text{base}}^2$.
+    *   This implies $\sigma_{\text{measure}}$ should be smaller than $\sigma_{\text{base}}$ by a factor of $\sqrt{P}$.
+    *   However, if we use a loose prior (like `Exponential(1.0)` with mean 1.0), the model may overestimate noise. Using a tighter prior like `Exponential(100)` for this term as well acts as a conservative regularizer, ensuring the proportional noise component remains physically realistic.

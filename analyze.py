@@ -148,6 +148,10 @@ def main():
              rate = 100.0
              return expon.pdf(x_vals, scale=1/rate)
 
+        if key == "sigma_measure_base":
+            rate = 100.0
+            return expon.pdf(x_vals, scale=1/rate)
+
         # Bias
         if key.startswith("b_"):
             # b_E1 ~ Normal(0, sigma_b_E1)
@@ -267,34 +271,42 @@ def main():
     def extract_params(samples_dict, idxs=None):
         if idxs is None: idxs = jnp.arange(samples_dict["E_1"].shape[0])
         
+        def get_batch(key):
+            return samples_dict[key][idxs]
+
         # Physical
-        E_1 = samples_dict["E_1"][idxs]
-        E_2 = samples_dict["E_2"][idxs]
-        v_12 = samples_dict["v_12"][idxs]
-        v_23 = samples_dict["v_23"][idxs]
-        G_12 = samples_dict["G_12"][idxs]
+        E_1 = get_batch("E_1")
+        E_2 = get_batch("E_2")
+        v_12 = get_batch("v_12")
+        v_23 = get_batch("v_23")
+        G_12 = get_batch("G_12")
         test_theta = jnp.stack([E_1, E_2, v_12, v_23, G_12], axis=1) # (N, 5)
         
         # Hyper
-        mu_emulator = samples_dict["mu_emulator"][idxs]
-        sigma_emulator = samples_dict["sigma_emulator"][idxs]
-        sigma_measure = samples_dict["sigma_measure"][idxs]
+        mu_emulator = get_batch("mu_emulator")
+        sigma_emulator = get_batch("sigma_emulator")
+        sigma_measure = get_batch("sigma_measure")
+        # Check if sigma_measure_base exists (backward compatibility)
+        try:
+            sigma_measure_base = get_batch("sigma_measure_base")
+        except KeyError:
+            sigma_measure_base = jnp.zeros_like(sigma_measure)
         
         # Length scales
-        l_P = samples_dict["lambda_P"][idxs]
-        l_alpha = samples_dict["lambda_alpha"][idxs]
+        l_P = get_batch("lambda_P")
+        l_alpha = get_batch("lambda_alpha")
     
         # Check if these keys exist in samples_dict before accessing
-        l_E1 = samples_dict["lambda_E1"][idxs] if "lambda_E1" in samples_dict else jnp.zeros_like(l_P) # Placeholder if not present
-        l_E2 = samples_dict["lambda_E2"][idxs] if "lambda_E2" in samples_dict else jnp.zeros_like(l_P)
-        l_v12 = samples_dict["lambda_v12"][idxs] if "lambda_v12" in samples_dict else jnp.zeros_like(l_P)
-        l_v23 = samples_dict["lambda_v23"][idxs] if "lambda_v23" in samples_dict else jnp.zeros_like(l_P)
-        l_G12 = samples_dict["lambda_G12"][idxs] if "lambda_G12" in samples_dict else jnp.zeros_like(l_P)
+        l_E1 = get_batch("lambda_E1") if "lambda_E1" in samples_dict else jnp.zeros_like(l_P) # Placeholder if not present
+        l_E2 = get_batch("lambda_E2") if "lambda_E2" in samples_dict else jnp.zeros_like(l_P)
+        l_v12 = get_batch("lambda_v12") if "lambda_v12" in samples_dict else jnp.zeros_like(l_P)
+        l_v23 = get_batch("lambda_v23") if "lambda_v23" in samples_dict else jnp.zeros_like(l_P)
+        l_G12 = get_batch("lambda_G12") if "lambda_G12" in samples_dict else jnp.zeros_like(l_P)
         
         length_xy = jnp.stack([l_P, l_alpha], axis=1)
         length_theta = jnp.stack([l_E1, l_E2, l_v12, l_v23, l_G12], axis=1)
         
-        return test_theta, mu_emulator, sigma_emulator, length_xy, length_theta, sigma_measure
+        return test_theta, mu_emulator, sigma_emulator, length_xy, length_theta, sigma_measure, sigma_measure_base
 
     # Extract Prior Params
     prior_params_tuple = extract_params(prior_samples_all)
@@ -310,7 +322,7 @@ def main():
     
     # Helper to batched predict
     def predict_batch(params_tuple, direction, current_test_xy):
-        test_theta, mu_em, sig_em, len_xy, len_th, sig_meas = params_tuple
+        test_theta, mu_em, sig_em, len_xy, len_th, sig_meas, sig_meas_base = params_tuple
         
         # Vectorize posterior_predict over samples
         # posterior_predict(rng_key, ..., test_theta, mean_emulator, ..., direction)
@@ -318,25 +330,50 @@ def main():
         # We fix the experimental/simulation inputs (they are constant/global)
         # We vary the parameters (test_theta, etc.)
         
-        def single_pred(rng, t_th, m_em, s_em, l_xy, l_th, s_meas):
-            # Tile theta for experimental data size
-            input_xy_exp_concat = jnp.concatenate(input_xy_exp, axis=0)
-            input_theta_exp_concat = jnp.tile(t_th, (input_xy_exp_concat.shape[0], 1))
+        # Helper to predict
+        def predict_point(m_em, s_em, l_xy, l_th, s_meas, s_meas_base, t_theta, t_xy, direction):
+            full_input_xy_exp = jnp.concatenate(input_xy_exp, axis=0) # (Total_Exp_Points, 2)
+            full_input_theta_exp = jnp.tile(t_theta, (full_input_xy_exp.shape[0], 1))
             
-            # Target data for conditioning based on direction
-            data_exp_target = jnp.concatenate(data_exp_v, axis=0) if direction == 'v' else jnp.concatenate(data_exp_h, axis=0)
-            data_sim_target = data_sim_v if direction == 'v' else data_sim_h
+            full_data_exp = jnp.concatenate(data_exp_v, axis=0) if direction == 'v' else jnp.concatenate(data_exp_h, axis=0)
+            trg_data_sim = data_sim_v if direction == 'v' else data_sim_h
             
-            return posterior_predict(rng, input_xy_exp_concat, input_xy_sim, input_theta_exp_concat, input_theta_sim, 
-                                     data_exp_target, data_sim_target, current_test_xy, t_th, 
-                                     m_em, s_em, l_xy, l_th, s_meas, direction=direction)
-                                   
-        # vmap over the 0-th dimension of all mapped args
-        batch_pred = vmap(single_pred)(random.split(random.PRNGKey(1), test_theta.shape[0]), 
-                                     test_theta, mu_em, sig_em, len_xy, len_th, sig_meas)
+            mean, std_em, _ = posterior_predict(
+                random.PRNGKey(0), 
+                full_input_xy_exp, input_xy_sim, full_input_theta_exp, input_theta_sim,
+                full_data_exp, trg_data_sim,
+                t_xy, t_theta, 
+                m_em, s_em, l_xy, l_th, s_meas, s_meas_base, direction=direction
+            )
+            return mean, std_em
+
+        vmap_predict = vmap(predict_point, in_axes=(0,0,0,0,0,0,0,None,None))
+        
+        # Predict at observed points
+        means, stds_em = vmap_predict(
+            mu_em, sig_em, len_xy, len_th, sig_meas, sig_meas_base,
+            test_theta, current_test_xy, direction
+        )
+        # Total Uncertainty at Observed Points
+        loads = current_test_xy[:, 0] # Extract loads from test_xy
+        
+        # Noise model selection (check config or default to proportional if base is 0)
+        noise_model = config["data"].get("noise_model", "proportional")
+        
+        if noise_model == "additive":
+            noise_var_samples = sig_meas[:, None]**2 * loads[None, :] + sig_meas_base[:, None]**2
+        else:
+             # proportional
+            noise_var_samples = sig_meas[:, None]**2 * loads[None, :]
+
+        total_std = jnp.sqrt(stds_em**2 + noise_var_samples)
+        
+        # Sample from predictive distribution
+        rng_key_predict = random.PRNGKey(2) # Use a fixed key for prediction sampling
+        y_samples = means + random.normal(rng_key_predict, means.shape) * total_std
                                      
         # Returns: mean_post, stdev_post, sample_post
-        return batch_pred
+        return means, total_std, y_samples
 
     for angle_value in angles_to_predict:
         print(f"\n=== Predicting for Angle {angle_value} ===")
@@ -396,8 +433,217 @@ def main():
                                      save_path=figures_dir / f"prediction_combined_{angle_value}_{dir_file_tag}_{suffix}.png",
                                      interval_label=interval_label)
     
+    # 9. Residual Analysis (Optional)
+    if config["data"].get("run_residual_analysis", False):
+        run_residual_analysis(idata, data_dict, figures_dir)
+        
     print("Analysis complete.")
+
+
+
+
+def run_residual_analysis(idata, data_dict, figures_dir):
+    print("\nRunning Residual Analysis...")
+    
+    # Extract data from dictionary
+    input_xy_exp = data_dict["input_xy_exp"]
+    input_xy_sim = data_dict["input_xy_sim"]
+    input_theta_sim = data_dict["input_theta_sim"]
+    data_exp_h = data_dict["data_exp_h"]
+    data_exp_v = data_dict["data_exp_v"]
+    data_sim_h = data_dict["data_sim_h"]
+    data_sim_v = data_dict["data_sim_v"]
+
+    # Extract Samples
+    num_samples = 500
+    posterior = idata.posterior.stack(sample=("chain", "draw"))
+    total_samples = posterior.dims.get("sample", posterior.sizes["sample"]) # Handle deprecation safely
+    indices = np.random.choice(total_samples, num_samples, replace=False)
+    
+    def get_batch(key):
+        val = posterior[key].values
+        return jnp.array(val[indices])
+
+    # Physical
+    E_1 = get_batch("E_1")
+    E_2 = get_batch("E_2")
+    v_12 = get_batch("v_12")
+    v_23 = get_batch("v_23")
+    G_12 = get_batch("G_12")
+    test_theta = jnp.stack([E_1, E_2, v_12, v_23, G_12], axis=1)
+
+    # Hyper
+    mu_emulator = get_batch("mu_emulator")
+    sigma_emulator = get_batch("sigma_emulator")
+    sigma_measure = get_batch("sigma_measure")
+    try:
+        sigma_measure_base = get_batch("sigma_measure_base")
+    except KeyError:
+        sigma_measure_base = jnp.zeros_like(sigma_measure)
+    
+    # Lengths
+    l_P = get_batch("lambda_P")
+    l_alpha = get_batch("lambda_alpha")
+    l_E1 = get_batch("lambda_E1")
+    l_E2 = get_batch("lambda_E2")
+    l_v12 = get_batch("lambda_v12")
+    l_v23 = get_batch("lambda_v23")
+    l_G12 = get_batch("lambda_G12")
+    
+    length_xy = jnp.stack([l_P, l_alpha], axis=1)
+    length_theta = jnp.stack([l_E1, l_E2, l_v12, l_v23, l_G12], axis=1)
+
+    # Helper to predict
+    def predict_point(m_em, s_em, l_xy, l_th, s_meas, s_meas_base, t_theta, t_xy, direction):
+        full_input_xy_exp = jnp.concatenate(input_xy_exp, axis=0) # (Total_Exp_Points, 2)
+        full_input_theta_exp = jnp.tile(t_theta, (full_input_xy_exp.shape[0], 1))
+        
+        full_data_exp = jnp.concatenate(data_exp_v, axis=0) if direction == 'v' else jnp.concatenate(data_exp_h, axis=0)
+        trg_data_sim = data_sim_v if direction == 'v' else data_sim_h
+        
+        mean, std_em, _ = posterior_predict(
+            random.PRNGKey(0), 
+            full_input_xy_exp, input_xy_sim, full_input_theta_exp, input_theta_sim,
+            full_data_exp, trg_data_sim,
+            t_xy, t_theta, 
+            m_em, s_em, l_xy, l_th, s_meas, s_meas_base, direction=direction
+        )
+        return mean, std_em
+
+    vmap_predict = vmap(predict_point, in_axes=(0,0,0,0,0,0,0,None,None))
+
+    rows = []
+    bands_data = [] 
+
+    for i, xy_exp in enumerate(input_xy_exp):
+        angle_rad = xy_exp[0, 1]
+        angle_deg = int(round(np.rad2deg(angle_rad)))
+        print(f"  Residuals: Angle {angle_deg}...")
+        
+        loads = xy_exp[:, 0]
+        max_load = jnp.max(loads)
+        
+        for direction, label in [('h', 'Shear'), ('v', 'Normal')]:
+            # Predict at observed
+            means, stds_em = vmap_predict(
+                mu_emulator, sigma_emulator, length_xy, length_theta, sigma_measure, sigma_measure_base,
+                test_theta, xy_exp, direction
+            )
+            
+            mu_post = jnp.mean(means, axis=0)
+
+            # Noise model check
+            noise_model = config["data"].get("noise_model", "proportional")
+            if noise_model == "additive":
+                noise_var_samples = sigma_measure[:, None]**2 * loads[None, :] + sigma_measure_base[:, None]**2
+            else:
+                noise_var_samples = sigma_measure[:, None]**2 * loads[None, :]
+
+            gp_var_samples = stds_em**2
+            total_std = jnp.sqrt(jnp.mean(gp_var_samples + noise_var_samples, axis=0) + jnp.var(means, axis=0))
+            
+            y_obs = (data_exp_h[i] if direction == 'h' else data_exp_v[i]).flatten()
+            resid = y_obs - mu_post
+            std_resid = resid / total_std
+            
+            for k in range(len(loads)):
+                rows.append({
+                    "Angle": angle_deg,
+                    "Direction": label,
+                    "Load": float(loads[k]),
+                    "Residual": float(resid[k]),
+                    "StdResidual": float(std_resid[k])
+                })
+
+            # Dense Grid for Smooth Bands
+            dense_loads = jnp.linspace(0, max_load, 100)
+            dense_angles = jnp.ones_like(dense_loads) * angle_rad
+            dense_xy = jnp.stack([dense_loads, dense_angles], axis=1)
+            
+            d_means, d_stds_em = vmap_predict(
+                mu_emulator, sigma_emulator, length_xy, length_theta, sigma_measure, sigma_measure_base,
+                test_theta, dense_xy, direction
+            )
+            
+            if noise_model == "additive":
+                 d_noise_var = sigma_measure[:, None]**2 * dense_loads[None, :] + sigma_measure_base[:, None]**2
+            else:
+                 d_noise_var = sigma_measure[:, None]**2 * dense_loads[None, :]
+
+            d_gp_var = d_stds_em**2
+            d_total_std = jnp.sqrt(jnp.mean(d_gp_var + d_noise_var, axis=0) + jnp.var(d_means, axis=0))
+            
+            bands_data.append({
+                "Angle": angle_deg,
+                "Direction": label,
+                "Load": dense_loads,
+                "SigmaTotal": d_total_std
+            })
+
+    df = pd.DataFrame(rows)
+    
+    unique_combos = df[["Angle", "Direction"]].drop_duplicates().values
+    
+    # 1. Residuals with Bands
+    plt.figure(figsize=(15, 5 * len(unique_combos) // 3 + 5))
+    num_plots = len(unique_combos)
+    cols = 3
+    rows_plt = (num_plots + cols - 1) // cols
+    fig, axes = plt.subplots(rows_plt, cols, figsize=(15, 4*rows_plt), constrained_layout=True)
+    if num_plots > 1: axes = axes.flatten()
+    else: axes = [axes]
+    
+    for idx, (angle, direction) in enumerate(unique_combos):
+        ax = axes[idx]
+        subset = df[(df["Angle"] == angle) & (df["Direction"] == direction)]
+        ax.scatter(subset["Load"], subset["Residual"], alpha=0.6, label="Residuals")
+        
+        band = next(b for b in bands_data if b["Angle"] == angle and b["Direction"] == direction)
+        upper = 1.96 * band["SigmaTotal"]
+        lower = -1.96 * band["SigmaTotal"]
+        
+        ax.fill_between(band["Load"], lower, upper, color='gray', alpha=0.2, label="95% CI")
+        ax.plot(band["Load"], upper, color='gray', linestyle='--', alpha=0.5)
+        ax.plot(band["Load"], lower, color='gray', linestyle='--', alpha=0.5)
+        ax.axhline(0, color='k', linestyle='-', alpha=0.3)
+        ax.set_title(f"Angle {angle}° - {direction}")
+        ax.set_xlabel("Load [kN]")
+        ax.set_ylabel("Residual [mm]")
+        if idx == 0: ax.legend()
+            
+    for i in range(num_plots, len(axes)):
+        axes[i].axis('off')
+    plt.savefig(figures_dir / "residuals_with_bands.png")
+    
+    # 2. Std Residuals vs Load
+    g = sns.FacetGrid(df, col="Angle", row="Direction", sharex=False, sharey=True, height=4, aspect=1.2)
+    g.map(plt.scatter, "Load", "StdResidual", alpha=0.6)
+    for ax in g.axes.flat:
+        ax.axhline(0, color='k', ls='-', lw=1)
+        ax.axhline(2, color='r', ls='--', lw=1)
+        ax.axhline(-2, color='r', ls='--', lw=1)
+    g.set_axis_labels("Load [kN]", "Standardized Residual")
+    g.savefig(figures_dir / "std_residuals_vs_load.png")
+
+    # 3. Histogram
+    plt.figure(figsize=(10, 6))
+    sns.histplot(df["StdResidual"], kde=True, stat="density", label="Observed")
+    x_range = np.linspace(df["StdResidual"].min()-1, df["StdResidual"].max()+1, 100)
+    from scipy.stats import norm
+    plt.plot(x_range, norm.pdf(x_range, 0, 1), 'r--', lw=2, label="Standard Normal")
+    plt.title("Distribution of Standardized Residuals")
+    plt.xlabel("Standardized Residual")
+    plt.legend()
+    plt.savefig(figures_dir / "std_residuals_hist.png")
+
+    # 4. Q-Q Plot
+    plt.figure(figsize=(8, 8))
+    import scipy.stats as stats
+    stats.probplot(df["StdResidual"], dist="norm", plot=plt)
+    plt.title("Q-Q Plot of Standardized Residuals")
+    plt.savefig(figures_dir / "residuals_qq.png")
+    
+    print("Residual analysis complete.")
 
 if __name__ == "__main__":
     main()
-

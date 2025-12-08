@@ -65,6 +65,27 @@ def get_priors_from_config(config, num_exp):
     stdev_emulator = hyper["sigma_emulator"]["target_dist"].icdf(cdf_normal(stdev_emulator_n))
     numpyro.deterministic("sigma_emulator", stdev_emulator)
 
+    # Measurement Noise (Base/Obs)
+    stdev_measure_n = numpyro.sample("sigma_measure_n", dist.Normal())
+    stdev_measure = hyper["sigma_measure"]["target_dist"].icdf(cdf_normal(stdev_measure_n))
+    numpyro.deterministic("sigma_measure", stdev_measure)
+
+    stdev_measure_base = 0.0 # Default to 0 (proportional model)
+    # Check noise model config
+    noise_model = config["data"].get("noise_model", "proportional")
+    
+    if noise_model == "additive":
+        stdev_measure_base_n = numpyro.sample("sigma_measure_base_n", dist.Normal())
+        stdev_measure_base = hyper["sigma_measure_base"]["target_dist"].icdf(cdf_normal(stdev_measure_base_n))
+        numpyro.deterministic("sigma_measure_base", stdev_measure_base)
+    else:
+        # If proportional, we don't sample base noise, just Deterministic 0 for consistency if needed, 
+        # or just return 0. Returning 0 is fine as long as downstream handles it.
+        # But to avoid "site not found" if we try to plot it, maybe deterministic 0?
+        # Actually, if we don't sample it, it wont be in posterior.
+        # Let's just return the value 0.0.
+        pass
+
     # Length Scales
     ls_cfg = hyper["length_scales"]
     ls_names = ["lambda_P", "lambda_alpha", "lambda_E1", "lambda_E2", "lambda_v12", "lambda_v23", "lambda_G12"]
@@ -80,12 +101,9 @@ def get_priors_from_config(config, num_exp):
     length_xy = jnp.array([ls_vals["lambda_P"], ls_vals["lambda_alpha"]])
     length_theta = jnp.array([ls_vals["lambda_E1"], ls_vals["lambda_E2"], ls_vals["lambda_v12"], ls_vals["lambda_v23"], ls_vals["lambda_G12"]])
 
-    # Measurement Noise
-    stdev_measure_n = numpyro.sample("sigma_measure_n", dist.Normal())
-    stdev_measure = hyper["sigma_measure"]["target_dist"].icdf(cdf_normal(stdev_measure_n))
-    numpyro.deterministic("sigma_measure", stdev_measure)
 
-    return theta, bias_E1, bias_alpha, mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure
+
+    return theta, bias_E1, bias_alpha, mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure, stdev_measure_base
 
 
 def model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, config):
@@ -98,7 +116,8 @@ def model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp
     add_bias_alpha = config["bias"]["add_bias_alpha"]
 
     # Get all priors
-    theta, bias_E1, bias_alpha, mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure = get_priors_from_config(config, num_exp)
+    # Get all priors
+    theta, bias_E1, bias_alpha, mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure, stdev_measure_base = get_priors_from_config(config, num_exp)
 
     # Prepare inputs based on bias
     data_size_exp = [i.shape[0] for i in input_xy_exp]
@@ -130,9 +149,23 @@ def model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp
     # Compute Covariance Matrix
     cov_matrix = cov_matrix_emulator(input_xy, input_theta, input_xy, input_theta, stdev_emulator, length_xy, length_theta)
     
+
+    
+    # Add Measurement Noise
     # Add Measurement Noise
     loads_exp = jnp.concatenate(input_xy_exp, axis=0)[:,0]
-    diag_line = jnp.concatenate([(stdev_measure**2 * loads_exp), jnp.zeros(input_xy_sim.shape[0])])
+    
+    # Noise model selection
+    noise_model = config["data"].get("noise_model", "proportional")
+    
+    if noise_model == "additive":
+         # sigma^2 = sigma_measure^2 * P + sigma_base^2
+         noise_diag = stdev_measure**2 * loads_exp + stdev_measure_base**2
+    else:
+         # proportional: sigma^2 = sigma_measure^2 * P
+         noise_diag = stdev_measure**2 * loads_exp
+
+    diag_line = jnp.concatenate([noise_diag, jnp.zeros(input_xy_sim.shape[0])])
     cov_matrix_measure = jnp.diag(diag_line)
     cov_matrix += cov_matrix_measure
     
@@ -158,7 +191,7 @@ def model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp
     )
 
 def posterior_predict(rng_key, input_xy_exp, input_xy_sim, input_theta_exp, input_theta_sim, data_exp, data_sim, test_xy, test_theta, 
-            mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure, direction='h'):
+            mean_emulator, stdev_emulator, length_xy, length_theta, stdev_measure, stdev_measure_base=0.0, direction='h'):
    
     # compute kernels between train and test data, etc.
     input_xy = jnp.concatenate((input_xy_exp, input_xy_sim, test_xy[0][None,:]), axis=0)
@@ -169,7 +202,13 @@ def posterior_predict(rng_key, input_xy_exp, input_xy_sim, input_theta_exp, inpu
     cov_matrix_data = cov_matrix_emulator(input_xy, input_theta, input_xy, input_theta, stdev_emulator, length_xy, length_theta) 
     # Cast shape to int to avoid TracerIntegerConversionError
     zeros_padding = jnp.zeros(int(input_xy_sim.shape[0]) + 1)
-    diag_line = jnp.concatenate([(stdev_measure**2 * input_xy_exp[:,0]), zeros_padding])
+    # Noise variance
+    # We need to know if we are doing additive or proportional.
+    # But this function doesn't see 'config'. It takes stdev_measure_base as arg.
+    # If stdev_measure_base is 0.0 (passed from main/analyze), then additive logic works fine:
+    # sigma^2 * P + 0^2  == sigma^2 * P.
+    # So we can keep the additive formula as the general case!
+    diag_line = jnp.concatenate([(stdev_measure**2 * input_xy_exp[:,0] + stdev_measure_base**2), zeros_padding])
     cov_matrix_measure = jnp.diag(diag_line)
     cov_matrix_data += cov_matrix_measure
     cov_matrix_data += jnp.diag(jnp.ones(cov_matrix_data.shape[0]) * 1e-10)

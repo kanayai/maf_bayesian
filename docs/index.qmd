@@ -4,3 +4,8 @@ This report documents the Bayesian analysis pipeline for the MAF project, includ
 
 ## Overview {.unnumbered}
 The project uses Gaussian Process (GP) emulators to calibrate material parameters from experimental load-extension data. This document compiles the technical documentation for the codebase and the statistical methods employed.
+
+## Recent Updates
+-   **Residual Analysis**: A comprehensive diagnostic suite has been added to `analyze.py`, featuring residual plots with 95% uncertainty bands, Q-Q plots, and distribution histograms.
+-   **Additive Noise Model**: An optional measurement error model ($\sigma^2 = \sigma_1^2 P + \sigma_0^2$) has been implemented to handle low-load noise. This is configurable via `default_config.py`.
+
