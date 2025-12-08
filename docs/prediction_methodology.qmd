@@ -1,0 +1,121 @@
+---
+title: "Prior vs Posterior Prediction Methodology"
+author: "MAF Bayesian Analysis"
+date: "2025-12-08"
+format:
+  html:
+    toc: true
+    code-fold: false
+    number-sections: true
+---
+
+# Overview
+
+This document explains how prior and posterior predictions are computed in `analyze.py`, following the methodology described in the paper.
+
+# Prediction Methodology
+
+## From the Paper
+
+> N random samples of the uncertain parameters are obtained according to their prior distributions. For each of these samples, a realization is obtained from the conditional multivariate Gaussian distribution based on the **training data (not the observed data)**. The prior mean is obtained as the average of these N realizations and the 95% probability interval is obtained as the interval bounded by the 2.5th and the 97.5th percentile.
+
+**Key terminology:**
+- **Training data** = Simulation outputs (FE model predictions)
+- **Observed data** = Experimental measurements
+
+## Implementation
+
+### Prior Predictions
+
+For prior predictions (`use_prior=True`):
+
+1. Sample hyperparameters $\theta$ from their **prior distributions**
+2. For each sample, obtain a GP realization by conditioning **only on simulation data**:
+   - Experimental data inputs: empty
+   - Simulation data inputs: included
+3. Compute statistics from the ensemble of realizations
+
+```python
+# Prior: exclude experimental data
+predict_batch(prior_params, direction, test_xy, use_prior=True)
+```
+
+### Posterior Predictions  
+
+For posterior predictions (`use_prior=False`):
+
+1. Sample hyperparameters $\theta$ from their **posterior distributions** (after MCMC)
+2. For each sample, obtain a GP realization by conditioning on **both simulation and experimental data**
+3. Compute statistics from the ensemble of realizations
+
+```python
+# Posterior: include experimental data
+predict_batch(posterior_params, direction, test_xy, use_prior=False)
+```
+
+# Critical Implementation Details
+
+## GP Realizations via Cholesky Decomposition
+
+The `posterior_predict` function returns three values:
+
+1. `mean`: GP posterior mean function
+2. `stdev`: GP posterior standard deviation (marginal)
+3. **`sample`: A correlated GP realization**
+
+The sample is generated via Cholesky decomposition:
+
+$$
+\text{sample} = L \cdot \epsilon + \mu_{post}
+$$
+
+where:
+- $L$: Cholesky decomposition of posterior covariance $\Sigma_{post}$
+- $\epsilon \sim \mathcal{N}(0, I)$: white noise
+- $\mu_{post}$: posterior mean
+
+**Why this matters:** The Cholesky sampling preserves the **spatial correlation structure** of the GP. Independent sampling at each point (e.g., `mean + random.normal() * std`) would **destroy** this correlation.
+
+## Code Structure
+
+```python
+def predict_batch(params_tuple, direction, current_test_xy, use_prior=False):
+    def predict_point(rng, ..., is_prior):
+        if is_prior:
+            # Condition only on simulation data
+            exp_xy = jnp.empty((0, 2))
+            exp_theta = jnp.empty((0, 5))
+            exp_data = jnp.empty(0)
+        else:
+            # Condition on both simulation and experimental data
+            exp_xy = jnp.concatenate(input_xy_exp, axis=0)
+            exp_theta = jnp.tile(t_theta, (exp_xy.shape[0], 1))
+            exp_data = jnp.concatenate(data_exp_v if direction == 'v' else data_exp_h)
+        
+        # Get GP realization via Cholesky
+        mean, std_em, sample = posterior_predict(
+            rng, exp_xy, input_xy_sim, exp_theta, input_theta_sim,
+            exp_data, sim_data, t_xy, t_theta, ...
+        )
+        return mean, std_em, sample
+    
+    # Use the Cholesky-sampled realizations directly
+    means, stds_em, y_samples = vmap_predict(...)
+    return means, total_std, y_samples
+```
+
+# Summary
+
+**Prior predictions:**
+- Use parameters sampled from prior distributions
+- Condition **only on simulation data**
+- Exclude experimental observations
+
+**Posterior predictions:**
+- Use parameters sampled from posterior distributions (MCMC)
+- Condition on **both simulation and experimental data**
+- Include experimental observations
+
+**Both methods:**
+- Use Cholesky-sampled GP realizations to preserve spatial correlation
+- Compute prediction bands from percentiles of the sample ensemble

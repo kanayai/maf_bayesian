@@ -17,6 +17,8 @@ book:
         - model_analysis.qmd
         - statistical_modeling_analysis.qmd
         - posterior_method_explanation.qmd
+        - prediction_methodology.qmd
+        - prior_prediction_issue.qmd
     - part: "Validation"
       chapters:
         - residual_analysis.qmd

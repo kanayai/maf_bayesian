@@ -47,20 +47,56 @@ The project supports three model types, configurable in `configs/default_config.
 Modify `configs/default_config.py` to set:
 - **Model**: Choose between `model`, `model_n`, or `model_n_hv`.
 - **Priors**: Define priors for physical parameters, hyperparameters, and bias terms using `numpyro.distributions`.
-- **Priors**: Define priors for physical parameters, hyperparameters, and bias terms using `numpyro.distributions`.
 - **Data**: Select angles and data paths.
 - **Analysis Settings**:
     - `prediction_interval`: Confidence level for prediction plots (default 0.95).
-    - `prediction_samples`: Number of samples to use for prediction (default 500).
+    - `prediction_samples`: Number of samples to use for prediction (default 2000).
 
-### 2. Execution
-Run the inference pipeline:
+### 2. Running Inference
+
+#### **With Automatic Organization (Recommended):**
+
 ```bash
-python main.py
-```
-This script loads data, runs the MCMC sampling based on your config, and saves the posterior samples to `results/`.
+# Experimental/testing run → saves to results/tmp/
+uv run python main.py --experimental
 
-### 3. Analysis (`analyze.py`)
+# Final/important run → saves to results/final/
+uv run python main.py --final
+
+# Default run → saves to results/
+uv run python main.py
+```
+
+Results are automatically saved with timestamped filenames. All `.nc` files are ignored by git and remain local-only.
+
+**Flags:**
+- `--experimental`: Automatically saves to `results/tmp/` for quick experiments
+- `--final`: Automatically saves to `results/final/` for important runs
+- No flag: Saves to `results/` (root level)
+
+### 3. Running Analysis
+
+The analyzer automatically loads the **most recent** `.nc` file from `results/`:
+
+```bash
+# Experimental analysis → saves to figures/tmp/
+uv run python analyze.py --experimental
+
+# Final analysis → saves to figures/final/
+uv run python analyze.py --final
+
+# Default analysis → saves to figures/
+uv run python analyze.py
+```
+
+Analysis outputs (plots, CSVs) are saved to timestamped directories based on the flag used.
+
+**Flags:**
+- `--experimental`: Saves to `figures/tmp/analysis_<timestamp>/`
+- `--final`: Saves to `figures/final/analysis_<timestamp>/`
+- No flag: Saves to `figures/analysis_<timestamp>/`
+
+#### **Analysis Output**
 
 The analysis script generates comprehensive visualizations and statistics, saved in timestamped folders within `figures/` (e.g., `figures/analysis_model_n_hv_20231027_123045/`).
 
@@ -71,10 +107,8 @@ The analysis script generates comprehensive visualizations and statistics, saved
     *   **Bias Parameters**: If bias is enabled.
     *   *Note*: Plots include the **analytical prior density** (green line) and posterior histogram (density scale).
 *   **Prediction Plots**:
-    *   **Prior Prediction**: Green dashed intervals.
-    *   **Posterior Prediction**: Blue solid intervals.
-    *   **Prior Prediction**: Green dashed intervals.
-    *   **Posterior Prediction**: Blue solid intervals.
+    *   **Prior Prediction**: Green dashed intervals (condition on simulation data only).
+    *   **Posterior Prediction**: Blue solid intervals (condition on both simulation and experimental data).
     *   **Dual Direction**: Automatically generates plots for both **Normal** (formerly Vertical) and **Shear** (formerly Horizontal) extension.
     *   **Combined Plot**: Data + Prior + Posterior predictions.
 *   **Statistics**:
@@ -84,6 +118,16 @@ To run the analysis:
 ```bash
 uv run python analyze.py
 ```
+
+## Documentation
+
+For detailed technical documentation, see `docs/`:
+
+- **`prediction_methodology.qmd`**: How prior vs posterior predictions work
+- **`prior_prediction_issue.qmd`**: GP theory and Cholesky sampling
+- **`posterior_method_explanation.qmd`**: Deep dive into `posterior_predict` function
+- **`model_analysis.qmd`**: Model structure and analysis details
+- **`residual_analysis.qmd`**: Residual diagnostics
 
 ## Installation
 This project uses `uv` for dependency management.

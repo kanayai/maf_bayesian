@@ -4,6 +4,7 @@ import arviz as az
 import datetime
 from pathlib import Path
 import time
+import argparse
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
@@ -42,12 +43,27 @@ def run_inference(model, rng_key, data_dict, config):
     mcmc.print_summary()
     return mcmc
 
-def save_results(mcmc, config):
+def save_results(mcmc, config, output_mode="default"):
     """
     Saves MCMC results to NetCDF.
+    
+    Args:
+        mcmc: MCMC object with results
+        config: Configuration dictionary
+        output_mode: One of "experimental", "final", or "default"
+                    - "experimental": saves to results/tmp/
+                    - "final": saves to results/final/
+                    - "default": saves to results/
     """
-    output_dir = Path("results")
-    output_dir.mkdir(exist_ok=True)
+    # Determine output directory based on mode
+    if output_mode == "experimental":
+        output_dir = Path("results") / "tmp"
+    elif output_mode == "final":
+        output_dir = Path("results") / "final"
+    else:
+        output_dir = Path("results")
+    
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     date_str = datetime.datetime.now().strftime("_%Y_%m_%d_%H_%M_%S_")
     
@@ -70,6 +86,43 @@ def save_results(mcmc, config):
     return file_path
 
 def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Run Bayesian inference on composite laminate data",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py                  # Default: saves to results/
+  python main.py --experimental   # Saves to results/tmp/
+  python main.py --final          # Saves to results/final/
+        """
+    )
+    
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        '--experimental',
+        action='store_true',
+        help='Save results to results/tmp/ (for experimental/testing runs)'
+    )
+    mode_group.add_argument(
+        '--final',
+        action='store_true',
+        help='Save results to results/final/ (for important/final runs)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Determine output mode
+    if args.experimental:
+        output_mode = "experimental"
+        print("🧪 Running in EXPERIMENTAL mode - results will be saved to results/tmp/")
+    elif args.final:
+        output_mode = "final"
+        print("📌 Running in FINAL mode - results will be saved to results/final/")
+    else:
+        output_mode = "default"
+        print("Running in default mode - results will be saved to results/")
+    
     print("Starting inference pipeline...")
     
     # 1. Load Data
@@ -92,7 +145,7 @@ def main():
     print(f"Inference completed in {time.time() - start_time:.2f}s")
     
     # 3. Save Results
-    save_results(mcmc, config)
+    save_results(mcmc, config, output_mode)
 
 if __name__ == "__main__":
     main()

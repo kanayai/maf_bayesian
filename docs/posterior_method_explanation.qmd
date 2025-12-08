@@ -1,6 +1,6 @@
 # Deep Dive: Posterior Prediction Method
 
-
+> **Note:** This document explains the `posterior_predict` function, which is used for **both prior and posterior predictions**. The difference is in what data we condition on (see `prediction_methodology.qmd` for details).
 
 This document details the mathematical and algorithmic implementation of the `posterior_predict` function found in `src/core/models.py`.
 

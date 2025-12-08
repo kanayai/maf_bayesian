@@ -10,6 +10,7 @@ from numpyro.infer import Predictive
 import pandas as pd
 import seaborn as sns
 from datetime import datetime
+import argparse
 
 
 from configs.default_config import config
@@ -18,6 +19,43 @@ from src.core.models import model_n_hv, posterior_predict
 from src.vis.plotting import plot_experimental_data, plot_posterior_distributions, plot_prediction, plot_combined_prediction
 
 def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="Analyze MCMC results and generate plots",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python analyze.py                  # Default: saves to figures/analysis_<timestamp>/
+  python analyze.py --experimental   # Saves to figures/tmp/analysis_<timestamp>/
+  python analyze.py --final          # Saves to figures/final/analysis_<timestamp>/
+        """
+    )
+    
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        '--experimental',
+        action='store_true',
+        help='Save figures to figures/tmp/ (for experimental/testing runs)'
+    )
+    mode_group.add_argument(
+        '--final',
+        action='store_true',
+        help='Save figures to figures/final/ (for important/final runs)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Determine output mode
+    if args.experimental:
+        output_mode = "experimental"
+        print("🧪 Running in EXPERIMENTAL mode - figures will be saved to figures/tmp/")
+    elif args.final:
+        output_mode = "final"
+        print("📌 Running in FINAL mode - figures will be saved to figures/final/")
+    else:
+        output_mode = "default"
+        print("Running in default mode - figures will be saved to figures/")
+    
     print("Starting analysis...")
     
     # 1. Load Data
@@ -27,7 +65,16 @@ def main():
     # Setup output directory
     model_type = config.get("model_type", "unknown")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    figures_dir = Path("figures") / f"analysis_{model_type}_{timestamp}"
+    
+    # Determine base figures directory based on mode
+    if output_mode == "experimental":
+        base_dir = Path("figures") / "tmp"
+    elif output_mode == "final":
+        base_dir = Path("figures") / "final"
+    else:
+        base_dir = Path("figures")
+    
+    figures_dir = base_dir / f"analysis_{model_type}_{timestamp}"
     figures_dir.mkdir(parents=True, exist_ok=True)
     print(f"Saving figures to {figures_dir}")
     
@@ -320,59 +367,62 @@ def main():
     
     print("Running predictions per angle...")
     
-    # Helper to batched predict
-    def predict_batch(params_tuple, direction, current_test_xy):
+    def predict_batch(params_tuple, direction, current_test_xy, use_prior=False):
+        """
+        Compute GP predictions using posterior_predict.
+        
+        Args:
+            params_tuple: Tuple of parameter samples
+            direction: 'h' or 'v' for horizontal/vertical
+            current_test_xy: Test points to predict at
+            use_prior: If True, condition only on simulation data (prior predictions).
+                      If False, condition on both simulation and experimental data (posterior).
+        """
         test_theta, mu_em, sig_em, len_xy, len_th, sig_meas, sig_meas_base = params_tuple
         
-        # Vectorize posterior_predict over samples
-        # posterior_predict(rng_key, ..., test_theta, mean_emulator, ..., direction)
-        
-        # We fix the experimental/simulation inputs (they are constant/global)
-        # We vary the parameters (test_theta, etc.)
-        
-        # Helper to predict
-        def predict_point(m_em, s_em, l_xy, l_th, s_meas, s_meas_base, t_theta, t_xy, direction):
-            full_input_xy_exp = jnp.concatenate(input_xy_exp, axis=0) # (Total_Exp_Points, 2)
-            full_input_theta_exp = jnp.tile(t_theta, (full_input_xy_exp.shape[0], 1))
+        def predict_point(rng, m_em, s_em, l_xy, l_th, s_meas, s_meas_base, t_theta, t_xy, direction, is_prior):
+            if is_prior:
+                # Prior: condition only on simulation data
+                exp_xy = jnp.empty((0, 2))
+                exp_theta = jnp.empty((0, 5))
+                exp_data = jnp.empty(0)
+            else:
+                # Posterior: condition on both simulation and experimental data
+                exp_xy = jnp.concatenate(input_xy_exp, axis=0)
+                exp_theta = jnp.tile(t_theta, (exp_xy.shape[0], 1))
+                exp_data = jnp.concatenate(data_exp_v if direction == 'v' else data_exp_h, axis=0)
             
-            full_data_exp = jnp.concatenate(data_exp_v, axis=0) if direction == 'v' else jnp.concatenate(data_exp_h, axis=0)
-            trg_data_sim = data_sim_v if direction == 'v' else data_sim_h
+            sim_data = data_sim_v if direction == 'v' else data_sim_h
             
-            mean, std_em, _ = posterior_predict(
-                random.PRNGKey(0), 
-                full_input_xy_exp, input_xy_sim, full_input_theta_exp, input_theta_sim,
-                full_data_exp, trg_data_sim,
-                t_xy, t_theta, 
+            # Get GP realization via Cholesky sampling from posterior_predict
+            mean, std_em, sample = posterior_predict(
+                rng, exp_xy, input_xy_sim, exp_theta, input_theta_sim,
+                exp_data, sim_data, t_xy, t_theta, 
                 m_em, s_em, l_xy, l_th, s_meas, s_meas_base, direction=direction
             )
-            return mean, std_em
+            return mean, std_em, sample
 
-        vmap_predict = vmap(predict_point, in_axes=(0,0,0,0,0,0,0,None,None))
+        vmap_predict = vmap(predict_point, in_axes=(0,0,0,0,0,0,0,0,None,None,None))
         
-        # Predict at observed points
-        means, stds_em = vmap_predict(
-            mu_em, sig_em, len_xy, len_th, sig_meas, sig_meas_base,
-            test_theta, current_test_xy, direction
+        num_samples = test_theta.shape[0]
+        rng_keys = random.split(random.PRNGKey(42), num_samples)
+        
+        means, stds_em, y_samples = vmap_predict(
+            rng_keys, mu_em, sig_em, len_xy, len_th, sig_meas, sig_meas_base,
+            test_theta, current_test_xy, direction, use_prior
         )
-        # Total Uncertainty at Observed Points
-        loads = current_test_xy[:, 0] # Extract loads from test_xy
         
-        # Noise model selection (check config or default to proportional if base is 0)
+        # Compute total_std for reporting
+        loads = current_test_xy[:, 0]
         noise_model = config["data"].get("noise_model", "proportional")
         
         if noise_model == "additive":
-            noise_var_samples = sig_meas[:, None]**2 * loads[None, :] + sig_meas_base[:, None]**2
+            noise_var = sig_meas[:, None]**2 * loads[None, :] + sig_meas_base[:, None]**2
         else:
-             # proportional
-            noise_var_samples = sig_meas[:, None]**2 * loads[None, :]
-
-        total_std = jnp.sqrt(stds_em**2 + noise_var_samples)
+            noise_var = sig_meas[:, None]**2 * loads[None, :]
         
-        # Sample from predictive distribution
-        rng_key_predict = random.PRNGKey(2) # Use a fixed key for prediction sampling
-        y_samples = means + random.normal(rng_key_predict, means.shape) * total_std
-                                     
-        # Returns: mean_post, stdev_post, sample_post
+        total_std = jnp.sqrt(stds_em**2 + noise_var)
+        
         return means, total_std, y_samples
 
     for angle_value in angles_to_predict:
@@ -399,14 +449,14 @@ def main():
             # 1. Prior Prediction
             print("    Running prior prediction...")
             # We already have prior samples. Just propagate.
-            _, _, prior_y_samples = predict_batch(prior_params_tuple, direction, test_xy)
+            _, _, prior_y_samples = predict_batch(prior_params_tuple, direction, test_xy, use_prior=True)
             
             mean_prior = jnp.mean(prior_y_samples, axis=0) # (100,)
             pct_prior = jnp.percentile(prior_y_samples, q=jnp.array([q_lower, q_upper]), axis=0)
             
             # 2. Posterior Prediction
             print("    Running posterior prediction...")
-            _, _, post_y_samples = predict_batch(post_params_tuple, direction, test_xy)
+            _, _, post_y_samples = predict_batch(post_params_tuple, direction, test_xy, use_prior=False)
             
             mean_post = jnp.mean(post_y_samples, axis=0)
             pct_post = jnp.percentile(post_y_samples, q=jnp.array([q_lower, q_upper]), axis=0)
