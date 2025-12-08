@@ -9,21 +9,25 @@ config = {
     
     # Data settings
     "data": {
+        # 'noise_model' options: 'proportional' (default) or 'additive'
+        # 'proportional': sigma^2 = sigma_measure^2 * Load
+        # 'additive': sigma^2 = sigma_measure^2 * Load + sigma_base^2
+        "noise_model": "proportional",
         "base_path": "./data", # Root data directory
         "angles": [45, 90, 135], # Angles to load
         "prediction_angle": [45, 90, 135], # Angle for prediction/plotting
         "direction": "v", # 'h' or 'v' for single direction models/plots
         "prediction_interval": 0.95, # Prediction interval coverage (e.g., 0.95 for 95%)
-        "prediction_samples": 5000, # Number of samples for prediction
+        "prediction_samples": 1000, # Number of samples for prediction
         "run_residual_analysis": True, # Validation: Run residual analysis
     },
 
     # MCMC settings
     "mcmc": {
-        "num_warmup": 5000,
-        "num_samples": 10000,
+        "num_warmup": 1000,
+        "num_samples":1000,
         "num_chains": 2,
-        "thinning": 5,
+        "thinning": 1,
     },
 
     # Bias flags
@@ -81,7 +85,10 @@ config = {
             },
             # Measurement noise
             "sigma_measure": {
-                "target_dist": dist.Exponential(1.)
+                "target_dist": dist.Exponential(100.)
+            },
+            "sigma_measure_base": {
+                "target_dist": dist.Exponential(100.)
             }
         },
 
