@@ -2,7 +2,7 @@
 
 
 
-This document details the methodology used in `analyze_residuals.py` to validate the statistical assumptions of the Bayesian model, specifically the measurement error model.
+This document details the methodology used in `analyze.py` (via `run_residual_analysis`) to validate the statistical assumptions of the Bayesian model, specifically the measurement error model.
 
 ## 1. The Assumption
 The model assumes that the measurement noise variance is **proportional to the applied load** ($P$).
