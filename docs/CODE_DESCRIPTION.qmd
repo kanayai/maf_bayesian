@@ -38,12 +38,11 @@ Analyzes results from the model **without bias** terms.
 *   **Plotting**: Generates plots for prior/posterior predictions and parameter distributions.
 *   **Optimization**: Uses `jax.vmap` for fast vectorized predictions.
 
-### [`analyze_residuals.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/analyze_residuals.py)
-Performs **Residual Analysis** to validate the measurement error model.
+### [`analyze.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/analyze.py)
+**Refactored common analysis script** that replaces earlier specific scripts (e.g., `posterior_no_bias.py`).
 
-*   **Residual Calculation**: Computes residuals ($y_{obs} - \mu_{post}$) at experimental data points.
-*   **Standardization**: Calculates standardized residuals using the load-dependent noise variance ($\sigma^2 \propto P$).
-*   **Visualization**: Generates diagnostic plots, including **Raw Residuals with Uncertainty Bands** and **Standardized Residuals vs Load**, to check for homoscedasticity and model adequacy.
+*   **Unified Analysis**: Handles loading results, plotting experimental data, and generating posterior predictions.
+*   **Residual Analysis (Optional)**: Can optionally run the full residual analysis (bands, histograms, Q-Q plots) if enabled in the config.
 
 ### [`posterior_bias_alpha.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/posterior_bias_alpha.py)
 Analyzes results from the model **with bias on the angle (`alpha`)**.
