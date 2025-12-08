@@ -1,16 +1,6 @@
----
-title: "Statistical Modeling Analysis: posterior_no_bias.py"
-format:
-  html:
-    theme: cosmo
-    toc: true
-  pdf:
-    geometry:
-      - top=30mm
-      - left=30mm
----
+# Statistical Modeling Analysis: posterior_no_bias.py
 
-# Statistical Modeling Analysis: `posterior_no_bias.py`
+
 
 This script performs **Bayesian Calibration** and **Posterior Prediction** for a material model using Gaussian Processes (GP). It does not run the MCMC inference itself (which is assumed to be done previously and saved); instead, it loads those results to perform analysis and prediction.
 
@@ -25,12 +15,13 @@ The script loads three types of data:
 The script uses `model_n_hv` from `maf_gp.py`.
 
 - **Type**: Gaussian Process Emulator with Multi-Output (Shear & Normal).
-- **Goal**: To predict the system response $y$ (extension) given inputs $x$ (load, angle) and parameters $\theta$ (E1, E2, etc.).
+- **Goal**: To predict the system response $y$ (extension) given inputs $\mathbf{x} = (P, \alpha)$ (where $P$ is Load and $\alpha$ is Angle) and parameters $\theta$ (E1, E2, etc.).
 - **Structure**:
   $$ y(\mathbf{x}) = \mu(\mathbf{x}, \theta) + \delta(\mathbf{x}) + \epsilon $$
   - $\mu(\mathbf{x}, \theta)$: Physics-based mean trend (from FE surrogate).
   - $\delta(\mathbf{x}) \sim \mathcal{GP}(0, k(\mathbf{x}, \mathbf{x}'))$: GP bias term (corrects for systematic model errors).
-  - $\epsilon \sim \mathcal{N}(0, \sigma^2_{measure})$: Random measurement noise.
+  - $\epsilon \sim \mathcal{N}(0, \Sigma_\epsilon)$: Random measurement noise.
+  - The noise variance is modeled as **proportional to the load** $P$: $\Sigma_\epsilon = \text{diag}(\sigma_{measure}^2 \cdot P)$.
 
 ### 2.1 Covariance Kernel
 The GP uses a **Squared Exponential Kernel** with separate length scales for inputs $\mathbf{x}$ and parameters $\theta$:

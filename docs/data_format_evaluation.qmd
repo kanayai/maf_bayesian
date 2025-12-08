@@ -1,14 +1,4 @@
----
-title: "Data Format Evaluation: HDF5 vs. NetCDF (ArviZ)"
-format:
-  html:
-    theme: cosmo
-    toc: true
-  pdf:
-    geometry:
-      - top=30mm
-      - left=30mm
----
+# Data Format Evaluation: HDF5 vs. NetCDF (ArviZ)
 
 
 ## Current Workflow (HDF5)

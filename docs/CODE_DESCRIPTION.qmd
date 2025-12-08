@@ -1,16 +1,6 @@
----
-title: "Codebase Description"
-format:
-  html:
-    theme: cosmo
-    toc: true
-  pdf:
-    geometry:
-      - top=30mm
-      - left=30mm
----
-
 # Codebase Description
+
+
 
 This document provides a detailed overview of the key Python scripts in the `maf_gp_bayesian` project.
 
@@ -47,6 +37,13 @@ Analyzes results from the model **without bias** terms.
 *   **Posterior Prediction**: Uses the saved posterior samples to predict the system response (Load vs. Extension) and compares it against the experimental data.
 *   **Plotting**: Generates plots for prior/posterior predictions and parameter distributions.
 *   **Optimization**: Uses `jax.vmap` for fast vectorized predictions.
+
+### [`analyze_residuals.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/analyze_residuals.py)
+Performs **Residual Analysis** to validate the measurement error model.
+
+*   **Residual Calculation**: Computes residuals ($y_{obs} - \mu_{post}$) at experimental data points.
+*   **Standardization**: Calculates standardized residuals using the load-dependent noise variance ($\sigma^2 \propto P$).
+*   **Visualization**: Generates diagnostic plots, including **Raw Residuals with Uncertainty Bands** and **Standardized Residuals vs Load**, to check for homoscedasticity and model adequacy.
 
 ### [`posterior_bias_alpha.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/posterior_bias_alpha.py)
 Analyzes results from the model **with bias on the angle (`alpha`)**.
