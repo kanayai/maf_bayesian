@@ -121,8 +121,13 @@ Examples:
     ]
 
     # Filter samples into categories
+    # Also filter out parameters that are all zeros (unused in current noise model)
     samples_physical = {k: v for k, v in samples.items() if k in physical_params}
-    samples_hyper = {k: v for k, v in samples.items() if k in hyper_params}
+    samples_hyper = {
+        k: v
+        for k, v in samples.items()
+        if k in hyper_params and jnp.any(v != 0)  # Exclude all-zero parameters
+    }
     samples_bias = {
         k: v
         for k, v in samples.items()
@@ -209,15 +214,17 @@ Examples:
             # We need the rate.
             # dist.Exponential(rate)
             rate = 20.0
-            return expon.pdf(x_vals, scale=1 / rate)  # scipy uses scale=1/rate
+            return expon.pdf(x_vals, scale=1 / rate)
 
+        # Hyperparameters - sigma_measure, sigma_emulator, sigma_constant
         if key == "sigma_measure":
-            rate = 100.0
-            return expon.pdf(x_vals, scale=1 / rate)
-
+            # Exponential(100) dist
+            return expon.pdf(x_vals, scale=1 / 100.0)
         if key == "sigma_measure_base":
-            rate = 100.0
-            return expon.pdf(x_vals, scale=1 / rate)
+            return expon.pdf(x_vals, scale=1 / 100.0)
+        if key == "sigma_constant":
+            # Exponential(0.1) dist -> scale = 1/0.1 = 10
+            return expon.pdf(x_vals, scale=10.0)
 
         # Bias
         if key.startswith("b_"):
