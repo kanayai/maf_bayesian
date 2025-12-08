@@ -13,13 +13,25 @@ wheels/
 .DS_Store
 **/.DS_Store
 
-# Results
+# Results - Large binary files (always ignore)
 results_mcmc/*.h5
 results_mcmc/*.nc
 model_structure*
+*.h5
+*.nc
 
-# New Project Structure
-results/
-figures/
+# Temporary/intermediate results (ignore)
+results/tmp/
+results/cache/
+results/debug/
+figures/tmp/
+figures/cache/
+figures/debug/
+
+# Final/important results (tracked - using negation)
+!results/final/
+!figures/final/
+
+# Documentation build artifacts
 docs/_site/
 docs/*_files/

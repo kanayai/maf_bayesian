@@ -1,0 +1,123 @@
+---
+title: "Gaussian Process Prediction Theory"
+author: "Technical Reference"
+date: "2025-12-08"
+format:
+  html:
+    toc: true
+    code-fold: false
+    number-sections: true
+---
+
+# Gaussian Process Posterior Prediction
+
+## Standard GP Formulation
+
+Given a Gaussian Process emulator with:
+
+- Training data: $(X_{train}, y_{train})$ where $y_{train} = f(X_{train}) + \varepsilon$
+- Test points: $X_{test}$
+- Kernel function: $k(x, x')$ with hyperparameters $\theta$
+- Observation noise: $\varepsilon \sim \mathcal{N}(0, \sigma^2_{noise})$
+
+The **posterior predictive distribution** at test points is:
+
+$$
+p(y_{test} | X_{test}, X_{train}, y_{train}) = \mathcal{N}(\mu_{post}, \Sigma_{post})
+$$
+
+where:
+
+$$
+\mu_{post} = K_{test,train} (K_{train,train} + \sigma^2_{noise}I)^{-1} y_{train}
+$$
+
+$$
+\Sigma_{post} = K_{test,test} - K_{test,train} (K_{train,train} + \sigma^2_{noise}I)^{-1} K_{train,test}
+$$
+
+# GP Realizations via Cholesky Decomposition
+
+## Why Cholesky Sampling?
+
+To obtain a **realization** (sample path) from the GP posterior, we need to preserve the **spatial correlation structure** encoded in $\Sigma_{post}$.
+
+**Incorrect approach (destroys correlation):**
+$$
+y_i \sim \mathcal{N}(\mu_{post,i}, \sigma_{post,i}^2) \quad \text{independently for each } i
+$$
+
+This samples independently at each location, **breaking** the correlation between points.
+
+**Correct approach (preserves correlation):**
+
+1. Compute Cholesky decomposition: $\Sigma_{post} = L L^T$
+2. Sample white noise: $\epsilon \sim \mathcal{N}(0, I)$
+3. Generate correlated sample: $y = L \epsilon + \mu_{post}$
+
+The result is a sample from $\mathcal{N}(\mu_{post}, \Sigma_{post})$ with proper spatial correlations.
+
+## Implementation
+
+In `src/core/models.py::posterior_predict()`:
+
+```python
+# Posterior covariance
+cov_post_emulator = K_test_test - K_test_train @ inv(K_train_train) @ K_train_test
+
+# Mean
+mean_post_emulator = ...
+
+# Cholesky decomposition
+L = jnp.linalg.cholesky(cov_post_emulator + 1e-10 * I)
+
+# Correlated sample
+white_noise = random.normal(rng_key, (n_test,))
+sample_post = L @ white_noise + mean_post_emulator
+
+return mean_post_emulator, stdev_post_emulator, sample_post
+```
+
+# Prior vs Posterior Predictions
+
+## Methodology from Paper
+
+> N random samples of the uncertain parameters are obtained according to their prior distributions. For each of these samples, a realization is obtained from the conditional multivariate Gaussian distribution based on the **training data (not the observed data)**.
+
+**Key distinction:**
+- **Training data** = Simulation outputs (FE model)
+- **Observed data** = Experimental measurements
+
+## Prior Predictions
+
+1. Sample hyperparameters from **prior distributions**
+2. Condition GP **only on simulation data** (exclude experimental data)
+3. Obtain Cholesky-sampled realizations
+4. Compute statistics (mean, percentiles) from ensemble
+
+## Posterior Predictions
+
+1. Sample hyperparameters from **posterior distributions** (MCMC)
+2. Condition GP on **both simulation and experimental data**
+3. Obtain Cholesky-sampled realizations  
+4. Compute statistics from ensemble
+
+## Why This Matters
+
+Conditioning on experimental data **reduces uncertainty** in the GP:
+
+$$
+\Sigma_{post,with\_exp} < \Sigma_{post,sim\_only}
+$$
+
+Therefore:
+- **Prior predictions**: Wider bands (less information)
+- **Posterior predictions**: Narrower bands (more information from data)
+
+# Summary
+
+**Key principles:**
+1. Use Cholesky decomposition to preserve GP spatial correlations
+2. Prior predictions condition only on simulation data
+3. Posterior predictions condition on both simulation and experimental data
+4. Never sample independently at each point - always use Cholesky-sampled realizations
