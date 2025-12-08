@@ -1,0 +1,28 @@
+project:
+  type: book
+  output-dir: _site
+
+book:
+  title: "MAF Bayesian Analysis"
+  chapters:
+    - index.qmd
+    - part: "Overview"
+      chapters:
+        - CODE_DESCRIPTION.qmd
+    - part: "Data & Design"
+      chapters:
+        - data_format_evaluation.qmd
+    - part: "Model Theory"
+      chapters:
+        - model_analysis.qmd
+        - statistical_modeling_analysis.qmd
+        - posterior_method_explanation.qmd
+    - part: "Validation"
+      chapters:
+        - residual_analysis.qmd
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3

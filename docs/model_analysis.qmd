@@ -1,16 +1,6 @@
----
-title: "Model Analysis: maf_gp.py"
-format:
-  html:
-    theme: cosmo
-    toc: true
-  pdf:
-    geometry:
-      - top=30mm
-      - left=30mm
----
+# Model Analysis: maf_gp.py
 
-# Model Analysis: `maf_gp.py`
+
 
 This document provides a detailed comparison of the three model definitions in `maf_gp.py` (`model`, `model_n`, and `model_n_hv`) and an in-depth analysis of the likelihood function, specifically for the multi-output case.
 
@@ -37,6 +27,15 @@ A critical difference is that `model_n_hv` uses a different set of physical prio
 | **$\nu_{12}$** | $0.32 \pm 0.01$ | $0.36 \pm 0.005$ | **Mean $\uparrow$, Uncertainty $\downarrow \times 0.5$** |
 | **$\nu_{23}$** | $0.43 \pm 0.01$ | $0.41 \pm 0.01$ | Mean $\downarrow$ |
 | **$G_{12}$** | $5,170 \pm 70$ | $5,000 \pm 80$ | Mean $\downarrow$ |
+
+### Understanding `_n` Parameters
+
+You may notice parameters with an `_n` suffix (e.g., `sigma_emulator_n`, `E_1_n`). These are **coupled** but not typically "clones" of their counterparts.
+
+*   **`param_n`** is the **normalized** latent variable sampled by the MCMC (usually $\sim \mathcal{N}(0, 1)$).
+*   **`param`** is the **physical** value derived from it: $\theta = \mu + \sigma \cdot \theta_n$ (for Normal) or similar transformations.
+
+They contain the same information (one is a deterministic function of the other), but their plots show the distribution on different scales (Standard Normal vs. Physical Units). The `_n` plots are useful for checking convergence (should look like a "fuzzy caterpillar" around 0).
 
 > [!NOTE]
 > `model_n_hv` assumes significantly higher uncertainty for $E_1$ but tighter constraints on $\nu_{12}$.
@@ -88,7 +87,7 @@ Where:
 
 *   $\boldsymbol{\mu}(\mathbf{x}, \theta)$: The physics-based mean function (Finite Element surrogate).
 *   $\mathbf{K}(\mathbf{x}, \theta)$: The GP covariance matrix representing emulator uncertainty (bias).
-*   $\mathbf{\Sigma}_\epsilon$: Measurement noise.
+*   $\mathbf{\Sigma}_\epsilon$: Measurement noise matrix. Note that the noise variance is **proportional to the load**: $\mathbf{\Sigma}_{ii} = \sigma_{measure}^2 \times P_i$.
 
 ### The `model_n_hv` Likelihood (Dual Output)
 

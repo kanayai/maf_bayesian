@@ -17,3 +17,9 @@ wheels/
 results_mcmc/*.h5
 results_mcmc/*.nc
 model_structure*
+
+# New Project Structure
+results/
+figures/
+docs/_site/
+docs/*_files/

@@ -1,0 +1,93 @@
+# Deep Dive: Posterior Prediction Method
+
+
+
+This document details the mathematical and algorithmic implementation of the `posterior_predict` function found in `src/core/models.py`.
+
+## 1. Goal
+The function computes the **conditional distribution** of the system output (extension) at new test inputs $\mathbf{x}_* = (P_*, \alpha_*)$ (where $P$ is Load and $\alpha$ is Angle), given:
+
+1.  **Experimental Data** ($\mathbf{x}_{exp}, y_{exp}$): Noisy observations.
+2.  **Simulation Data** ($\mathbf{x}_{sim}, y_{sim}$): Noise-free (or low noise) "ground truth" from the FE model.
+3.  **Model Parameters** ($\theta$): Physical parameters ($E_1, E_2$, etc.) and hyperparameters ($\lambda$, $\sigma_{em}$, etc.).
+
+It returns samples from the posterior predictive distribution:
+$$ p(y_* | \mathbf{x}_{exp}, y_{exp}, \mathbf{x}_{sim}, y_{sim}, \mathbf{x}_*, \theta) $$
+
+## 2. Mathematical Formulation
+
+The method uses **Gaussian Process Regression** (also known as Kriging).
+
+### The Model
+The GP assumes the data follows a joint Multivariate Normal distribution:
+$$
+\begin{bmatrix} \mathbf{y}_{obs} \\ \mathbf{y}_* \end{bmatrix} \sim \mathcal{N} \left(
+\begin{bmatrix} \boldsymbol{\mu}(\mathbf{X}_{obs}) \\ \boldsymbol{\mu}(\mathbf{X}_*) \end{bmatrix},
+\begin{bmatrix} \mathbf{K}_{obs, obs} + \mathbf{\Sigma}_\epsilon & \mathbf{K}_{obs, *} \\ \mathbf{K}_{*, obs} & \mathbf{K}_{*, *} \end{bmatrix}
+\right)
+$$
+
+Where $\mathbf{X}_{obs}$ is the matrix of inputs $\mathbf{x} = (P, \alpha)$ for both experimental and simulation data.
+
+### The Prediction Equations (Conditioning)
+The posterior (conditional) distribution for new inputs $\mathbf{x}_*$ is Gaussian $\mathcal{N}(\boldsymbol{\mu}_{post}, \mathbf{\Sigma}_{post})$ with:
+
+**Mean:**
+$$ \boldsymbol{\mu}_{post} = \boldsymbol{\mu}(\mathbf{X}_*) + \mathbf{K}_{*, obs} (\mathbf{K}_{obs, obs} + \mathbf{\Sigma}_\epsilon)^{-1} (\mathbf{y}_{obs} - \boldsymbol{\mu}(\mathbf{X}_{obs})) $$
+
+**Covariance:**
+$$ \mathbf{\Sigma}_{post} = \mathbf{K}_{*, *} - \mathbf{K}_{*, obs} (\mathbf{K}_{obs, obs} + \mathbf{\Sigma}_\epsilon)^{-1} \mathbf{K}_{obs, *} $$
+
+## 3. Implementation Details
+
+### A. Data Augmentation (The "Zero" Point)
+A unique feature of this implementation is the augmentation of the training data with a single "dummy" point found at `test_xy[0]`.
+
+```python
+# Lines 164 & 191
+input_xy = jnp.concatenate((input_xy_exp, input_xy_sim, test_xy[0][None,:]), axis=0)
+targets  = jnp.concatenate((data_exp,     data_sim,     jnp.zeros(1)),       axis=0)
+```
+
+-   **What this does**: It forces the model to treat the first point of your test set (usually Load=0) as a known observation with value 0.
+-   **Why**: This enforces the physical boundary condition that **Extension is 0 when Load is 0**. Without this, the GP might predict a non-zero intercept.
+
+### B. The Mean Function
+The code uses a **Linear Mean Function** derived from the physics of the setup:
+
+$$ \mu(P, \alpha) = \mu_{emulator} \cdot P \cdot \sin(\alpha) \quad \text{(for Shear)} $$
+$$ \mu(P, \alpha) = \mu_{emulator} \cdot P \cdot \cos(\alpha) \quad \text{(for Normal)} $$
+
+This removes the bulk linear trend, leaving the GP to model the *non-linear residuals* (the difference between the simple linear theory and reality).
+
+### C. Construction of Covariance Matrices
+
+1.  **Observational Covariance ($K_{obs, obs} + \Sigma_\epsilon$)**:
+    *   Constructed from Exp + Sim + Dummy Point.
+    *   **Noise Model**:
+        *   Experiment: $\sigma^2_{noise} = \sigma^2_{measure} \times \text{Load}$
+        *   Simulation: $\sigma^2 \approx 0$ (practically $10^{-10}$ for stability)
+        *   Dummy Point: $\sigma^2 = 0$ (Hard Constraints)
+
+2.  **Cross Covariance ($K_{*, obs}$)**:
+    *   Correlation between Test points and All Observed points.
+
+### D. Sampling
+Instead of just returning the mean and variance, the function assumes you want a **sample path** from the GP.
+
+```python
+# Line 202-207
+L = jnp.linalg.cholesky(cov_post_emulator + jitter)
+white_noise = random.normal(rng_key, ...)
+sample_post = L @ white_noise + mean_post_emulator
+```
+
+It uses the Cholesky decomposition of the posterior covariance matrix to generate correlated random samples.
+
+## Summary of Flow
+1.  **Prepare Inputs**: Combine Exp, Sim, and the "Zero point".
+2.  **Build Kernel**: Compute covariance matrices using hyperparameters ($\lambda, \sigma_{em}$).
+3.  **Add Noise**: Add proportional noise to experimental diagonal.
+4.  **Solve**: Compute $(K + \Sigma)^{-1} (y - \mu)$.
+5.  **Predict**: Compute posterior mean and potentially full covariance.
+6.  **Sample**: Draw a realization from the posterior distribution.

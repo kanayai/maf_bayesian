@@ -1,0 +1,58 @@
+# Residual Analysis: Validating the Error Model
+
+
+
+This document details the methodology used in `analyze_residuals.py` to validate the statistical assumptions of the Bayesian model, specifically the measurement error model.
+
+## 1. The Assumption
+The model assumes that the measurement noise variance is **proportional to the applied load** ($P$).
+
+$$ \epsilon \sim \mathcal{N}(0, \sigma_{measure}^2 \cdot P) $$
+
+This implies that as the load increases, the absolute spread of the data around the true physical behavior should increase (heteroscedasticity).
+
+## 2. Methodology
+
+To validate this, we perform a **Posterior Predictive Residual Analysis** at the exact locations of the experimental data observations.
+
+### A. Posterior Prediction at Observed Points
+For each experimental data point $(\mathbf{x}_i, y_{obs, i})$ where $\mathbf{x}_i = (P_i, \alpha_i)$, we calculate the posterior predictive mean:
+
+$$ \mu_{post}(\mathbf{x}_i) = \mathbb{E}[y | \mathbf{x}_i, \text{Data}] $$
+
+This represents the model's "best guess" for the response at that specific load and angle.
+
+### B. Residual Calculation
+We verify the model by analyzing the difference between the observed data and this prediction.
+
+**1. Raw Residual:**
+$$ r_i = y_{obs, i} - \mu_{post}(\mathbf{x}_i) $$
+*   **Expectation**: If the error model is correct, these residuals should fan out (increase in magnitude) as $P$ increases.
+
+**2. Total Uncertainty:**
+The total predictive variance at a point includes both the GP emulator uncertainty and the measurement noise:
+$$ \sigma^2_{total, i} = \sigma^2_{emulator}(\mathbf{x}_i) + (\sigma_{measure}^2 \cdot P_i) $$
+
+**3. Standardized Residual:**
+We normalize the raw residual by the total predictive standard deviation:
+$$ r_{std, i} = \frac{r_i}{\sigma_{total, i}} $$
+*   **Expectation**: These standardized residuals should follow a Standard Normal distribution $\mathcal{N}(0, 1)$ and be **homoscedastic** (constant variance approx 1) with respect to Load.
+
+## 3. Diagnostic Plots
+
+The script generates several plots to diagnose the model fit.
+
+### Residuals with Uncertainty Bands
+**What it shows**: The raw residuals overlaid with the predicted **95% Prediction Interval** ($\approx \pm 1.96\sigma_{total}$).
+**Interpretation**: 
+- **Smooth Bands**: The uncertainty bands are calculated on a dense set of load points to clearly visualize the "trumpet" shape of the error model ($\sigma \propto \sqrt{P}$).
+- **Validation**: The residual points (blue dots) should generally fall within the gray shaded region. Any systematic deviation outside these bands suggests the error model (or the structural model) is inadequate.
+
+
+### Standardized Residuals vs Load
+**What it shows**: The standardized residuals plotted against Load.
+**Interpretation**: If the variance model is correct, this plot should show a **uniform horizontal band** of points centered at 0, with no flaring or narrowing trend. If the band widens with Load, the model underestimates the noise scaling. If it narrows, the model overestimates it.
+
+### Q-Q Plot and Histogram
+**What it shows**: The statistical distribution of the standardized residuals.
+**Interpretation**: The points in the Q-Q plot should lie on the 45-degree line, and the histogram should match the Standard Normal curve. Deviations indicate non-Gaussian behavior (e.g., heavy tails or skewness).

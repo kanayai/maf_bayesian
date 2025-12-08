@@ -1,0 +1,6 @@
+# Preface {.unnumbered}
+
+This report documents the Bayesian analysis pipeline for the MAF project, including model definitions, statistical methodology, and validation results.
+
+## Overview {.unnumbered}
+The project uses Gaussian Process (GP) emulators to calibrate material parameters from experimental load-extension data. This document compiles the technical documentation for the codebase and the statistical methods employed.

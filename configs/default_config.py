@@ -14,13 +14,13 @@ config = {
         "prediction_angle": [45, 90, 135], # Angle for prediction/plotting
         "direction": "v", # 'h' or 'v' for single direction models/plots
         "prediction_interval": 0.95, # Prediction interval coverage (e.g., 0.95 for 95%)
-        "prediction_samples": 1000, # Number of samples for prediction
+        "prediction_samples": 2000, # Number of samples for prediction
     },
 
     # MCMC settings
     "mcmc": {
-        "num_warmup": 3000,
-        "num_samples": 5000,
+        "num_warmup": 2000,
+        "num_samples": 3000,
         "num_chains": 2,
         "thinning": 5,
     },
@@ -80,7 +80,7 @@ config = {
             },
             # Measurement noise
             "sigma_measure": {
-                "target_dist": dist.Exponential(100.)
+                "target_dist": dist.Exponential(1.)
             }
         },
 
