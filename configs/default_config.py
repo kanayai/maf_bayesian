@@ -8,10 +8,11 @@ config = {
     "model_type": "model_n_hv",
     # Data settings
     "data": {
-        # 'noise_model' options: 'proportional' (default) or 'additive'
+        # 'noise_model' options: 'proportional' (default), 'additive', or 'constant'
         # 'proportional': sigma^2 = sigma_measure^2 * Load
         # 'additive': sigma^2 = sigma_measure^2 * Load + sigma_base^2
-        "noise_model": "proportional",
+        # 'constant': sigma^2 = sigma_constant^2
+        "noise_model": "constant",
         "base_path": "./data",  # Root data directory
         "angles": [45, 90, 135],  # Angles to load
         "prediction_angle": [45, 90, 135],  # Angle for prediction/plotting
@@ -22,8 +23,8 @@ config = {
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 5000,
-        "num_samples": 5000,
+        "num_warmup": 3000,
+        "num_samples": 3000,
         "num_chains": 2,
         "thinning": 3,
     },
@@ -78,6 +79,9 @@ config = {
             # Measurement noise
             "sigma_measure": {"target_dist": dist.Exponential(100.0)},
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
+            "sigma_constant": {
+                "target_dist": dist.Exponential(0.1)
+            },  # For constant noise model
         },
         # Bias Priors
         "bias_priors": {
