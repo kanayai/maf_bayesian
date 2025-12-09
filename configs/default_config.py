@@ -5,14 +5,14 @@ import numpy as np
 # Default Configuration
 config = {
     # Model selection: 'model', 'model_n', 'model_n_hv'
-    "model_type": "model_n_hv",
+    "model_type": "model_n",
     # Data settings
     "data": {
         # 'noise_model' options: 'proportional' (default), 'additive', or 'constant'
         # 'proportional': sigma^2 = sigma_measure^2 * Load
         # 'additive': sigma^2 = sigma_measure^2 * Load + sigma_base^2
         # 'constant': sigma^2 = sigma_constant^2
-        "noise_model": "constant",
+        "noise_model": "proportional",
         "base_path": "./data",  # Root data directory
         "angles": [45, 90, 135],  # Angles to load
         "prediction_angle": [45, 90, 135],  # Angle for prediction/plotting
@@ -20,6 +20,7 @@ config = {
         "prediction_interval": 0.95,  # Prediction interval coverage (e.g., 0.95 for 95%)
         "prediction_samples": 2000,  # Number of samples for prediction
         "run_residual_analysis": True,  # Validation: Run residual analysis
+        "plot_trace": True,  # Validation: Plot MCMC trace for diagnostics
     },
     # MCMC settings
     "mcmc": {

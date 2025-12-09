@@ -152,6 +152,125 @@ def get_priors_from_config(config, num_exp):
     )
 
 
+def model_n(
+    input_xy_exp,
+    input_xy_sim,
+    input_theta_sim,
+    data_exp,
+    data_sim,
+    config,
+):
+    """
+    Model with reparameterization for single direction (horizontal or vertical).
+    Uses config for priors and settings.
+    """
+    num_exp = len(input_xy_exp)
+    add_bias_E1 = config["bias"]["add_bias_E1"]
+    add_bias_alpha = config["bias"]["add_bias_alpha"]
+    direction = config["data"].get("direction", "h") # Default to horizontal if not specified
+
+    # Get all priors
+    (
+        theta,
+        bias_E1,
+        bias_alpha,
+        mean_emulator,
+        stdev_emulator,
+        length_xy,
+        length_theta,
+        stdev_measure,
+        stdev_measure_base,
+        stdev_constant,
+    ) = get_priors_from_config(config, num_exp)
+
+    # Prepare inputs based on bias
+    data_size_exp = [i.shape[0] for i in input_xy_exp]
+
+    if add_bias_E1:
+        input_xy = jnp.concatenate((*input_xy_exp, input_xy_sim), axis=0)
+        input_theta_exp = []
+        for i in range(num_exp):
+            theta_b = theta.at[0].add(bias_E1[i])
+            input_theta_exp.append(jnp.tile(theta_b, (data_size_exp[i], 1)))
+        input_theta = jnp.concatenate([*input_theta_exp, input_theta_sim], axis=0)
+
+    elif add_bias_alpha:
+        input_xy_exp_b = []
+        for i in range(num_exp):
+            input_xy_exp_b.append(
+                jnp.array(input_xy_exp[i])
+                + jnp.concatenate(
+                    (
+                        jnp.zeros((data_size_exp[i], 1)),
+                        bias_alpha[i] * jnp.ones((data_size_exp[i], 1)),
+                    ),
+                    axis=1,
+                )
+            )
+        input_xy = jnp.concatenate((*input_xy_exp_b, input_xy_sim), axis=0)
+        input_theta = jnp.concatenate(
+            [jnp.tile(theta, (sum(data_size_exp), 1)), input_theta_sim], axis=0
+        )
+
+    else:  # No bias
+        input_xy = jnp.concatenate((*input_xy_exp, input_xy_sim), axis=0)
+        input_theta = jnp.concatenate(
+            [jnp.tile(theta, (sum(data_size_exp), 1)), input_theta_sim], axis=0
+        )
+
+    # Prepare Data
+    data = jnp.concatenate((*data_exp, data_sim), axis=0)
+
+    # Compute Covariance Matrix
+    cov_matrix = cov_matrix_emulator(
+        input_xy,
+        input_theta,
+        input_xy,
+        input_theta,
+        stdev_emulator,
+        length_xy,
+        length_theta,
+    )
+
+    # Add Measurement Noise
+    loads_exp = jnp.concatenate(input_xy_exp, axis=0)[:, 0]
+
+    # Noise model selection
+    noise_model = config["data"].get("noise_model", "proportional")
+
+    if noise_model == "additive":
+        # sigma^2 = sigma_measure^2 * P + sigma_base^2
+        noise_diag = stdev_measure**2 * loads_exp + stdev_measure_base**2
+    elif noise_model == "constant":
+        # sigma^2 = sigma_constant^2 (constant variance)
+        num_exp_points = len(loads_exp)
+        noise_diag = stdev_constant**2 * jnp.ones(num_exp_points)
+    else:
+        # proportional: sigma^2 = sigma_measure^2 * P
+        noise_diag = stdev_measure**2 * loads_exp
+
+    diag_line = jnp.concatenate([noise_diag, jnp.zeros(input_xy_sim.shape[0])])
+    cov_matrix_measure = jnp.diag(diag_line)
+    cov_matrix += cov_matrix_measure
+
+    # Jitter
+    jitter = jnp.diag(1e-6 * jnp.ones(input_xy.shape[0]))
+    cov_matrix += jitter
+
+    # Mean Vectors
+    if direction == "h":
+        mean_vector = mean_emulator * input_xy[:, 0] * jnp.sin(input_xy[:, 1])
+    else: # direction == "v"
+        mean_vector = mean_emulator * input_xy[:, 0] * jnp.cos(input_xy[:, 1])
+
+    # Sample Data
+    numpyro.sample(
+        "data", # Single output variable for single direction model
+        dist.MultivariateNormal(loc=mean_vector, covariance_matrix=cov_matrix),
+        obs=data,
+    )
+
+
 def model_n_hv(
     input_xy_exp,
     input_xy_sim,
