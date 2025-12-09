@@ -17,6 +17,7 @@ from src.io.data_loader import load_all_data
 from src.core.models import model_n_hv, posterior_predict
 from src.vis.plotting import (
     plot_experimental_data,
+    plot_averaged_experimental_data,
     plot_posterior_distributions,
     plot_prediction,
     plot_combined_prediction,
@@ -83,7 +84,19 @@ Examples:
     figures_dir.mkdir(parents=True, exist_ok=True)
     print(f"Saving figures to {figures_dir}")
 
-    plot_experimental_data(data_dict, save_path=figures_dir / "experimental_data.png")
+    # Create temporary dict for full data plotting
+    # The plotting functions expect standard keys, so we map the full data to them
+    full_data_dict = {
+        "input_xy_exp": data_dict["input_xy_exp_full"],
+        "data_exp_h_raw": data_dict["data_exp_h_full_raw"],
+        "data_exp_v_raw": data_dict["data_exp_v_full_raw"]
+    }
+
+    plot_experimental_data(full_data_dict, save_path=figures_dir / "experimental_data.png")
+    
+    plot_averaged_experimental_data(
+        full_data_dict, save_path=figures_dir / "experimental_data_averaged.png"
+    )
 
     # 3. Load Latest Results
     results_dir = Path("results")
@@ -671,6 +684,10 @@ Examples:
     if config["data"].get("run_residual_analysis", False):
         run_residual_analysis(idata, data_dict, figures_dir)
 
+    # 10. Traceplots (Optional)
+    if config["data"].get("plot_trace", True):
+        plot_trace_diagnostics(idata, figures_dir)
+        
     print("Analysis complete.")
 
 
@@ -709,11 +726,21 @@ def run_residual_analysis(idata, data_dict, figures_dir):
     # Hyper
     mu_emulator = get_batch("mu_emulator")
     sigma_emulator = get_batch("sigma_emulator")
-    sigma_measure = get_batch("sigma_measure")
+    
+    try:
+        sigma_measure = get_batch("sigma_measure")
+    except KeyError:
+        sigma_measure = jnp.zeros_like(mu_emulator)
+        
     try:
         sigma_measure_base = get_batch("sigma_measure_base")
     except KeyError:
-        sigma_measure_base = jnp.zeros_like(sigma_measure)
+        sigma_measure_base = jnp.zeros_like(mu_emulator)
+
+    try:
+        sigma_constant = get_batch("sigma_constant")
+    except KeyError:
+        sigma_constant = jnp.zeros_like(mu_emulator)
 
     # Lengths
     l_P = get_batch("lambda_P")
@@ -729,7 +756,7 @@ def run_residual_analysis(idata, data_dict, figures_dir):
 
     # Helper to predict
     def predict_point(
-        m_em, s_em, l_xy, l_th, s_meas, s_meas_base, t_theta, t_xy, direction
+        m_em, s_em, l_xy, l_th, s_meas, s_meas_base, s_const, t_theta, t_xy, direction
     ):
         full_input_xy_exp = jnp.concatenate(
             input_xy_exp, axis=0
@@ -759,11 +786,12 @@ def run_residual_analysis(idata, data_dict, figures_dir):
             l_th,
             s_meas,
             s_meas_base,
+            s_const,
             direction=direction,
         )
         return mean, std_em
 
-    vmap_predict = vmap(predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, None, None))
+    vmap_predict = vmap(predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, None, None))
 
     rows = []
     bands_data = []
@@ -785,6 +813,7 @@ def run_residual_analysis(idata, data_dict, figures_dir):
                 length_theta,
                 sigma_measure,
                 sigma_measure_base,
+                sigma_constant,
                 test_theta,
                 xy_exp,
                 direction,
@@ -798,6 +827,10 @@ def run_residual_analysis(idata, data_dict, figures_dir):
                 noise_var_samples = (
                     sigma_measure[:, None] ** 2 * loads[None, :]
                     + sigma_measure_base[:, None] ** 2
+                )
+            elif noise_model == "constant":
+                noise_var_samples = sigma_constant[:, None] ** 2 * jnp.ones_like(
+                    loads[None, :]
                 )
             else:
                 noise_var_samples = sigma_measure[:, None] ** 2 * loads[None, :]
@@ -835,6 +868,7 @@ def run_residual_analysis(idata, data_dict, figures_dir):
                 length_theta,
                 sigma_measure,
                 sigma_measure_base,
+                sigma_constant,
                 test_theta,
                 dense_xy,
                 direction,
@@ -844,6 +878,10 @@ def run_residual_analysis(idata, data_dict, figures_dir):
                 d_noise_var = (
                     sigma_measure[:, None] ** 2 * dense_loads[None, :]
                     + sigma_measure_base[:, None] ** 2
+                )
+            elif noise_model == "constant":
+                d_noise_var = sigma_constant[:, None] ** 2 * jnp.ones_like(
+                    dense_loads[None, :]
                 )
             else:
                 d_noise_var = sigma_measure[:, None] ** 2 * dense_loads[None, :]
@@ -945,6 +983,76 @@ def run_residual_analysis(idata, data_dict, figures_dir):
     plt.savefig(figures_dir / "residuals_qq.png")
 
     print("Residual analysis complete.")
+
+
+def plot_trace_diagnostics(idata, figures_dir):
+    """
+    Generate and save traceplots for physical parameters and hyperparameters.
+    """
+    print("\nGenerating Traceplots for Convergence Diagnostics...")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Group variables
+    var_names = list(idata.posterior.data_vars)
+    
+    # Identify Physical Parameters (Theta)
+    # They usually don't have underscores or are specific names like E_1, v_12, etc.
+    # Exclude those ending in '_n' (normalized) or starting with 'mu_'/'sigma_'/'lambda_' unless physical
+    
+    # Based on models.py: E_1, E_2, v_12, v_23, G_12 are deterministic or sampled
+    # We want the transformed (actual) values if available.
+    
+    # Physical params of interest
+    physical_params = ["E_1", "E_2", "v_12", "v_23", "G_12"]
+    # Bias params
+    bias_params = [v for v in var_names if v.startswith("b_") and not v.endswith("_n")]
+    
+    # Filter for what's actually in posterior
+    physical_vars = [v for v in physical_params if v in var_names]
+    bias_vars = [v for v in bias_params if v in var_names]
+    
+    # Hyperparameters
+    # typically start with mu_, sigma_, lambda_
+    hyper_prefixes = ("mu_", "sigma_", "lambda_")
+    hyper_vars = [
+        v for v in var_names 
+        if v.startswith(hyper_prefixes) 
+        and not v.endswith("_n") 
+        and v not in physical_vars
+    ]
+
+    # Plot Physical
+    if physical_vars:
+        print(f"  Plotting trace for physical parameters: {physical_vars}")
+        az.plot_trace(idata, var_names=physical_vars)
+        plt.tight_layout()
+        plt.savefig(figures_dir / f"trace_physical_{timestamp}.png")
+        plt.close()
+
+    # Plot Bias
+    if bias_vars:
+        print(f"  Plotting trace for bias parameters: {len(bias_vars)} variables")
+        # Might be too many for one plot if we have many experiments
+        # Plot only first few or aggregate if needed. For now, plot all but handle size?
+        # If too many, maybe just skip or plot first 5
+        if len(bias_vars) > 10:
+             print("  Too many bias variables, plotting first 10...")
+             bias_vars = bias_vars[:10]
+        
+        az.plot_trace(idata, var_names=bias_vars)
+        plt.tight_layout()
+        plt.savefig(figures_dir / f"trace_bias_{timestamp}.png")
+        plt.close()
+
+    # Plot Hyperparameters
+    if hyper_vars:
+        print(f"  Plotting trace for hyperparameters: {hyper_vars}")
+        az.plot_trace(idata, var_names=hyper_vars)
+        plt.tight_layout()
+        plt.savefig(figures_dir / f"trace_hyper_{timestamp}.png")
+        plt.close()
+        
+    print("Traceplots saved.")
 
 
 if __name__ == "__main__":

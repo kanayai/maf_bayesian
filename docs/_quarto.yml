@@ -11,6 +11,7 @@ book:
         - CODE_DESCRIPTION.qmd
     - part: "Data & Design"
       chapters:
+        - data_provenance.md
         - data_format_evaluation.qmd
     - part: "Model Theory"
       chapters:
