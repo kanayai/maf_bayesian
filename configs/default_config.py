@@ -5,6 +5,7 @@ import numpy as np
 config = {
     # Model selection: 'model', 'model_n', 'model_n_hv'
     "model_type": "model_n_hv",
+    "seed": 0,  # Random seed for reproducibility
     # Data settings
     "data": {
         # 'noise_model' options: 'proportional' (default), 'additive', or 'constant'

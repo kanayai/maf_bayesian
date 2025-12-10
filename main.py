@@ -158,7 +158,7 @@ Examples:
     
     # 2. Run Inference
     print("Running MCMC...")
-    rng_key = random.PRNGKey(0)
+    rng_key = random.PRNGKey(config.get("seed", 0))
     
     # Select model based on config (currently only model_n_hv is fully refactored and wired)
     if config["model_type"] == "model_n_hv":

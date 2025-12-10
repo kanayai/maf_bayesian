@@ -189,7 +189,7 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
         plt.show()
     plt.close()
 
-def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None, interval_label="90% interval"):
+def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None, interval_label="90% interval", training_info_label=None):
     """
     Plots prediction (mean + interval) against experimental data.
     """
@@ -231,6 +231,10 @@ def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data
         # Shear / Horizontal
         ax.set_xlim(0, 0.15)
     
+    if training_info_label:
+        # Add text at the bottom center of the figure
+        fig.text(0.5, 0.01, training_info_label, ha='center', fontsize=10, style='italic', color='gray')
+    
     if save_path:
         # Increase figure width to accommodate legend
         plt.gcf().set_size_inches(7, 5)
@@ -240,7 +244,7 @@ def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data
         plt.show()
     plt.close()
 
-def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct_post, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None, interval_label="95% interval"):
+def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct_post, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None, interval_label="95% interval", training_info_label=None):
     """
     Plots combined prediction (Prior + Posterior + Data).
     Prior: Green dashed
@@ -276,6 +280,10 @@ def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct
     else:
         # Shear / Horizontal
         ax.set_xlim(0, 0.15)
+
+    if training_info_label:
+        # Add text at the bottom center of the figure
+        fig.text(0.5, 0.01, training_info_label, ha='center', fontsize=10, style='italic', color='gray')
     
     if save_path:
         # Increase figure width to accommodate legend
