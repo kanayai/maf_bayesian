@@ -89,11 +89,13 @@ Examples:
     full_data_dict = {
         "input_xy_exp": data_dict["input_xy_exp_full"],
         "data_exp_h_raw": data_dict["data_exp_h_full_raw"],
-        "data_exp_v_raw": data_dict["data_exp_v_full_raw"]
+        "data_exp_v_raw": data_dict["data_exp_v_full_raw"],
     }
 
-    plot_experimental_data(full_data_dict, save_path=figures_dir / "experimental_data.png")
-    
+    plot_experimental_data(
+        full_data_dict, save_path=figures_dir / "experimental_data.png"
+    )
+
     plot_averaged_experimental_data(
         full_data_dict, save_path=figures_dir / "experimental_data_averaged.png"
     )
@@ -351,7 +353,8 @@ Examples:
     )
     print(f"Predicting for angles: {angles_to_predict}")
 
-    samples_load = jnp.linspace(0, 10, 100)
+    max_load = config["data"].get("max_load", 10.0)
+    samples_load = jnp.linspace(0, max_load, 100)
     # test_xy is angle dependent, moved inside loop
 
     # --- Generate Prior Samples for Prediction (ONCE) ---
@@ -590,7 +593,10 @@ Examples:
         print(f"\n=== Predicting for Angle {angle_value} ===")
 
         test_xy = jnp.stack(
-            [jnp.array([l, jnp.deg2rad(angle_value)]) for l in samples_load]
+            [
+                jnp.array([load_val, jnp.deg2rad(angle_value)])
+                for load_val in samples_load
+            ]
         )
 
         # Re-load data for this specific angle to get the points for plotting
@@ -687,7 +693,7 @@ Examples:
     # 10. Traceplots (Optional)
     if config["data"].get("plot_trace", True):
         plot_trace_diagnostics(idata, figures_dir)
-        
+
     print("Analysis complete.")
 
 
@@ -726,12 +732,12 @@ def run_residual_analysis(idata, data_dict, figures_dir):
     # Hyper
     mu_emulator = get_batch("mu_emulator")
     sigma_emulator = get_batch("sigma_emulator")
-    
+
     try:
         sigma_measure = get_batch("sigma_measure")
     except KeyError:
         sigma_measure = jnp.zeros_like(mu_emulator)
-        
+
     try:
         sigma_measure_base = get_batch("sigma_measure_base")
     except KeyError:
@@ -994,30 +1000,31 @@ def plot_trace_diagnostics(idata, figures_dir):
 
     # Group variables
     var_names = list(idata.posterior.data_vars)
-    
+
     # Identify Physical Parameters (Theta)
     # They usually don't have underscores or are specific names like E_1, v_12, etc.
     # Exclude those ending in '_n' (normalized) or starting with 'mu_'/'sigma_'/'lambda_' unless physical
-    
+
     # Based on models.py: E_1, E_2, v_12, v_23, G_12 are deterministic or sampled
     # We want the transformed (actual) values if available.
-    
+
     # Physical params of interest
     physical_params = ["E_1", "E_2", "v_12", "v_23", "G_12"]
     # Bias params
     bias_params = [v for v in var_names if v.startswith("b_") and not v.endswith("_n")]
-    
+
     # Filter for what's actually in posterior
     physical_vars = [v for v in physical_params if v in var_names]
     bias_vars = [v for v in bias_params if v in var_names]
-    
+
     # Hyperparameters
     # typically start with mu_, sigma_, lambda_
     hyper_prefixes = ("mu_", "sigma_", "lambda_")
     hyper_vars = [
-        v for v in var_names 
-        if v.startswith(hyper_prefixes) 
-        and not v.endswith("_n") 
+        v
+        for v in var_names
+        if v.startswith(hyper_prefixes)
+        and not v.endswith("_n")
         and v not in physical_vars
     ]
 
@@ -1036,9 +1043,9 @@ def plot_trace_diagnostics(idata, figures_dir):
         # Plot only first few or aggregate if needed. For now, plot all but handle size?
         # If too many, maybe just skip or plot first 5
         if len(bias_vars) > 10:
-             print("  Too many bias variables, plotting first 10...")
-             bias_vars = bias_vars[:10]
-        
+            print("  Too many bias variables, plotting first 10...")
+            bias_vars = bias_vars[:10]
+
         az.plot_trace(idata, var_names=bias_vars)
         plt.tight_layout()
         plt.savefig(figures_dir / f"trace_bias_{timestamp}.png")
@@ -1051,7 +1058,7 @@ def plot_trace_diagnostics(idata, figures_dir):
         plt.tight_layout()
         plt.savefig(figures_dir / f"trace_hyper_{timestamp}.png")
         plt.close()
-        
+
     print("Traceplots saved.")
 
 
