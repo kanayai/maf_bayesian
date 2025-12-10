@@ -20,6 +20,7 @@ This document explains how prior and posterior predictions are computed in `anal
 > N random samples of the uncertain parameters are obtained according to their prior distributions. For each of these samples, a realization is obtained from the conditional multivariate Gaussian distribution based on the **training data (not the observed data)**. The prior mean is obtained as the average of these N realizations and the 95% probability interval is obtained as the interval bounded by the 2.5th and the 97.5th percentile.
 
 **Key terminology:**
+
 - **Training data** = Simulation outputs (FE model predictions)
 - **Observed data** = Experimental measurements
 
@@ -53,6 +54,26 @@ For posterior predictions (`use_prior=False`):
 predict_batch(posterior_params, direction, test_xy, use_prior=False)
 ```
 
+## Mathematical Formulation
+
+The key difference lies in the conditional distribution used.
+
+### Prior Prediction
+Conditioned only on Simulation Data $D_{sim} = \{\mathbf{X}_{sim}, \mathbf{y}_{sim}\}$ and parameters $\theta$ from the Prior $\pi(\theta)$.
+
+$$ \theta \sim \pi(\theta) $$
+$$ p(y_* | D_{sim}, \theta) = \mathcal{N}\left( \mu(y_* | D_{sim}, \theta), \Sigma(y_* | D_{sim}, \theta) \right) $$
+
+The Experimental Data $D_{exp}$ is **completely ignored**.
+
+### Posterior Prediction
+Conditioned on **both** Simulation and Experimental Data $D_{total} = D_{sim} \cup D_{exp}$, with parameters $\theta$ from the Posterior $p(\theta | D_{total})$.
+
+$$ \theta \sim p(\theta | D_{total}) $$
+$$ p(y_* | D_{total}, \theta) = \mathcal{N}\left( \mu(y_* | D_{total}, \theta), \Sigma(y_* | D_{total}, \theta) \right) $$
+
+The Experimental Data is actively used to update the GP mean and reduce variance.
+
 # Critical Implementation Details
 
 ## GP Realizations via Cholesky Decomposition
@@ -70,11 +91,28 @@ $$
 $$
 
 where:
+
 - $L$: Cholesky decomposition of posterior covariance $\Sigma_{post}$
 - $\epsilon \sim \mathcal{N}(0, I)$: white noise
 - $\mu_{post}$: posterior mean
 
 **Why this matters:** The Cholesky sampling preserves the **spatial correlation structure** of the GP. Independent sampling at each point (e.g., `mean + random.normal() * std`) would **destroy** this correlation.
+
+### Equivalent for Prior Prediction
+
+The same logic applies to the **Prior Prediction** (which is the GP conditioned on *only* simulation data).
+
+$$
+\text{sample}_{prior} = L_{prior} \cdot \epsilon + \mu_{prior}
+$$
+
+Where:
+
+- $\mu_{prior} = \mathbb{E}[y_* | \mathbf{D}_{sim}, \theta]$ (Mean conditioned on simulation data)
+- $L_{prior} = \text{Cholesky}(\Sigma_{prior})$
+- $\Sigma_{prior} = \text{Cov}(y_* | \mathbf{D}_{sim}, \theta)$ (Covariance conditioned on simulation data)
+
+This ensures that even the prior predictions (green bands) respect the smoothness and correlation length scales ($\lambda$) defined by the hyperparameters.
 
 ## Code Structure
 
@@ -107,15 +145,18 @@ def predict_batch(params_tuple, direction, current_test_xy, use_prior=False):
 # Summary
 
 **Prior predictions:**
+
 - Use parameters sampled from prior distributions
 - Condition **only on simulation data**
 - Exclude experimental observations
 
 **Posterior predictions:**
+
 - Use parameters sampled from posterior distributions (MCMC)
 - Condition on **both simulation and experimental data**
 - Include experimental observations
 
 **Both methods:**
+
 - Use Cholesky-sampled GP realizations to preserve spatial correlation
 - Compute prediction bands from percentiles of the sample ensemble

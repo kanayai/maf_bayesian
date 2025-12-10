@@ -184,3 +184,14 @@ $$ \sigma_{\text{total}}^2 = \sigma_{\text{measure}}^2 \cdot P + \sigma_{\text{b
     *   If the typical Load $P \approx 10$ kN, then $\sigma_{\text{measure}}^2 \cdot 10 \approx \sigma_{\text{base}}^2$.
     *   This implies $\sigma_{\text{measure}}$ should be smaller than $\sigma_{\text{base}}$ by a factor of $\sqrt{P}$.
     *   However, if we use a loose prior (like `Exponential(1.0)` with mean 1.0), the model may overestimate noise. Using a tighter prior like `Exponential(100)` for this term as well acts as a conservative regularizer, ensuring the proportional noise component remains physically realistic.
+
+### Constant Variance Noise Model
+
+A third option is the **Constant Variance Noise Model** (`noise_model: "constant"`):
+
+$$ \sigma_{\text{noise}}^2 = \sigma_{\text{constant}}^2 $$
+
+-   **Assumption**: The noise variance is practically constant and does not depend on the load mechanism. This is effectively a standard homoscedastic Gaussian noise model.
+-   **Configuration**: Set `"data": {"noise_model": "constant"}` in `default_config.py`.
+-   **Prior**: The prior for $\sigma_{\text{constant}}$ is configured under `"priors" -> "sigma_constant"`.
+

@@ -5,11 +5,13 @@
 The current workflow in `MAF_gp_hv.py` and `posterior_no_bias.ipynb` uses HDF5 (`h5py`) to store and retrieve MCMC samples.
 
 **Pros:**
+
 - Simple to implement for basic array storage.
 - Fast I/O.
 - No additional dependencies beyond `h5py` (which is standard).
 
 **Cons:**
+
 - **Lack of Structure**: Samples are stored as flat datasets. Dimensions like `chain` and `draw` are often flattened or require manual management.
 - **Manual Metadata**: You have to manually track what each dimension corresponds to (e.g., which index is which experiment).
 - **Manual Diagnostics**: You must manually calculate ESS, R-hat, and HPDI using `numpyro.diagnostics` or custom code.
@@ -19,6 +21,7 @@ The current workflow in `MAF_gp_hv.py` and `posterior_no_bias.ipynb` uses HDF5 (
 NumPyro integrates well with [ArviZ](https://arviz-devs.github.io/arviz/), a library for exploratory analysis of Bayesian models. ArviZ uses NetCDF as its backend storage format.
 
 **Pros:**
+
 - **InferenceData Object**: A single, structured object containing:
     - `posterior`: The MCMC samples.
     - `posterior_predictive`: Generated data from the model.

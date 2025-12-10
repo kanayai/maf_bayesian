@@ -15,6 +15,7 @@ import argparse
 from configs.default_config import config
 from src.io.data_loader import load_all_data
 from src.core.models import model_n_hv, posterior_predict
+from src.io.output_manager import save_config_log
 from src.vis.plotting import (
     plot_experimental_data,
     plot_averaged_experimental_data,
@@ -84,6 +85,10 @@ Examples:
     figures_dir.mkdir(parents=True, exist_ok=True)
     print(f"Saving figures to {figures_dir}")
 
+    # Save Config Log (Output Rules) - Done early to ensure it exists even if later steps fail
+    # We don't have the results filename yet if we haven't loaded it, but we should load it first?
+    # Actually step 3 loads it. Let's move this call after step 3.
+
     # Create temporary dict for full data plotting
     # The plotting functions expect standard keys, so we map the full data to them
     full_data_dict = {
@@ -110,6 +115,9 @@ Examples:
     latest_file = max(files, key=lambda f: f.stat().st_mtime)
     print(f"Loading results from {latest_file}")
     idata = az.from_netcdf(latest_file)
+
+    # Save Config Log
+    save_config_log(config, figures_dir, latest_file.name)
 
     # 4. Categorized Posterior Plots
     samples = {}
@@ -610,6 +618,16 @@ Examples:
         for direction in ["v", "h"]:
             dir_label = "Normal" if direction == "v" else "Shear"
             dir_file_tag = "normal" if direction == "v" else "shear"
+            
+            # Determine Training Status Label
+            training_info = None
+            model_type = config.get("model_type", "unknown")
+            training_direction = config["data"].get("direction", "h") # Default h if missing
+            
+            if model_type == "model_n":
+                if direction != training_direction:
+                    training_info = "No training data for this direction"
+            
             print(f"  --- {dir_label} Direction ---")
 
             # Data for plotting
@@ -654,6 +672,7 @@ Examples:
                 save_path=figures_dir
                 / f"prediction_posterior_{angle_value}_{dir_file_tag}_{suffix}.png",
                 interval_label=interval_label,
+                training_info_label=training_info
             )
 
             # Prior Prediction Plot
@@ -684,6 +703,7 @@ Examples:
                 save_path=figures_dir
                 / f"prediction_combined_{angle_value}_{dir_file_tag}_{suffix}.png",
                 interval_label=interval_label,
+                training_info_label=training_info
             )
 
     # 9. Residual Analysis (Optional)
