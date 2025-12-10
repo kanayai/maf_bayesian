@@ -106,7 +106,18 @@ Examples:
     )
 
     # 3. Load Latest Results
-    results_dir = Path("results")
+    # 3. Load Latest Results
+    if output_mode == "experimental":
+        results_dir = Path("results") / "tmp"
+    elif output_mode == "final":
+        results_dir = Path("results") / "final"
+    else:
+        results_dir = Path("results")
+    
+    if not results_dir.exists():
+        print(f"Results directory {results_dir} does not exist.")
+        return
+
     files = list(results_dir.glob("*.nc"))
     if not files:
         print("No result files found in results/")
