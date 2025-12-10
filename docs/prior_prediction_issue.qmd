@@ -85,7 +85,8 @@ return mean_post_emulator, stdev_post_emulator, sample_post
 > N random samples of the uncertain parameters are obtained according to their prior distributions. For each of these samples, a realization is obtained from the conditional multivariate Gaussian distribution based on the **training data (not the observed data)**.
 
 **Key distinction:**
-- **Training data** = Simulation outputs (FE model)
+
+- **Training data** = Simulation outputs (FE model predictions)
 - **Observed data** = Experimental measurements
 
 ## Prior Predictions
@@ -117,6 +118,7 @@ Therefore:
 # Summary
 
 **Key principles:**
+
 1. Use Cholesky decomposition to preserve GP spatial correlations
 2. Prior predictions condition only on simulation data
 3. Posterior predictions condition on both simulation and experimental data

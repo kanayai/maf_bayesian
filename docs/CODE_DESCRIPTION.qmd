@@ -57,3 +57,26 @@ Analyzes results from the model **with bias on the Young's Modulus (`E1`)**.
 *   **Bias Handling**: Handles `b_E1` bias terms.
 *   **Prediction**: Adjusts the `E1` parameter by the inferred bias for each experiment during prediction.
 *   **Plotting**: Includes plots for the posterior distribution of the `E1` bias terms.
+
+## Utilities
+
+### [`scripts/update_truncated_data.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/scripts/update_truncated_data.py)
+**Data Update Script**
+
+*   **Purpose**: Updates the truncated experimental data files in `data/experimental/h` and `data/experimental/v` to match the current `max_load` configuration.
+*   **Usage**: Run `python scripts/update_truncated_data.py` from the project root.
+*   **Features**:
+    *   Reads `max_load` from `configs/default_config.py`.
+    *   Uses `data/experimental/full_experimental_data` as the immutable source.
+    *   Ensures minimal datasets are up-to-date with configuration changes.
+
+### [`scripts/compare_data.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/scripts/compare_data.py)
+**Data Verification Script**
+
+*   **Purpose**: verifies consistency between partial and full experimental datasets.
+*   **Usage**: Run `python scripts/compare_data.py` from the project root.
+*   **Functionality**:
+    *   Iterates through current experimental files.
+    *   Searches for matching sequences in the full dataset.
+    *   Reports whether files are identical, subsets (prefix/suffix/internal), or different.
+

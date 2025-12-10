@@ -6,6 +6,7 @@ This report documents the Bayesian analysis pipeline for the MAF project, includ
 The project uses Gaussian Process (GP) emulators to calibrate material parameters from experimental load-extension data. This document compiles the technical documentation for the codebase and the statistical methods employed.
 
 ## Recent Updates
+
 -   **Prediction Methodology**: Fixed prior prediction bands by properly separating conditioning data. Prior predictions now condition only on simulation data (training), while posterior predictions condition on both simulation and experimental data. See [Prediction Methodology](prediction_methodology.qmd) for implementation details.
 -   **GP Theory Documentation**: Added comprehensive documentation on Gaussian Process theory and Cholesky sampling methods. See [GP Prediction Theory](prior_prediction_issue.qmd) for mathematical background and why spatial correlation preservation via Cholesky decomposition is critical.
 -   **Residual Analysis**: A comprehensive diagnostic suite has been added to `analyze.py`, featuring residual plots with 95% uncertainty bands, Q-Q plots, and distribution histograms.
