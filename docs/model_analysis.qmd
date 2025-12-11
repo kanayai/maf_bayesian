@@ -1,8 +1,8 @@
-# Model Analysis: maf_gp.py
+# Model Analysis: src/core/models.py
 
 
 
-This document provides a detailed comparison of the three model definitions in `maf_gp.py` (`model`, `model_n`, and `model_n_hv`) and an in-depth analysis of the likelihood function, specifically for the multi-output case.
+This document provides a detailed comparison of the three model definitions in `src/core/models.py` (`model`, `model_n`, and `model_n_hv`) and an in-depth analysis of the likelihood function, specifically for the multi-output case.
 
 ## 1. Model Comparison
 
@@ -88,6 +88,18 @@ Where:
 *   $\boldsymbol{\mu}(\mathbf{x}, \theta)$: The physics-based mean function (Finite Element surrogate).
 *   $\mathbf{K}(\mathbf{x}, \theta)$: The GP covariance matrix representing emulator uncertainty (bias).
 *   $\mathbf{\Sigma}_\epsilon$: Measurement noise matrix. Note that the noise variance is **proportional to the load**: $\mathbf{\Sigma}_{ii} = \sigma_{measure}^2 \times P_i$.
+
+*   $\mathbf{\Sigma}_\epsilon$: Measurement noise matrix. Note that the noise variance is **proportional to the load**: $\mathbf{\Sigma}_{ii} = \sigma_{measure}^2 \times P_i$.
+
+### 2.1 Experimental Data Aggregation
+
+> [!IMPORTANT]
+> **Data Usage Note**: The current Bayesian analysis uses **averaged experimental data** for the likelihood calculation.
+
+The raw experimental data contains measurements from three sensor positions (Left, Center, Right) for each load step. However, the current inference input ($\mathbf{y}$) is constructed by **averaging** these three values into a single mean extension per load step.
+
+*   **Current State**: Likelihood is computed against the mean response: $\mathbf{y}_i = \frac{1}{3} (y_{i,L} + y_{i,C} + y_{i,R})$.
+*   **Future Capability**: The code retains the raw positional data in the data loading pipeline (`data_loader.py` returns `_raw` arrays). This allows for future extensions where the likelihood could explicitly model the separate sensor outputs, potentially to capture asymmetric effects or sensor-specific noise.
 
 ### The `model_n_hv` Likelihood (Dual Output)
 

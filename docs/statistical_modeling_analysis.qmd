@@ -1,4 +1,4 @@
-# Statistical Modeling Analysis: posterior_no_bias.py
+# Statistical Modeling Analysis: analyze.py
 
 
 
@@ -12,7 +12,7 @@ The script loads three types of data:
 - **Posterior Samples (`results_mcmc/*.nc`)**: The results of a previously run MCMC inference, containing thousands of samples of the material parameters ($\theta$) that best fit the experimental data.
 
 ## 2. Statistical Model Definition
-The script uses `model_n_hv` from `maf_gp.py`.
+The script uses `model_n_hv` from `src/core/models.py`.
 
 - **Type**: Gaussian Process Emulator with Multi-Output (Shear & Normal).
 - **Goal**: To predict the system response $y$ (extension) given inputs $\mathbf{x} = (P, \alpha)$ (where $P$ is Load and $\alpha$ is Angle) and parameters $\theta$ (E1, E2, etc.).

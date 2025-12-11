@@ -2,7 +2,7 @@
 
 
 ## Current Workflow (HDF5)
-The current workflow in `MAF_gp_hv.py` and `posterior_no_bias.ipynb` uses HDF5 (`h5py`) to store and retrieve MCMC samples.
+The current workflow in `analyze.py` primarily uses HDF5 / NetCDF to store and retrieve MCMC samples.
 
 **Pros:**
 
@@ -36,7 +36,7 @@ NumPyro integrates well with [ArviZ](https://arviz-devs.github.io/arviz/), a lib
 ## Recommendation
 **Switch to ArviZ/NetCDF.**
 
-While HDF5 is sufficient for raw storage, adopting ArviZ `InferenceData` (saved as NetCDF) will significantly streamline post-processing in `posterior_no_bias.ipynb`. It eliminates the need for manual array slicing and boilerplate plotting code, and provides robust diagnostics out of the box.
+While HDF5 is sufficient for raw storage, adopting ArviZ `InferenceData` (saved as NetCDF) will significantly streamline post-processing in `analyze.py`. It eliminates the need for manual array slicing and boilerplate plotting code, and provides robust diagnostics out of the box.
 
 ### Implementation Steps
 1.  **In `MAF_gp_hv.py`**:
@@ -46,7 +46,7 @@ While HDF5 is sufficient for raw storage, adopting ArviZ `InferenceData` (saved 
     idata = az.from_numpyro(mcmc)
     az.to_netcdf(idata, "results_mcmc/model_results.nc")
     ```
-2.  **In `posterior_no_bias.ipynb`**:
+2.  **In `analyze.py`**:
     ```python
     import arviz as az
     idata = az.from_netcdf("results_mcmc/model_results.nc")
