@@ -6,7 +6,7 @@ This document provides a detailed overview of the key Python scripts in the `maf
 
 ## Core Library
 
-### [`maf_gp.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/maf_gp.py)
+### [`src/core/models.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/src/core/models.py)
 This is the **core library** file containing the definitions for the Gaussian Process (GP) models, covariance functions, and inference utilities using `numpyro` and `jax`.
 
 *   **`cov_matrix_emulator`**: Defines the squared exponential covariance kernel used for the GP emulator.
@@ -18,7 +18,7 @@ This is the **core library** file containing the definitions for the Gaussian Pr
 ## Inference Scripts
 
 ### [`MAF_gp_hv.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/MAF_gp_hv.py)
-This is the **main execution script** for running the Bayesian inference.
+This is the **main execution script** for running the Bayesian inference (now largely superseded by `analyze.py` workflows, but retains core logic).
 
 *   **Data Loading**: Loads experimental data for both shear (`data_extension_h`) and normal (`data_extension_v`) directions, as well as simulation data.
 *   **Visualization**: Plots the raw experimental data (Load vs. Extension) color-coded by angle and marker-coded by position.
@@ -29,20 +29,16 @@ This is the **main execution script** for running the Bayesian inference.
 
 These scripts are used to analyze the results of the MCMC inference (saved in `results_mcmc`), generate plots, and perform posterior predictive checks.
 
-### [`posterior_no_bias.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/posterior_no_bias.py)
-Analyzes results from the model **without bias** terms.
+### [`analyze.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/analyze.py)
+**Main analysis script** that unifies inference, prediction, and plotting.
 
-*   **Loads Results**: Automatically finds and loads the latest `no_bias_hv_*.nc` file.
-*   **Prior Prediction**: Runs a prior predictive check using `model_n_hv` to see what the model predicts before seeing any data.
+*   **Loads Results**: Automatically finds and loads the latest `results_mcmc/*.nc` file.
+*   **Prior Prediction** (Optional): Can run prior checks.
 *   **Posterior Prediction**: Uses the saved posterior samples to predict the system response (Load vs. Extension) and compares it against the experimental data.
-*   **Plotting**: Generates plots for prior/posterior predictions and parameter distributions.
+*   **Plotting**: Generates plots for posterior predictions and parameter distributions.
 *   **Optimization**: Uses `jax.vmap` for fast vectorized predictions.
 
-### [`analyze.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/analyze.py)
-**Refactored common analysis script** that replaces earlier specific scripts (e.g., `posterior_no_bias.py`).
 
-*   **Unified Analysis**: Handles loading results, plotting experimental data, and generating posterior predictions.
-*   **Residual Analysis (Optional)**: Can optionally run the full residual analysis (bands, histograms, Q-Q plots) if enabled in the config.
 
 ### [`posterior_bias_alpha.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/posterior_bias_alpha.py)
 Analyzes results from the model **with bias on the angle (`alpha`)**.
@@ -57,3 +53,26 @@ Analyzes results from the model **with bias on the Young's Modulus (`E1`)**.
 *   **Bias Handling**: Handles `b_E1` bias terms.
 *   **Prediction**: Adjusts the `E1` parameter by the inferred bias for each experiment during prediction.
 *   **Plotting**: Includes plots for the posterior distribution of the `E1` bias terms.
+
+## Utilities
+
+### [`scripts/update_truncated_data.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/scripts/update_truncated_data.py)
+**Data Update Script**
+
+*   **Purpose**: Updates the truncated experimental data files in `data/experimental/h` and `data/experimental/v` to match the current `max_load` configuration.
+*   **Usage**: Run `python scripts/update_truncated_data.py` from the project root.
+*   **Features**:
+    *   Reads `max_load` from `configs/default_config.py`.
+    *   Uses `data/experimental/full_experimental_data` as the immutable source.
+    *   Ensures minimal datasets are up-to-date with configuration changes.
+
+### [`scripts/compare_data.py`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/scripts/compare_data.py)
+**Data Verification Script**
+
+*   **Purpose**: verifies consistency between partial and full experimental datasets.
+*   **Usage**: Run `python scripts/compare_data.py` from the project root.
+*   **Functionality**:
+    *   Iterates through current experimental files.
+    *   Searches for matching sequences in the full dataset.
+    *   Reports whether files are identical, subsets (prefix/suffix/internal), or different.
+

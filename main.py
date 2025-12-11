@@ -8,7 +8,7 @@ import argparse
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
-from src.core.models import model_n_hv
+from src.core.models import model_n_hv, model_n
 
 def run_inference(model, rng_key, data_dict, config):
     """
@@ -29,16 +29,35 @@ def run_inference(model, rng_key, data_dict, config):
     )
     
     # Unpack data for model
-    # model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, config)
-    mcmc.run(rng_key, 
-             data_dict["input_xy_exp"], 
-             data_dict["input_xy_sim"], 
-             data_dict["input_theta_sim"], 
-             data_dict["data_exp_h"], 
-             data_dict["data_exp_v"], 
-             data_dict["data_sim_h"], 
-             data_dict["data_sim_v"], 
-             config)
+    if config["model_type"] == "model_n_hv":
+        # model_n_hv(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h, data_exp_v, data_sim_h, data_sim_v, config)
+        mcmc.run(rng_key, 
+                 data_dict["input_xy_exp"], 
+                 data_dict["input_xy_sim"], 
+                 data_dict["input_theta_sim"], 
+                 data_dict["data_exp_h"], 
+                 data_dict["data_exp_v"], 
+                 data_dict["data_sim_h"], 
+                 data_dict["data_sim_v"], 
+                 config)
+    elif config["model_type"] == "model_n":
+        # model_n(input_xy_exp, input_xy_sim, input_theta_sim, data_exp, data_sim, config)
+        direction = config["data"].get("direction", "h") # 'h' or 'v'
+        
+        if direction == "h":
+            data_exp = data_dict["data_exp_h"]
+            data_sim = data_dict["data_sim_h"]
+        else: # 'v'
+            data_exp = data_dict["data_exp_v"]
+            data_sim = data_dict["data_sim_v"]
+            
+        mcmc.run(rng_key,
+                 data_dict["input_xy_exp"],
+                 data_dict["input_xy_sim"],
+                 data_dict["input_theta_sim"],
+                 data_exp,
+                 data_sim,
+                 config)
     
     mcmc.print_summary()
     return mcmc
@@ -69,8 +88,16 @@ def save_results(mcmc, config, output_mode="default"):
     
     # Construct filename
     angles = config["data"]["angles"]
-    suffix = "hv" + "".join([f"_{i}" for i in angles]) if len(angles) != 3 else "hv"
+    model_type = config["model_type"]
     
+    if model_type == "model_n_hv":
+        suffix = "hv" + "".join([f"_{i}" for i in angles]) if len(angles) != 3 else "hv"
+    else:
+        # For model_n, include direction
+        direction = config["data"].get("direction", "h")
+        dir_tag = "shear" if direction == "h" else "normal"
+        suffix = f"{dir_tag}" + "".join([f"_{i}" for i in angles])
+        
     bias_flags = config["bias"]
     prefix = "bias_" if (bias_flags["add_bias_E1"] or bias_flags["add_bias_alpha"]) else "no_bias_"
     if bias_flags["add_bias_E1"]: prefix += "E1_"
@@ -131,11 +158,13 @@ Examples:
     
     # 2. Run Inference
     print("Running MCMC...")
-    rng_key = random.PRNGKey(0)
+    rng_key = random.PRNGKey(config.get("seed", 0))
     
     # Select model based on config (currently only model_n_hv is fully refactored and wired)
     if config["model_type"] == "model_n_hv":
         model = model_n_hv
+    elif config["model_type"] == "model_n":
+        model = model_n
     else:
         raise NotImplementedError(f"Model {config['model_type']} not yet implemented in main.py")
 

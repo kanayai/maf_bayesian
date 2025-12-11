@@ -1,4 +1,4 @@
-# Statistical Modeling Analysis: posterior_no_bias.py
+# Posterior samples analysis: analyze.py
 
 
 
@@ -12,16 +12,17 @@ The script loads three types of data:
 - **Posterior Samples (`results_mcmc/*.nc`)**: The results of a previously run MCMC inference, containing thousands of samples of the material parameters ($\theta$) that best fit the experimental data.
 
 ## 2. Statistical Model Definition
-The script uses `model_n_hv` from `maf_gp.py`.
+The script primarily analyzes results from the active non-centered models (`model_n_hv` or `model_n`) defined in `src/core/models.py`.
 
 - **Type**: Gaussian Process Emulator with Multi-Output (Shear & Normal).
 - **Goal**: To predict the system response $y$ (extension) given inputs $\mathbf{x} = (P, \alpha)$ (where $P$ is Load and $\alpha$ is Angle) and parameters $\theta$ (E1, E2, etc.).
 - **Structure**:
   $$ y(\mathbf{x}) = \mu(\mathbf{x}, \theta) + \delta(\mathbf{x}) + \epsilon $$
+
   - $\mu(\mathbf{x}, \theta)$: Physics-based mean trend (from FE surrogate).
   - $\delta(\mathbf{x}) \sim \mathcal{GP}(0, k(\mathbf{x}, \mathbf{x}'))$: GP bias term (corrects for systematic model errors).
   - $\epsilon \sim \mathcal{N}(0, \Sigma_\epsilon)$: Random measurement noise.
-  - The noise variance is modeled as **proportional to the load** $P$: $\Sigma_\epsilon = \text{diag}(\sigma_{measure}^2 \cdot P)$.
+  - The noise variance is modeled in **one of 3 possible ways** as per `default_config.py` (Proportional, Additive, or Constant).
 
 ### 2.1 Covariance Kernel
 The GP uses a **Squared Exponential Kernel** with separate length scales for inputs $\mathbf{x}$ and parameters $\theta$:
@@ -43,24 +44,54 @@ Where the mean functions differ by direction:
 - $\boldsymbol{\mu}_h = \mu_{emulator} \cdot P \cdot \sin(\alpha)$
 - $\boldsymbol{\mu}_v = \mu_{emulator} \cdot P \cdot \cos(\alpha)$
 
-## 3. Prior Prediction
-Before looking at the posterior samples, the script runs a **Prior Predictive Check**.
+## 3. Prediction Methodology
 
-- **Action**: It samples parameters $\theta$ from their *prior distributions* (before seeing data) and pushes them through the `model_n_hv`.
-- **Purpose**: To verify that the model assumptions cover the range of observed data. If the prior predictions don't overlap with the experimental data, the priors are likely too restrictive or the model is fundamentally wrong.
-- **Code**: `Predictive(model_n_hv, num_samples=500)`
+The script performs two key types of prediction, detailed in **[`prediction_methodology.qmd`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/docs/prediction_methodology.qmd)**.
 
-## 4. Posterior Prediction
-This is the core statistical output of the script.
+### 3.1 Prior Prediction
 
-- **Action**: It takes the "learned" parameters from the MCMC results (`idata`) and uses them to predict the material behavior at a specific test angle (e.g., 45°).
-- **Method**:
-  1.  **Subsampling**: Selects a random subset (e.g., 500) of the posterior samples to reduce computation time.
-  2.  **GP Conditional Prediction**: For each sample $\theta_i$, it computes the GP posterior mean and variance at test points $\mathbf{x}^*$:
-      $$ \mu_{post}(\mathbf{x}^*) = \mu(\mathbf{x}^*) + \mathbf{k}_*^T (\mathbf{K} + \mathbf{\Sigma}_\epsilon)^{-1} (\mathbf{y} - \mu(\mathbf{X})) $$
-      $$ \Sigma_{post}(\mathbf{x}^*) = k(\mathbf{x}^*, \mathbf{x}^*) - \mathbf{k}_*^T (\mathbf{K} + \mathbf{\Sigma}_\epsilon)^{-1} \mathbf{k}_* $$
-  3.  **Aggregation**: It computes the mean and a configurable prediction interval (default 95%) of these predictions.
-- **Key Function**: `posterior_predict` (from `maf_gp.py`) implements these GP conditional distribution equations.
+- **Input**: Parameters sampled from the **Prior** ($\theta \sim \pi(\theta)$).
+- **Conditioning**: Uses **Simulation Data Only**.
+- **Goal**: Validation. Checks if the model structure and priors are capable of generating the observed data *before* calibration.
+
+### 3.2 Posterior Prediction
+
+- **Input**: Parameters sampled from the **Posterior** ($\theta \sim p(\theta|D)$).
+- **Conditioning**: Uses **Both Simulation and Experimental Data**.
+- **Goal**: Prediction. Generates the best possible estimate of material behavior at the test angle, incorporating all available information.
+
+*Note: Both methods use Cholesky decomposition to generate spatially correlated GP realizations.*
+
+## 4. Cross-Validation via Single-Direction Training
+
+An advanced feature of this framework is the ability to perform cross-validation by calibrating on one direction (e.g., Normal/Vertical) and predicting the response in the other (e.g., Shear/Horizontal).
+
+### Concept
+When using the single-output model (`model_n`), you can configure the training to use only one dataset direction (e.g., `direction: "v"`). However, the analysis script (`analyze.py`) is designed to generate predictions for **both** directions.
+
+### Why this works
+The physical material parameters ($\theta = \{E_1, E_2, \nu_{12}, \dots\}$) are properties of the **material**, not the test direction.
+
+1.  **Calibration**: The MCMC inference finds the posterior distribution $p(\theta | D_v)$ that best explains the Vertical data.
+2.  **Prediction**: The prediction step uses these same parameters $\theta$ but applies the physics model for the Horizontal direction:
+    $$ \mu_h(P, \alpha, \theta) = \mu_{emulator}(\theta) \cdot P \cdot \sin(\alpha) $$
+
+### Implementation
+The `analyze.py` script explicitly loops over both directions, regardless of the training configuration:
+
+```python
+# analyze.py
+for direction in ["v", "h"]:
+    # ...
+    # 1. Selects data_exp_v or data_exp_h for plotting
+    # 2. Runs posterior_predict using the 'direction' flag
+    # 3. Generates plots for that direction
+```
+
+**Interpretation:**
+
+-   **Same Direction (Train "v", Plot "v")**: This is a standard **Goodness of Fit** check.
+-   **Cross Direction (Train "v", Plot "h")**: This is a **Generalization** check. It asks: *"If we only knew the Normal response, how accurately could we predict the Shear response?"*
 
 ## 5. Visualization
 The script generates three key plots:

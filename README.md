@@ -30,6 +30,7 @@ maf_bayesian/
 │   └── simulation/          # Simulation data (h/v subfolders)
 ├── figures/                 # Output figures from analysis
 ├── results/                 # Output MCMC results (.nc files)
+├── scripts/                 # Utility scripts (data maintenance, verification)
 ├── main.py                  # Main entry point for inference
 └── analyze.py               # Main entry point for analysis
 ```
@@ -118,6 +119,17 @@ To run the analysis:
 ```bash
 uv run python analyze.py
 ```
+
+### 4. Reproducibility
+To ensure the reproducibility of results, the analysis pipeline automatically generates a **Configuration Log** for every run.
+
+*   **File**: `config_log.md` (saved in the analysis output folder).
+*   **Contents**:
+    1.  **Git Commit Hash**: The exact version of the code used for the analysis.
+    2.  **Results File**: The precise `.nc` file loaded.
+    3.  **Configuration Dump**: A full JSON dump of the settings used.
+
+ This allows every figure and statistic to be traced back to the exact code version and dataset that produced it.
 
 ## Documentation
 
