@@ -1,29 +1,32 @@
 import numpyro.distributions as dist
-import jax.numpy as jnp
 import numpy as np
 
 # Default Configuration
 config = {
     # Model selection: 'model', 'model_n', 'model_n_hv'
     "model_type": "model_n_hv",
+    "seed": 0,  # Random seed for reproducibility
     # Data settings
     "data": {
-        # 'noise_model' options: 'proportional' (default) or 'additive'
+        # 'noise_model' options: 'proportional' (default), 'additive', or 'constant'
         # 'proportional': sigma^2 = sigma_measure^2 * Load
         # 'additive': sigma^2 = sigma_measure^2 * Load + sigma_base^2
+        # 'constant': sigma^2 = sigma_constant^2
         "noise_model": "proportional",
         "base_path": "./data",  # Root data directory
+        "max_load": 11.0,  # Maximum load [kN] for data truncation and prediction
         "angles": [45, 90, 135],  # Angles to load
         "prediction_angle": [45, 90, 135],  # Angle for prediction/plotting
         "direction": "v",  # 'h' or 'v' for single direction models/plots
         "prediction_interval": 0.95,  # Prediction interval coverage (e.g., 0.95 for 95%)
-        "prediction_samples": 2000,  # Number of samples for prediction
+        "prediction_samples": 500,  # Number of samples for prediction
         "run_residual_analysis": True,  # Validation: Run residual analysis
+        "plot_trace": True,  # Validation: Plot MCMC trace for diagnostics
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 5000,
-        "num_samples": 5000,
+        "num_warmup": 2000,
+        "num_samples": 1000,
         "num_chains": 2,
         "thinning": 3,
     },
@@ -78,6 +81,9 @@ config = {
             # Measurement noise
             "sigma_measure": {"target_dist": dist.Exponential(100.0)},
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
+            "sigma_constant": {
+                "target_dist": dist.Exponential(0.1)
+            },  # For constant noise model
         },
         # Bias Priors
         "bias_priors": {

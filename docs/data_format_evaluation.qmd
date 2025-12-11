@@ -1,52 +1,58 @@
-# Data Format Evaluation: HDF5 vs. NetCDF (ArviZ)
+# Data Format Strategy: NetCDF & ArviZ
 
+## 1. The Chosen Standard: NetCDF & ArviZ
 
-## Current Workflow (HDF5)
-The current workflow in `MAF_gp_hv.py` and `posterior_no_bias.ipynb` uses HDF5 (`h5py`) to store and retrieve MCMC samples.
+The project has standardized on **NetCDF** as the storage format and **[ArviZ](https://arviz-devs.github.io/arviz/)** as the backend for handling Bayesian inference results.
 
-**Pros:**
-- Simple to implement for basic array storage.
-- Fast I/O.
-- No additional dependencies beyond `h5py` (which is standard).
+This decision was made to leverage the robust `InferenceData` structure, which provides significant advantages over raw array storage:
 
-**Cons:**
-- **Lack of Structure**: Samples are stored as flat datasets. Dimensions like `chain` and `draw` are often flattened or require manual management.
-- **Manual Metadata**: You have to manually track what each dimension corresponds to (e.g., which index is which experiment).
-- **Manual Diagnostics**: You must manually calculate ESS, R-hat, and HPDI using `numpyro.diagnostics` or custom code.
-- **Boilerplate Plotting**: Plotting requires manually extracting arrays and setting up Matplotlib figures.
+*   **Structured Metadata**: Instead of flat arrays, data is organized into labeled groups (`posterior`, `posterior_predictive`, `observed_data`).
+*   **Labeled Dimensions**: Dimensions are explicitly named (e.g., `experiment`, `sensor_location`, `draw`) rather than being integer indices. This prevents "off-by-one" errors and makes array slicing intuitive.
+*   **Built-in Diagnostics**: ArviZ provides one-line commands for essential MCMC diagnostics like Effective Sample Size (`az.ess`), Gelman-Rubin convergence (`az.rhat`), and summary statistics (`az.summary`).
+*   **Rich Visualization**: Access to a high-quality suite of Bayesian visualization tools (`az.plot_trace`, `az.plot_forest`, `az.plot_ppc`) that work out-of-the-box with the data structure.
 
-## Proposed Workflow (NetCDF / ArviZ)
-NumPyro integrates well with [ArviZ](https://arviz-devs.github.io/arviz/), a library for exploratory analysis of Bayesian models. ArviZ uses NetCDF as its backend storage format.
+## 2. Why HDF5 Was Abandoned
 
-**Pros:**
-- **InferenceData Object**: A single, structured object containing:
-    - `posterior`: The MCMC samples.
-    - `posterior_predictive`: Generated data from the model.
-    - `observed_data`: The actual experimental data used.
-    - `log_likelihood`: For model comparison (WAIC, LOO).
-    - `sample_stats`: Divergences, acceptance probabilities, etc.
-- **Labeled Dimensions**: You can name dimensions (e.g., `experiment`, `sensor_location`) instead of using integer indices.
-- **Built-in Diagnostics**: One-line commands for `az.summary()`, `az.rhat()`, `az.ess()`.
-- **Rich Plotting**: `az.plot_trace()`, `az.plot_posterior()`, `az.plot_forest()`, `az.plot_ppc()` (posterior predictive check).
-- **Standardization**: NetCDF is a self-describing format, making results easier to share and understand later.
+Earlier versions of this workflow utilized raw **HDF5** (`h5py`) files. This approach was abandoned due to several critical friction points:
 
-## Recommendation
-**Switch to ArviZ/NetCDF.**
+*   **Lack of Semantics**: HDF5 stores data effectively but does not inherently capture *what* the data represents (e.g., chains vs. draws). This required manual tracking of array shapes and indices.
+*   **Boilerplate Overhead**: Performing simple tasks (like calculating the mean of a posterior parameter across chains) required writing custom iteration loops and array manipulation code.
+*   **Fragility**: Any change in the model structure (e.g., adding a new parameter) often broke the custom loading scripts, whereas ArviZ handles schema changes more gracefully.
+*   **Visualization Effort**: Creating trace plots or posterior density plots required writing raw Matplotlib code from scratch for every new model iteration.
 
-While HDF5 is sufficient for raw storage, adopting ArviZ `InferenceData` (saved as NetCDF) will significantly streamline post-processing in `posterior_no_bias.ipynb`. It eliminates the need for manual array slicing and boilerplate plotting code, and provides robust diagnostics out of the box.
+Moving to ArviZ eliminated this technical debt, allowing the codebase to focus on modeling physics rather than managing data structures.
 
-### Implementation Steps
-1.  **In `MAF_gp_hv.py`**:
-    ```python
-    import arviz as az
-    # ... after mcmc.run() ...
-    idata = az.from_numpyro(mcmc)
-    az.to_netcdf(idata, "results_mcmc/model_results.nc")
-    ```
-2.  **In `posterior_no_bias.ipynb`**:
-    ```python
-    import arviz as az
-    idata = az.from_netcdf("results_mcmc/model_results.nc")
-    az.plot_trace(idata, var_names=["E_1", "E_2"])
-    az.summary(idata)
-    ```
+## 3. Implementation
+
+The integration is handled seamlessly in the analysis scripts.
+
+### Saving Results (`analyze.py` / MCMC Runner)
+
+When inference is complete, the `numpyro` MCMC object is converted directly to `InferenceData` and saved:
+
+```python
+import arviz as az
+
+# Convert NumPyro MCMC object to ArviZ InferenceData
+idata = az.from_numpyro(mcmc)
+
+# Save to robust NetCDF format
+az.to_netcdf(idata, "results_mcmc/model_results.nc")
+```
+
+### Loading & Analyzing
+
+The analysis workflow loads this single file to access all aspects of the model run:
+
+```python
+import arviz as az
+
+# Load the full inference context
+idata = az.from_netcdf("results_mcmc/model_results.nc")
+
+# Example: Check convergence
+print(az.summary(idata))
+
+# Example: Plot posterior densities for stiffness parameters
+az.plot_trace(idata, var_names=["E_1", "E_2"])
+```

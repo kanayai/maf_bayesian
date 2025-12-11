@@ -85,6 +85,7 @@ sample_post = L @ white_noise + mean_post_emulator
 It uses the Cholesky decomposition of the posterior covariance matrix to generate correlated random samples.
 
 ## Summary of Flow
+
 1.  **Prepare Inputs**: Combine Exp, Sim, and the "Zero point".
 2.  **Build Kernel**: Compute covariance matrices using hyperparameters ($\lambda, \sigma_{em}$).
 3.  **Add Noise**: Add proportional noise to experimental diagonal.
