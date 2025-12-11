@@ -17,18 +17,18 @@ def get_priors_from_config(config, num_exp):
     # Order matters: E1, E2, v12, v23, G12
     param_names = ["E_1", "E_2", "v_12", "v_23", "G_12"]
 
-    if "n" in config["model_type"]:  # Reparameterized models
-        reparam_cfg = priors["theta"]["reparam"]
-        for name in param_names:
-            n_sample = numpyro.sample(f"{name}_n", dist.Normal())
-            val = reparam_cfg[name]["mean"] + reparam_cfg[name]["scale"] * n_sample
-            numpyro.deterministic(name, val)
-            theta_vals.append(val)
-    else:  # Standard models
-        std_cfg = priors["theta"]["standard"]
-        for name in param_names:
-            val = numpyro.sample(name, std_cfg[name])
-            theta_vals.append(val)
+    if "n" not in config["model_type"]:
+        raise ValueError(
+            "Only reparameterized models (model_type='model_n' or 'model_n_hv') are supported."
+        )
+
+    # Reparameterized models
+    reparam_cfg = priors["theta"]["reparam"]
+    for name in param_names:
+        n_sample = numpyro.sample(f"{name}_n", dist.Normal())
+        val = reparam_cfg[name]["mean"] + reparam_cfg[name]["scale"] * n_sample
+        numpyro.deterministic(name, val)
+        theta_vals.append(val)
 
     theta = jnp.array(theta_vals)
 

@@ -44,7 +44,7 @@ The script generates several plots to diagnose the model fit.
 
 ### Residuals with Uncertainty Bands
 **What it shows**: The raw residuals overlaid with the predicted **95% Prediction Interval** ($\approx \pm 1.96\sigma_{total}$).
-**Interpretation**: 
+**Interpretation**:
 
 - **Smooth Bands**: The uncertainty bands are calculated on a dense set of load points to clearly visualize the "trumpet" shape of the error model ($\sigma \propto \sqrt{P}$).
 - **Validation**: The residual points (blue dots) should generally fall within the gray shaded region. Any systematic deviation outside these bands suggests the error model (or the structural model) is inadequate.

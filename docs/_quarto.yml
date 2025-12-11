@@ -23,6 +23,9 @@ book:
     - part: "Validation"
       chapters:
         - residual_analysis.qmd
+    - part: "Appendices"
+      chapters:
+        - legacy_notes.qmd
 
 format:
   html:
