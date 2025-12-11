@@ -1,111 +1,99 @@
-import numpy as np
-from pathlib import Path
+
+import sys
 import os
 
-def load_file_content(path):
-    try:
-        return np.loadtxt(path, delimiter=",")
-    except Exception as e:
-        print(f"Error loading {path}: {e}")
-        return None
+# Add project root to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-def compare_arrays(arr1, arr2):
-    # Check if arr1 is a subset of arr2 (allowing for different start point and truncation)
-    # Check if arr1 is found within arr2
-    
-    # We look for the first element of arr1 in arr2
-    if len(arr1) == 0: return "EMPTY"
-    
-    # Simple brute force search (sufficient for small arrays)
-    matches = np.where(np.isclose(arr2[:,0], arr1[0,0], atol=1e-5))[0]
-    
-    for start_idx in matches:
-        # Check if subsequent elements match
-        end_idx = start_idx + len(arr1)
-        if end_idx <= len(arr2):
-            sub_arr2 = arr2[start_idx:end_idx]
-            if np.allclose(arr1, sub_arr2, equal_nan=True):
-                if start_idx == 0 and end_idx == len(arr2):
-                    return "IDENTICAL"
-                elif start_idx == 0:
-                    return f"PREFIX SUBSET (Matches first {len(arr1)} rows)"
-                elif end_idx == len(arr2):
-                    return f"SUFFIX SUBSET (Matches last {len(arr1)} rows)"
-                else:
-                    return f"INTERNAL SUBSET (Matches rows {start_idx} to {end_idx-1})"
-        else:
-             # arr1 is longer than the remaining part of arr2
-             # Check if arr2 is a prefix of arr1 (unlikely for "Full" data, but possible)
-             pass
+from src.io.data_loader import load_all_data
+from configs.default_config import config
+import matplotlib.pyplot as plt
+import numpy as np
 
-    return "DIFFERENT"
-
-def find_subset_indices(arr1, arr2):
-    """Returns (status, start_index, end_index) if arr1 is found in arr2."""
-    if len(arr1) == 0: return ("EMPTY", 0, 0)
+def compare_data():
+    data = load_all_data(config)
     
-    matches = np.where(np.isclose(arr2[:,0], arr1[0,0], atol=1e-5))[0]
+    # We want truncated raw data to match what the model sees
+    # data "data_exp_h_raw" is a list of arrays (one per angle)
+    # Each array is (N, 3) 
     
-    for start_idx in matches:
-        end_idx = start_idx + len(arr1)
-        if end_idx <= len(arr2):
-            sub_arr2 = arr2[start_idx:end_idx]
-            if np.allclose(arr1, sub_arr2, equal_nan=True):
-                return ("MATCH", start_idx, end_idx)
-    return ("DIFFERENT", -1, -1)
-
-def main():
-    # context: script is in scripts/, data is in data/experimental
-    # Use parent of parent to go from scripts/compare_data.py -> project_root -> data
-    base_path = Path(__file__).resolve().parent.parent / "data" / "experimental"
-    current_path_h = base_path / "h"
-    current_path_v = base_path / "v"
-    full_path = base_path / "full_experimental_data"
+    angles = config['data']['angles']
     
-    print("Listing Current Data Files:")
-    current_files_h = sorted(list(current_path_h.glob("input_load_angle_exp_*.txt")))
-    full_files_load = sorted(list(full_path.glob("input_load_angle_exp_*.txt")))
+    # Setup plot
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
-    print(f"Found {len(current_files_h)} current files (h) and {len(full_files_load)} full files.")
-    
-    # For each current file, find a matching full file
-    for curr_file in current_files_h:
-        curr_data = load_file_content(curr_file)
-        if curr_data is None: continue
+    for i, angle in enumerate(angles):
+        ax = axes[i]
         
-        # Get the corresponding extension file
-        curr_ext_file = curr_file.parent / curr_file.name.replace("input_load_angle", "data_extension")
-        curr_ext_data = load_file_content(curr_ext_file)
+        # Get raw data for this angle
+        # Shape: (N_experiments, N_points, 3 sensors) usually, but loader returns list of (N_points, 3)
+        # Wait, load_experiment_data returns 'inputs' and 'extensions' as lists of arrays.
+        # Each element in list corresponds to one experiment file. 
+        # But 'load_all_data' merges them? No.
         
-        match_found = False
-        print(f"\nChecking {curr_file.name} (Max Load: {curr_data[:,0].max():.3f})...")
+        # Let's check data_loader.py again. 
+        # load_experiment_data returns inputs (list), extensions (list).
+        # load_all_data returns truncated lists in 'data_exp_h_raw'.
+        # Since currently we only have ONE file per angle typically, the list has length 1 (or small number).
+        # We need to match H and V data for the SAME experiment.
         
-        for full_file in full_files_load:
-            full_data = load_file_content(full_file)
-            if full_data is None: continue
+        h_data_list = data['data_exp_h_raw'] # List of (N, 3) arrays
+        v_data_list = data['data_exp_v_raw'] # List of (N, 3) arrays
+        
+        # We assume they align by index if they come from sorted glob.
+        # Let's iterate and concat all points for this angle.
+        
+        # However, load_all_data flattens everything?
+        # No, load_experiment_data iterates angles. 
+        # Ah, 'load_experiment_data' returns a list of ALL valid files found matching ANY angle.
+        # This is tricky because we need to separate by angle for plotting.
+        
+        # Let's inspect 'inputs' to filter by angle.
+        inputs_list = data['input_xy_exp']
+        
+        shear_vals = []
+        normal_vals = []
+        
+        for j, inp in enumerate(inputs_list):
+            # inp is (N, 2), columns: [Load, Angle]
+            # Check if this experiment matches current angle
+            # We use mean angle of the experiment
+            exp_angle_rad = np.mean(inp[:, 1]) 
+            exp_angle_deg = np.rad2deg(exp_angle_rad)
             
-            # Compare Load/Angle
-            status_load = compare_arrays(curr_data, full_data)
-            
-            if status_load != "DIFFERENT":
-                # Check Extension
-                full_ext_file = full_file.parent / full_file.name.replace("input_load_angle", "data_extension")
-                full_ext_data = load_file_content(full_ext_file)
+            if np.isclose(exp_angle_deg, angle, atol=1.0):
+                # This experiment is for the current angle
+                h_ext = h_data_list[j] # (N, 3)
+                v_ext = v_data_list[j] # (N, 3)
                 
-                status_ext = compare_arrays(curr_ext_data, full_ext_data)
+                # Average across sensors (L, C, R)
+                h_mean = h_ext.mean(axis=1) # (N,)
+                v_mean = v_ext.mean(axis=1) # (N,)
                 
-                print(f"  MATCH FOUND: {full_file.name}")
-                print(f"    Subset Type: {status_load}")
-                # Parse indices from status string or pass them back
-                # Let's verify exact indices again for reporting
-                subset_load, start, end = find_subset_indices(curr_data, full_data)
-                print(f"    Reconstruction: full_data[{start}:{end}]")
-                print(f"    Full Max Load: {full_data[:,0].max():.3f}")
-                match_found = True
-                break
+                shear_vals.extend(h_mean)
+                normal_vals.extend(v_mean)
         
-        if not match_found:
-            print("  NO MATCH FOUND in full dataset.")
+        if not shear_vals:
+            print(f"No data found for {angle}")
+            continue
+            
+        shear_vals = np.array(shear_vals)
+        normal_vals = np.array(normal_vals)
+        
+        # Correlation
+        corr = np.corrcoef(shear_vals, normal_vals)[0, 1]
+        
+        # Plot
+        ax.scatter(shear_vals, normal_vals, alpha=0.5)
+        ax.set_title(f"Angle {angle}°\nCorrelation: {corr:.4f}")
+        ax.set_xlabel("Shear Extension (mm)")
+        ax.set_ylabel("Normal Extension (mm)")
+        ax.grid(True)
+        
+    plt.tight_layout()
+    output_path = "figures/correlation_check.png"
+    plt.savefig(output_path)
+    print(f"Correlation plot saved to {output_path}")
 
 if __name__ == "__main__":
-    main()
+    compare_data()
