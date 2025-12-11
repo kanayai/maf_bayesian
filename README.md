@@ -8,6 +8,8 @@ This project uses **Bayesian Inference** to calibrate material properties of com
 ## Key Features
 - **Bayesian Inference**: Uses MCMC (Markov Chain Monte Carlo) via `numpyro` and `jax` to estimate posterior distributions of material parameters ($E_1, E_2, \nu_{12}, G_{12}$).
 - **Gaussian Process Emulator**: Bridges the gap between FE models and experimental observations.
+- **Flexible Noise Modeling**: Supports Proportional, Additive, and Constant noise models to capture realistic measurement uncertainty.
+- **ArviZ Integration**: Uses NetCDF for standardized, robust storage and analysis of Bayesian results.
 - **Bias Correction**: Supports different bias correction frameworks (No bias, Bias $E_1$, Bias $\alpha$).
 - **Modular Architecture**: Configurable models, priors, and data loading.
 
@@ -36,17 +38,23 @@ maf_bayesian/
 ```
 
 ## Models and Likelihoods
-The project supports three model types, configurable in `configs/default_config.py`:
+The project supports two active model types (Non-Centered), configurable in `configs/default_config.py`:
 
-1.  **`model`**: Standard formulation using a **Gaussian likelihood**.
-2.  **`model_n`**: Reparameterized formulation (improves MCMC mixing) using a **Gaussian likelihood**.
-3.  **`model_n_hv`**: Reparameterized formulation using a **Joint Gaussian likelihood** that simultaneously accounts for both Horizontal and Vertical extension data.
+1.  **`model_n`**: Reparameterized formulation (improves MCMC mixing) using a **Gaussian likelihood**.
+2.  **`model_n_hv`**: Reparameterized formulation using a **Joint Gaussian likelihood** that simultaneously accounts for both Horizontal and Vertical extension data.
+
+## Noise Models
+The project supports three noise models to capture measurement uncertainty:
+
+1. **Proportional (Default)**: $\sigma^2 \propto P$. Assumes noise scales with load (heteroscedastic).
+2. **Additive**: $\sigma^2 \propto P + \sigma_{base}^2$. Captures background noise at zero load.
+3. **Constant**: $\sigma^2 = \text{const}$. Standard homoscedastic noise.
 
 ## Workflow
 
 ### 1. Configuration
 Modify `configs/default_config.py` to set:
-- **Model**: Choose between `model`, `model_n`, or `model_n_hv`.
+- **Model**: Choose between `model_n` or `model_n_hv`.
 - **Priors**: Define priors for physical parameters, hyperparameters, and bias terms using `numpyro.distributions`.
 - **Data**: Select angles and data paths.
 - **Analysis Settings**:
