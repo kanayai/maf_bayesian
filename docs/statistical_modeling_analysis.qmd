@@ -49,11 +49,13 @@ Where the mean functions differ by direction:
 The script performs two key types of prediction, detailed in **[`prediction_methodology.qmd`](file:///Users/kai21/Projects/Research/certest/maf_bayesian/docs/prediction_methodology.qmd)**.
 
 ### 3.1 Prior Prediction
+
 - **Input**: Parameters sampled from the **Prior** ($\theta \sim \pi(\theta)$).
 - **Conditioning**: Uses **Simulation Data Only**.
 - **Goal**: Validation. Checks if the model structure and priors are capable of generating the observed data *before* calibration.
 
 ### 3.2 Posterior Prediction
+
 - **Input**: Parameters sampled from the **Posterior** ($\theta \sim p(\theta|D)$).
 - **Conditioning**: Uses **Both Simulation and Experimental Data**.
 - **Goal**: Prediction. Generates the best possible estimate of material behavior at the test angle, incorporating all available information.
@@ -87,6 +89,7 @@ for direction in ["v", "h"]:
 ```
 
 **Interpretation:**
+
 -   **Same Direction (Train "v", Plot "v")**: This is a standard **Goodness of Fit** check.
 -   **Cross Direction (Train "v", Plot "h")**: This is a **Generalization** check. It asks: *"If we only knew the Normal response, how accurately could we predict the Shear response?"*
 

@@ -112,6 +112,7 @@ $$
 $$
 
 Therefore:
+
 - **Prior predictions**: Wider bands (less information)
 - **Posterior predictions**: Narrower bands (more information from data)
 

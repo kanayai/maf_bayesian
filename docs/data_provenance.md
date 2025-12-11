@@ -1,33 +1,47 @@
-# Experimental Data Provenance
+# Experimental Data Processing
 
-This document records the relationship between the truncated experimental dataset (located in `data/experimental/h`) and the full experimental dataset (located in `data/experimental/full_experimental_data`).
+This document attempts to detail the relationship between the raw experimental data and the specific dataset used for Bayesian inference.
 
-The truncated dataset was derived as a subset of the full dataset, generally by taking the initial sequence of data points up to a load of approximately 10 kN.
+Unlike earlier iterations of this project which relied on manual file subsetting, the current workflow employs a **code-driven pipeline** to load, clean, and truncate data dynamically.
 
-## Horizontal Direction ('h') Mappings
+## 1. Single Source of Truth
 
-The following table maps each file in the current dataset to its source in the full dataset, including the exact Python slice indices used to verify the match.
+The project relies on one immutable "Full Experimental Dataset":
 
-| Current File | Full Source File | Subset Type | Slice Indices (Python) | Full Max Load |
-| :--- | :--- | :--- | :--- | :--- |
-| `input_load_angle_exp_1.txt` | `input_load_angle_exp_45_h_1.txt` | Prefix Subset | `[0:27]` | 16.474 kN |
-| `input_load_angle_exp_2.txt` | `input_load_angle_exp_45_h_2.txt` | Internal Subset | `[1:22]` (Start skipped) | 16.580 kN |
-| `input_load_angle_exp_3.txt` | `input_load_angle_exp_45_h_3.txt` | Internal Subset | `[1:28]` (Start skipped) | 16.620 kN |
-| `input_load_angle_exp_4.txt` | `input_load_angle_exp_90_h_1.txt` | Prefix Subset | `[0:20]` | 12.166 kN |
-| `input_load_angle_exp_5.txt` | `input_load_angle_exp_90_h_2.txt` | Internal Subset | `[1:17]` (Start skipped) | 13.080 kN |
-| `input_load_angle_exp_6.txt` | `input_load_angle_exp_90_h_3.txt` | Internal Subset | `[1:16]` (Start skipped) | 12.437 kN |
-| `input_load_angle_exp_7.txt` | `input_load_angle_exp_135_h_1.txt` | Prefix Subset | `[0:34]` | 13.739 kN |
-| `input_load_angle_exp_8.txt` | `input_load_angle_exp_135_h_2.txt` | Internal Subset | `[1:33]` (Start skipped) | 14.894 kN |
+*   **Location**: `data/experimental/full_experimental_data`
+*   **Content**: Complete load-extension curves for all tested angles and directions, extending until failure or test termination.
 
-**Note on "Start skipped":** Files marked as "Internal Subset" are missing the first data point (row 0) present in the full dataset. In the full dataset, this first row corresponds to `Load ≈ 0` and `Extension ≈ 0`.
+## 2. Dynamic Processing Pipeline
 
-## Reconstruction
+The `src/io/data_loader.py` script (`load_all_data`) performs the following operations to prepare data for analysis:
 
-To reconstruct the current dataset from the full dataset, one can simply load the full source file and sub-select the rows using the indices provided above.
+### A. Selection (by Config)
+It filters files to load only the specific **angles** requested in `defaults_config.py` (e.g., `angles: [45, 90, 135]`).
 
-Example:
-```python
-full_data = np.loadtxt("data/experimental/full_experimental_data/input_load_angle_exp_45_h_2.txt", delimiter=",")
-# Reconstruct exp_2
-current_data_reconstructed = full_data[1:22]
-```
+### B. Cleaning
+It enforces data quality rules during loading (`load_experiment_data`):
+
+1.  **NaN Removal**: Any rows containing `NaN` in either Load or Extension are dropped.
+2.  **Negative Load Filter**: Rows with significant negative load (tensor compression artifacts < -1e-6) are removed to ensure physical compatibility with the tension-only model inputs.
+
+### C. Truncation (by Load)
+To focus the analysis on the relevant elastic/plastic region and avoid high-load failure modes that the model may not capture, the data is **truncated**:
+
+*   **Mechanism**: `truncate_data(..., max_load)`
+*   **Configuration**: Controlled by `data.max_load` in `default_config.py`.
+*   **Effect**: Any data points where `Load > max_load` are excluded from the inference dataset.
+
+### D. Averaging (for Inference)
+As noted in `model_analysis.qmd`, the Bayesian inference currently treats the three sensor positions (Left, Center, Right) as independent samples of the mean behavior.
+
+*   **Operation**: The code computes the mean extension across valid sensors for each load step.
+*   **Output**: A single "mean extension" vector per experiment is passed to the likelihood function.
+
+## 3. Reproducibility
+
+Because this processing is defined in code and configuration, the exact dataset used for any analysis run is determined entirely by:
+
+1.  The committed state of `src/io/data_loader.py`.
+2.  The values in `configs/default_config.py`.
+
+There is no longer a need to maintain separate manual "partial" data files.

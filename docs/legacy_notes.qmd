@@ -1,0 +1,30 @@
+# Legacy Notes: Centered Parameterization Removal
+
+## Context
+In December 2025, the "Centered Parameterization" logic (previously the default `model` implementation) was removed from the codebase, leaving only the Non-Centered (Reparameterized) implementations (`model_n` and `model_n_hv`).
+
+## What was Removed?
+The original `get_priors_from_config` function supported a "Standard" mode where parameters were sampled directly from their physical priors:
+
+```python
+# Legacy Code Snippet
+val = numpyro.sample(name, std_cfg[name]) # e.g., Normal(160000, 2000)
+```
+
+## Why was it Removed?
+
+### 1. The "Funnel" Problem
+**Literature**: In hierarchical models (like Gaussian Processes with learnable length scales), centered parameterizations ($\theta \sim N(\mu, \sigma)$) essentially create a geometry known as "Neal's Funnel."
+
+**The Issue**: The curvature of the posterior distribution changes drastically depending on the value of the hyperparameters. NUTS (the sampler used by NumPyro) struggles to explore the "neck" of this funnel, leading to divergences and very low Effective Sample Sizes (ESS).
+
+**Solution**: Non-centered parameterization (sampling $\theta_{raw} \sim N(0,1)$ and scaling it) "whitens" the geometry, making it much easier for the sampler to navigate.
+
+### 2. Efficiency
+For the type of GP inference you are doing (learning separate length scales and variances), the non-centered implementations (`model_n`) will almost always converge faster and produce more reliable chains than the centered `model`.
+
+### 3. Code Maintenance
+Maintaining two parallel paths for prior sampling (standard vs. reparameterized) increased complexity in `src/core/models.py` and `configs/default_config.py`. Given that the reparameterized model is strictly superior for this use case, the legacy path was deemed technical debt.
+
+## Recovery
+If for some research reason the centered parameterization is needed again, it can be restored by reverting the changes to `src/core/models.py` in git commit `[insert commit hash prior to removal]`.

@@ -2,31 +2,31 @@
 
 
 
-This document provides a detailed comparison of the three model definitions in `src/core/models.py` (`model`, `model_n`, and `model_n_hv`) and an in-depth analysis of the likelihood function, specifically for the multi-output case.
+This document provides a detailed analysis of the two active model definitions in `src/core/models.py` (`model_n` and `model_n_hv`) and the likelihood function.
 
 ## 1. Model Comparison
 
 The file contains three distinct model formulations. The key differences lie in their **parameterization strategy** (Centered vs. Non-Centered), **data handling** (Single vs. Multi-output), and **prior distributions**.
 
-| Feature | `model` | `model_n` | `model_n_hv` |
-| :--- | :--- | :--- | :--- |
-| **Type** | Baseline | Reparameterized | Multi-Output Reparameterized |
-| **Parameterization** | **Centered**<br>Parameters sampled directly from priors. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. |
-| **Outputs** | Single (Implicitly Shear) | Single (Switchable S/N) | **Dual (Shear & Normal)** |
-| **Mean Function** | $P \sin(\alpha)$ | $P \sin(\alpha)$ OR $P \cos(\alpha)$ | $P \sin(\alpha)$ AND $P \cos(\alpha)$ |
-| **Priors** | Set A | Set A | **Set B (Updated)** |
+| Feature | `model_n` | `model_n_hv` |
+| :--- | :--- | :--- |
+| **Type** | Reparameterized | Multi-Output Reparameterized |
+| **Parameterization** | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. |
+| **Outputs** | Single (Switchable S/N) | **Dual (Shear & Normal)** |
+| **Mean Function** | $P \sin(\alpha)$ OR $P \cos(\alpha)$ | $P \sin(\alpha)$ AND $P \cos(\alpha)$ |
+| **Priors** | **Current** | **Current** |
 
 ### Detailed Prior Comparison
 
 A critical difference is that `model_n_hv` uses a different set of physical priors compared to `model` and `model_n`.
 
-| Parameter | `model` / `model_n` (Set A) | `model_n_hv` (Set B) | Change Analysis |
+| Parameter | Original / Legacy (Set A) | Current (Set B) | Change Analysis |
 | :--- | :--- | :--- | :--- |
-| **$E_1$** | $161,000 \pm 2,000$ | $165,000 \pm 6,050$ | **Mean $\uparrow$, Uncertainty $\uparrow \times 3$** |
-| **$E_2$** | $11,380 \pm 100$ | $11,500 \pm 250$ | Mean $\uparrow$, Uncertainty $\uparrow$ |
-| **$\nu_{12}$** | $0.32 \pm 0.01$ | $0.36 \pm 0.005$ | **Mean $\uparrow$, Uncertainty $\downarrow \times 0.5$** |
-| **$\nu_{23}$** | $0.43 \pm 0.01$ | $0.41 \pm 0.01$ | Mean $\downarrow$ |
-| **$G_{12}$** | $5,170 \pm 70$ | $5,000 \pm 80$ | Mean $\downarrow$ |
+| **$E_1$** | $161,000 \pm 2,000$ | $154,900 \pm 5,050$ | **Mean $\downarrow$, Uncertainty $\uparrow \times 2.5$** |
+| **$E_2$** | $11,380 \pm 100$ | $10,285 \pm 650$ | Mean $\downarrow$, Uncertainty $\uparrow$ |
+| **$\nu_{12}$** | $0.32 \pm 0.01$ | $0.33 \pm 0.015$ | Mean $\uparrow$ |
+| **$\nu_{23}$** | $0.43 \pm 0.01$ | $0.435 \pm 0.0125$ | Mean $\approx$ |
+| **$G_{12}$** | $5,170 \pm 70$ | $5,115 \pm 98$ | Mean $\downarrow$ |
 
 ### Understanding `_n` Parameters
 
@@ -139,12 +139,9 @@ Although the likelihood statements are separate, the inference is **strongly cou
 
 ### 3. Code Implementation Details
 
-#### Centered vs. Non-Centered Parameterization
-**Centered (`model`)**:
-```python
-# Harder for MCMC to sample if geometry is complex
-x = numpyro.sample("x", dist.Normal(mu, sigma))
-```
+### Centered vs. Non-Centered Parameterization
+
+The codebase exclusively uses **Non-Centered parameterization** to ensure sampling efficiency.
 
 **Non-Centered (`model_n`, `model_n_hv`)**:
 ```python
@@ -156,6 +153,7 @@ numpyro.deterministic("x", x)
 *Why?* This decouples the dependency between the mean/scale and the sample value, avoiding "funnel" pathologies in the posterior geometry, leading to more efficient sampling.
 
 #### Directional Logic
+
 *   **`model`**: Hardcoded to $\sin(\alpha)$ (Shear).
 *   **`model_n`**: Checks `if direction == 'h'` to choose between $\sin$ and $\cos$.
 *   **`model_n_hv`**: Computes **both** and samples **both**.
@@ -166,11 +164,15 @@ mean_vector_h = mean_emulator * input_xy[:,0] * jnp.sin(input_xy[:,1])
 mean_vector_v = mean_emulator * input_xy[:,0] * jnp.cos(input_xy[:,1])
 ```
 
-### Additive Noise Model (Optional)
+### Proportional Noise Model (Default)
 
 By default, the codebase assumes a measurement noise variance proportional to load (`noise_model: "proportional"`):
 $$ \sigma_{\text{noise}}^2 = \sigma_{\text{measure}}^2 \cdot P $$
 where $P$ is the load.
+
+This model assumes **heteroscedasticity**: as the load increases, the physical variability (and thus error) increases naturally. This is consistent with many mechanical testing scenarios where error is a percentage of the signal.
+
+### Additive Noise Model (Optional)
 
 An optional **Additive Noise Model** (`noise_model: "additive"`) is available to handle cases where noise persists at zero load:
 $$ \sigma_{\text{noise}}^2 = \sigma_{\text{measure}}^2 \cdot P + \sigma_{\text{base}}^2 $$
@@ -205,5 +207,20 @@ $$ \sigma_{\text{noise}}^2 = \sigma_{\text{constant}}^2 $$
 
 -   **Assumption**: The noise variance is practically constant and does not depend on the load mechanism. This is effectively a standard homoscedastic Gaussian noise model.
 -   **Configuration**: Set `"data": {"noise_model": "constant"}` in `default_config.py`.
+
 -   **Prior**: The prior for $\sigma_{\text{constant}}$ is configured under `"priors" -> "sigma_constant"`.
+
+## Appendix: Legacy Design Decision - Dropping Centered Parameterization
+
+Based on literature regarding Hamiltonian Monte Carlo and NUTS, the centered `model` was dropped in favor of the non-centered (reparameterized) versions (`model_n` / `model_n_hv`).
+
+**Reasoning:**
+
+1.  **The "Funnel" Problem**:
+    *   **Literature**: In hierarchical models (like Gaussian Processes with learnable length scales), centered parameterizations ($\theta \sim N(\mu, \sigma)$) essentially create a geometry known as "Neal's Funnel."
+    *   **The Issue**: The curvature of the posterior distribution changes drastically depending on the value of the hyperparameters. NUTS (the sampler used by NumPyro) struggles to explore the "neck" of this funnel, leading to divergences and very low Effective Sample Sizes (ESS).
+    *   **Solution**: Non-centered parameterization (sampling $\theta_{raw} \sim N(0,1)$ and scaling it) "whitens" the geometry, making it much easier for the sampler to navigate.
+
+2.  **Efficiency**:
+    *   For the type of GP inference performed here (learning separate length scales and variances), the non-centered implementations (`model_n`) will almost always converge faster and produce more reliable chains than the centered `model`.
 
