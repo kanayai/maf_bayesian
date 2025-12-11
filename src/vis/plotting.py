@@ -189,20 +189,24 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
         plt.show()
     plt.close()
 
-def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None, interval_label="90% interval", training_info_label=None):
+def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data_exp_plt, angle, title, save_path=None, interval_label="90% interval", training_info_label=None, color="blue", mean_color=None):
     """
     Plots prediction (mean + interval) against experimental data.
     """
     fig, ax = plt.subplots(figsize=(5,5), constrained_layout=True)
     
+    # Use color for mean if mean_color not provided
+    if mean_color is None:
+        mean_color = color
+
     # Interval
-    ax.fill_betweenx(samples_load, percentiles[0, :], percentiles[1, :], color="lightblue", label=interval_label)
+    ax.fill_betweenx(samples_load, percentiles[0, :], percentiles[1, :], color=color, alpha=0.5, label=interval_label)
     
     # Mean
-    ax.plot(mean_pred, samples_load, "blue", ls="solid", lw=0.5, label="Mean prediction")
+    ax.plot(mean_pred, samples_load, color=mean_color, ls="solid", lw=0.5, label="Mean prediction")
     
     # Data
-    sz=4
+    sz=2
     positions = ["Left", "Center", "Right"]
     markers = ['o', 's', '^']
     colors = ['k', 'k', 'k'] # Or use different colors? Original experimental plot used angle colors and pos markers.
@@ -219,7 +223,7 @@ def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data
             # But usually we have 1 exp per angle.
             
             ax.plot(data_exp_plt[i][:, col], input_xy_exp_plt[i][:,0], 
-                    f"-{markers[col]}", markersize=sz, linewidth=1, alpha=0.7, label=lbl)
+                    f"-{markers[col]}", markersize=sz, linewidth=0.5, alpha=0.4, label=lbl)
 
     ax.set(xlabel="Extension [mm]", ylabel="Load [kN]", title=f"{title} (${angle}^\circ$)")
     ax.legend(fontsize=10, bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -253,15 +257,15 @@ def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct
     fig, ax = plt.subplots(figsize=(5,5), constrained_layout=True)
     
     # Prior
-    ax.fill_betweenx(samples_load, pct_prior[0, :], pct_prior[1, :], alpha=0.75, color="lightgreen", label=f'Prior {interval_label}')
+    ax.fill_betweenx(samples_load, pct_prior[0, :], pct_prior[1, :], alpha=0.3, color="lightgreen", label=f'Prior {interval_label}')
     ax.plot(mean_prior, samples_load, c="green", ls="dashed", lw=1., label='Prior mean')
     
     # Posterior
-    ax.fill_betweenx(samples_load, pct_post[0, :], pct_post[1, :], alpha=1, color="lightblue", label=f'Posterior {interval_label}')
-    ax.plot(mean_post, samples_load, c="blue", ls="solid", lw=0.5, label="Posterior mean")
+    ax.fill_betweenx(samples_load, pct_post[0, :], pct_post[1, :], alpha=0.5, color="orange", label=f'Posterior {interval_label}')
+    ax.plot(mean_post, samples_load, c="red", ls="solid", lw=0.5, label="Posterior mean")
     
     # Data
-    sz=4
+    sz=2
     positions = ["Left", "Center", "Right"]
     markers = ['o', 's', '^']
     
@@ -269,7 +273,7 @@ def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct
         for col in range(data_exp_plt[i].shape[1]):
             lbl = positions[col] if i == 0 else "_nolegend_"
             ax.plot(data_exp_plt[i][:, col], input_xy_exp_plt[i][:,0], 
-                    f"-{markers[col]}", markersize=sz, linewidth=1, alpha=0.7, label=lbl)
+                    f"-{markers[col]}", markersize=sz, linewidth=0.5, alpha=0.4, label=lbl)
         
     ax.set(xlabel="Extension [mm]", ylabel="Load [kN]", title=f"{title} (${angle}^\circ$)")
     ax.legend(fontsize=10, bbox_to_anchor=(1.05, 1), loc='upper left')

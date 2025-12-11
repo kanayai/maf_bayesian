@@ -683,21 +683,9 @@ Examples:
                 save_path=figures_dir
                 / f"prediction_posterior_{angle_value}_{dir_file_tag}_{suffix}.png",
                 interval_label=interval_label,
-                training_info_label=training_info
-            )
-
-            # Prior Prediction Plot
-            plot_prediction(
-                samples_load,
-                mean_prior,
-                pct_prior,
-                input_xy_exp_plt,
-                data_exp_plt,
-                angle_value,
-                f"Prior Prediction ({dir_label})",
-                save_path=figures_dir
-                / f"prediction_prior_{angle_value}_{dir_file_tag}_{suffix}.png",
-                interval_label=interval_label,
+                training_info_label=training_info,
+                color="orange",
+                mean_color="red"
             )
 
             # Combined Prediction Plot
