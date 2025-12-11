@@ -1,4 +1,4 @@
-# Statistical Modeling Analysis: analyze.py
+# Posterior samples analysis: analyze.py
 
 
 
@@ -12,7 +12,7 @@ The script loads three types of data:
 - **Posterior Samples (`results_mcmc/*.nc`)**: The results of a previously run MCMC inference, containing thousands of samples of the material parameters ($\theta$) that best fit the experimental data.
 
 ## 2. Statistical Model Definition
-The script uses `model_n_hv` from `src/core/models.py`.
+The script primarily analyzes results from the active non-centered models (`model_n_hv` or `model_n`) defined in `src/core/models.py`.
 
 - **Type**: Gaussian Process Emulator with Multi-Output (Shear & Normal).
 - **Goal**: To predict the system response $y$ (extension) given inputs $\mathbf{x} = (P, \alpha)$ (where $P$ is Load and $\alpha$ is Angle) and parameters $\theta$ (E1, E2, etc.).
@@ -22,7 +22,7 @@ The script uses `model_n_hv` from `src/core/models.py`.
   - $\mu(\mathbf{x}, \theta)$: Physics-based mean trend (from FE surrogate).
   - $\delta(\mathbf{x}) \sim \mathcal{GP}(0, k(\mathbf{x}, \mathbf{x}'))$: GP bias term (corrects for systematic model errors).
   - $\epsilon \sim \mathcal{N}(0, \Sigma_\epsilon)$: Random measurement noise.
-  - The noise variance is modeled as **proportional to the load** $P$: $\Sigma_\epsilon = \text{diag}(\sigma_{measure}^2 \cdot P)$.
+  - The noise variance is modeled in **one of 3 possible ways** as per `default_config.py` (Proportional, Additive, or Constant).
 
 ### 2.1 Covariance Kernel
 The GP uses a **Squared Exponential Kernel** with separate length scales for inputs $\mathbf{x}$ and parameters $\theta$:
