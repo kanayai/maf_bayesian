@@ -206,24 +206,16 @@ def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data
     ax.plot(mean_pred, samples_load, color=mean_color, ls="solid", lw=0.5, label="Mean prediction")
     
     # Data
-    sz=2
-    positions = ["Left", "Center", "Right"]
-    markers = ['o', 's', '^']
-    colors = ['k', 'k', 'k'] # Or use different colors? Original experimental plot used angle colors and pos markers.
-    # But here we are in a single angle plot.
-    # Let's use black or specific colors. The prediction is blue.
-    # Let's use simple colors or just markers.
-    
+    sz=3
+    # Averaged Data Plotting
     for i in range(len(input_xy_exp_plt)):
-        # Assuming data_exp_plt[i] has 3 columns for L, C, R
-        for col in range(data_exp_plt[i].shape[1]):
-            # Only label the first experiment's columns to avoid duplicate legend entries
-            lbl = positions[col] if i == 0 else "_nolegend_"
-            # If there are multiple experiments, maybe distinguish them? 
-            # But usually we have 1 exp per angle.
-            
-            ax.plot(data_exp_plt[i][:, col], input_xy_exp_plt[i][:,0], 
-                    f"-{markers[col]}", markersize=sz, linewidth=0.5, alpha=0.4, label=lbl)
+        # Calculate mean across columns (positions)
+        mean_ext = np.mean(data_exp_plt[i], axis=1)
+        lbl = "Exp Data (Avg)" if i == 0 else "_nolegend_"
+        
+        ax.plot(mean_ext, input_xy_exp_plt[i][:,0], 
+                "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                markersize=sz, linewidth=0, alpha=0.7, label=lbl)
 
     ax.set(xlabel="Extension [mm]", ylabel="Load [kN]", title=f"{title} (${angle}^\circ$)")
     ax.legend(fontsize=10, bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -265,15 +257,16 @@ def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct
     ax.plot(mean_post, samples_load, c="red", ls="solid", lw=0.5, label="Posterior mean")
     
     # Data
-    sz=2
-    positions = ["Left", "Center", "Right"]
-    markers = ['o', 's', '^']
-    
+    # Data
+    sz=3
     for i in range(len(input_xy_exp_plt)):
-        for col in range(data_exp_plt[i].shape[1]):
-            lbl = positions[col] if i == 0 else "_nolegend_"
-            ax.plot(data_exp_plt[i][:, col], input_xy_exp_plt[i][:,0], 
-                    f"-{markers[col]}", markersize=sz, linewidth=0.5, alpha=0.4, label=lbl)
+        # Calculate mean across columns (positions)
+        mean_ext = np.mean(data_exp_plt[i], axis=1)
+        lbl = "Exp Data (Avg)" if i == 0 else "_nolegend_"
+        
+        ax.plot(mean_ext, input_xy_exp_plt[i][:,0], 
+                "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                markersize=sz, linewidth=0, alpha=0.7, label=lbl)
         
     ax.set(xlabel="Extension [mm]", ylabel="Load [kN]", title=f"{title} (${angle}^\circ$)")
     ax.legend(fontsize=10, bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -294,6 +287,299 @@ def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct
         plt.gcf().set_size_inches(7, 5)
         plt.savefig(save_path, dpi=300, transparent=True, bbox_inches='tight')
         print(f"Saved combined prediction plot to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+def plot_grid_prediction(predictions_collection, angles, save_path=None, interval_label="95% interval"):
+    """
+    Plots a 2x3 grid of predictions (Rows: Shear/Normal, Cols: Angles).
+    
+    Args:
+        predictions_collection: Dict [angle][direction] -> {
+            'samples_load': ..., 'mean_post': ..., 'pct_post': ..., 
+            'mean_prior': ..., 'pct_prior': ..., 
+            'input_xy_exp': ..., 'data_exp': ..., 'training_info': ...
+        }
+        angles: List of angles [45, 90, 135]
+    """
+    directions = ["h", "v"] # Top row: Shear (h), Bottom row: Normal (v)
+    rows = 2
+    cols = len(angles)
+    
+    # 5 inch width per col, 4 inch height per row
+    fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 4*rows), constrained_layout=True)
+    
+    # Ensure axes is 2D array
+    if rows == 1 and cols == 1: axes = np.array([[axes]])
+    elif rows == 1: axes = axes[None, :]
+    elif cols == 1: axes = axes[:, None]
+        
+    for r, direction in enumerate(directions):
+        dir_label = "Shear" if direction == "h" else "Normal"
+        
+        for c, angle in enumerate(angles):
+            ax = axes[r, c]
+            
+            # Check if we have data for this cell
+            if angle in predictions_collection and direction in predictions_collection[angle]:
+                data = predictions_collection[angle][direction]
+                
+                samples_load = data['samples_load']
+                
+                # --- Prior ---
+                if 'mean_prior' in data and data['mean_prior'] is not None:
+                    ax.fill_betweenx(samples_load, data['pct_prior'][0], data['pct_prior'][1], 
+                                     alpha=0.3, color="lightgreen", label=f'Prior {interval_label}')
+                    ax.plot(data['mean_prior'], samples_load, c="green", ls="dashed", lw=1., label='Prior mean')
+                
+                # --- Posterior ---
+                if 'mean_post' in data and data['mean_post'] is not None:
+                    ax.fill_betweenx(samples_load, data['pct_post'][0], data['pct_post'][1], 
+                                     alpha=0.5, color="orange", label=f'Posterior {interval_label}')
+                    ax.plot(data['mean_post'], samples_load, c="red", ls="solid", lw=0.5, label="Posterior mean")
+                
+                # --- Experimental Data ---
+                if 'data_exp' in data:
+                    input_xy = data['input_xy_exp']
+                    data_exp = data['data_exp']
+                    
+                    # Averaged Data Plotting
+                    sz=3
+                    for i in range(len(input_xy)):
+                        mean_ext = np.mean(data_exp[i], axis=1)
+                        lbl = "Exp Data (Avg)" if i == 0 else "_nolegend_"
+                        ax.plot(mean_ext, input_xy[i][:,0], 
+                                "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                                markersize=sz, linewidth=0, alpha=0.7, label=lbl)
+
+                # --- Labels & Info ---
+                if r == 0:
+                    ax.set_title(f"Angle {angle}°")
+                if r == 1:
+                    ax.set_xlabel("Extension [mm]")
+                if c == 0:
+                    ax.set_ylabel(f"{dir_label} - Load [kN]")
+                
+                # Limits
+                if direction == "v":
+                    if int(angle) == 90:
+                        ax.set_xlim(-0.05, 0.05)
+                    else:
+                        ax.set_xlim(-0.05, 0.05)
+                else:
+                    ax.set_xlim(0, 0.15)
+                    
+                ax.grid(True)
+                
+                # Legend only on first subplot per row or consolidated?
+                if c == 0:
+                    ax.legend(fontsize=8, loc='upper left')
+                    
+                if 'training_info' in data and data['training_info']:
+                     ax.text(0.5, 0.02, data['training_info'], transform=ax.transAxes, 
+                             ha='center', fontsize=8, style='italic', color='gray')
+            else:
+                ax.axis('off')
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Saved grid plot to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+def plot_spaghetti_verification(
+    test_loads,
+    samples,
+    percentiles,  # (2, num_points)
+    angle,
+    direction,
+    input_xy_exp=None,
+    data_exp=None,
+    plot_type="Posterior",
+    save_path=None
+):
+    """
+    Plots a spaghetti plot of samples with overlaid percentiles.
+    To verify that bands match the distribution of samples.
+    """
+    fig, ax = plt.subplots(figsize=(6, 5))
+    
+    num_samples = samples.shape[0]
+    
+    # Plot Samples (Spaghetti)
+    # Axes Swap: X=Extension (samples), Y=Load (test_loads)
+    for s in range(min(num_samples, 200)): # Plot max 200 to avoid clutter
+        ax.plot(samples[s], test_loads, color='blue', alpha=0.1, lw=1)
+        
+    # Plot Percentiles
+    if percentiles is not None:
+        ax.plot(percentiles[0], test_loads, color='green', linestyle='--', linewidth=2, label='2.5% / 97.5%')
+        ax.plot(percentiles[1], test_loads, color='green', linestyle='--', linewidth=2)
+        
+    # Overlay Data
+    if input_xy_exp is not None and data_exp is not None:
+        val_label = "val"
+        for i in range(len(input_xy_exp)):
+            # Average exp data
+            mean_ext = np.mean(data_exp[i], axis=1)
+            lbl = "Exp Data (Avg)" if i == 0 else "_nolegend_"
+            ax.plot(mean_ext, input_xy_exp[i][:,0], 
+                    "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                    markersize=3, linewidth=0, alpha=0.7, label=lbl)
+
+    dir_label = "Shear" if direction == "h" else "Normal"
+    ax.set_title(f"{plot_type} Spaghetti Verification - {angle}° {dir_label}")
+    ax.set_xlabel("Extension [mm]")
+    ax.set_ylabel("Load [kN]")
+    
+    # Limits (consistent with grid)
+    if direction == "v":
+        if int(angle) == 90:
+            ax.set_xlim(-0.05, 0.05)
+        else:
+            ax.set_xlim(-0.05, 0.05)
+    else:
+        ax.set_xlim(0, 0.15)
+        
+    ax.grid(True)
+    ax.legend(loc='upper left', fontsize=8)
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved posterior spaghetti plot to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="Posterior"):
+    """
+    Plots a 2xN grid of spaghetti plots.
+    Rows: Shear (H), Normal (V)
+    Cols: Angles provided in 'angles' list
+    
+    prediction_data: dict[angle][direction] -> {samples_load, post_y_samples, pct_post, ...}
+    """
+    directions = ["h", "v"]
+    num_cols = len(angles)
+    
+    # Dynamic figsize: ~5 inch width per col, 10 inch height total (2 rows)
+    fig, axes = plt.subplots(2, num_cols, figsize=(5 * num_cols, 10), squeeze=False)
+    
+    for row_idx, direction in enumerate(directions):
+        for col_idx, angle in enumerate(angles):
+            ax = axes[row_idx, col_idx]
+            
+            p_data = prediction_data.get(angle, {}).get(direction)
+            if not p_data:
+                ax.axis('off')
+                continue
+            
+            # Extract data depends on whether we are plotting Prior or Posterior
+            # The caller handles logic, but prediction_data usually has keys:
+            # 'samples_load', 'post_y_samples' / 'prior_y_samples', 'pct_post' / 'pct_prior'
+            
+            test_loads = p_data['samples_load']
+            input_xy_exp = p_data['input_xy_exp']
+            data_exp = p_data['data_exp']
+            training_info = p_data.get('training_info')
+
+            # Determine what to plot based on title_prefix or available keys
+            if "Prior" in title_prefix:
+                samples = p_data.get('prior_y_samples')
+                percentiles = p_data.get('pct_prior')
+                color = 'green' # Prior color scheme? Usually we used green bands. 
+                # Wait, prior spaghetti was blue in test? 
+                # Let's stick to Blue spaghetti, Green bands for consistency with test script.
+            else:
+                samples = p_data.get('post_y_samples')
+                percentiles = p_data.get('pct_post')
+                color = 'blue'
+
+            # Plot Samples (Spaghetti)
+            if samples is not None:
+                num_samples = samples.shape[0]
+                # Plot ~100 lines max for visibility
+                for s in range(min(num_samples, 100)):
+                    ax.plot(samples[s], test_loads, color='blue', alpha=0.1, lw=0.5)
+
+            # Plot Percentiles
+            if percentiles is not None:
+                ax.plot(percentiles[0], test_loads, color='green', linestyle='--', linewidth=1.5, label='95% Interval')
+                ax.plot(percentiles[1], test_loads, color='green', linestyle='--', linewidth=1.5)
+            
+            # Overlay Data (Averaged)
+            if input_xy_exp is not None and data_exp is not None:
+                markers = ['o', '^', 's', 'D', 'v', '<', '>', 'p', '*', 'h']
+                for i in range(len(input_xy_exp)):
+                    # Average sensors (Right, Center, Left -> axis 1)
+                    if data_exp[i].ndim > 1 and data_exp[i].shape[1] > 1:
+                        mean_ext = np.mean(data_exp[i], axis=1)
+                    else:
+                        mean_ext = data_exp[i].flatten()
+                    
+                    marker = markers[i % len(markers)]
+                    ax.plot(mean_ext, input_xy_exp[i][:,0], 
+                            marker, color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                            markersize=4, linewidth=0, alpha=0.8, label=f'Exp {i+1}')
+
+            # Labels and Limits
+            if row_idx == 0:
+                ax.set_title(f"Angle {angle}°")
+            
+            if row_idx == 1:
+                ax.set_xlabel("Extension (mm)")
+                
+            if col_idx == 0:
+                dir_label = "Shear" if direction == "h" else "Normal"
+                ax.set_ylabel(f"{dir_label} - Load (kN)")
+                
+            # Limits (consistent with user request)
+            if direction == "v":
+                if int(angle) == 90:
+                    ax.set_xlim(-0.05, 0.05)
+                elif int(angle) == 45:
+                     ax.set_xlim(-0.05, 0.1) # Updated
+                elif int(angle) == 135:
+                     ax.set_xlim(-0.1, 0.1) # Default for 135 V? User specified "135 degrees Shear".
+                     # Assuming "both 45 degree plots" meant H/V for 45.
+                     # For 135, user said "for the 135 degrees Shear". 
+                     # I will leave 135 V as -0.1, 0.1 unless clarified, or set to -0.05, 0.1 if user implied "both" earlier logic applies?
+                     # Ideally 135 Normal is stiff? 
+                     # Let's keep 45 V as -0.05, 0.1.
+                else:
+                    ax.set_xlim(-0.05, 0.05)
+            else:
+                # Shear
+                if int(angle) == 90:
+                    ax.set_xlim(-0.05, 0.15) # Updated
+                elif int(angle) == 45:
+                    ax.set_xlim(-0.05, 0.1) # Updated
+                elif int(angle) == 135:
+                    ax.set_xlim(-0.05, 0.1) # Updated
+                else:
+                    ax.set_xlim(0, 0.15)
+                
+            ax.grid(True, alpha=0.5)
+            
+            if training_info:
+                 ax.text(0.5, 0.02, training_info, transform=ax.transAxes, 
+                         ha='center', fontsize=8, style='italic', color='gray')
+            
+            if row_idx==0 and col_idx==0:
+                 # Ensure unique labels in legend
+                 handles, labels = ax.get_legend_handles_labels()
+                 by_label = dict(zip(labels, handles))
+                 ax.legend(by_label.values(), by_label.keys(), loc='upper left', fontsize=6)
+
+    # Global Title
+    fig.suptitle(f'{title_prefix} Prediction Spaghetti Grid', fontsize=16)
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Saved {title_prefix} spaghetti grid plot to {save_path}")
     else:
         plt.show()
     plt.close()

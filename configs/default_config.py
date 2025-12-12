@@ -14,21 +14,21 @@ config = {
         # 'constant': sigma^2 = sigma_constant^2
         "noise_model": "proportional",
         "base_path": "./data",  # Root data directory
-        "max_load": 11.0,  # Maximum load [kN] for data truncation and prediction
+        "max_load": 10.0,  # Maximum load [kN] for data truncation and prediction
         "angles": [45, 90, 135],  # Angles to load
         "prediction_angle": [45, 90, 135],  # Angle for prediction/plotting
         "direction": "v",  # 'h' or 'v' for single direction models/plots
         "prediction_interval": 0.95,  # Prediction interval coverage (e.g., 0.95 for 95%)
-        "prediction_samples": 500,  # Number of samples for prediction
+        "prediction_samples": 1000,  # Number of samples for prediction
         "run_residual_analysis": True,  # Validation: Run residual analysis
         "plot_trace": True,  # Validation: Plot MCMC trace for diagnostics
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 2000,
-        "num_samples": 1000,
+        "num_warmup": 4000,
+        "num_samples": 4000,
         "num_chains": 2,
-        "thinning": 3,
+        "thinning": 4,
     },
     # Bias flags
     "bias": {
