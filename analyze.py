@@ -22,6 +22,9 @@ from src.vis.plotting import (
     plot_posterior_distributions,
     plot_prediction,
     plot_combined_prediction,
+    plot_grid_prediction,
+    plot_spaghetti_verification,
+    plot_grid_spaghetti,
 )
 
 
@@ -173,6 +176,8 @@ Examples:
     # Unpack data
     input_xy_exp = data_dict["input_xy_exp"]
     input_xy_sim = data_dict["input_xy_sim"]
+    print(f"DEBUG_ANALYZE: input_xy_sim shape: {input_xy_sim.shape}")
+    print(f"DEBUG_ANALYZE: input_xy_sim head:\n{input_xy_sim[:5]}")
     input_theta_sim = data_dict["input_theta_sim"]
     data_exp_h = data_dict["data_exp_h"]
     data_exp_v = data_dict["data_exp_v"]
@@ -608,7 +613,10 @@ Examples:
 
         return means, total_std, y_samples
 
+    predictions_collection = {}
+
     for angle_value in angles_to_predict:
+        predictions_collection[angle_value] = {}
         print(f"\n=== Predicting for Angle {angle_value} ===")
 
         test_xy = jnp.stack(
@@ -656,6 +664,10 @@ Examples:
             pct_prior = jnp.percentile(
                 prior_y_samples, q=jnp.array([q_lower, q_upper]), axis=0
             )
+            
+            # --- Verification: Prior Spaghetti - Disabled individual plot ---
+            # plot_spaghetti_verification(...)
+
 
             # 2. Posterior Prediction
             print("    Running posterior prediction...")
@@ -668,43 +680,45 @@ Examples:
                 post_y_samples, q=jnp.array([q_lower, q_upper]), axis=0
             )
 
-            # 3. Plots
-            print(f"    Generating plots for {dir_label}...")
+            # 3. Plots - Output Standardization: Disabled individual plots
+            # plot_prediction(...) 
+            # plot_combined_prediction(...)
+            # plot_spaghetti_verification(...)
 
-            # Posterior Prediction Plot
-            plot_prediction(
-                samples_load,
-                mean_post,
-                pct_post,
-                input_xy_exp_plt,
-                data_exp_plt,
-                angle_value,
-                f"Posterior Prediction ({dir_label})",
-                save_path=figures_dir
-                / f"prediction_posterior_{angle_value}_{dir_file_tag}_{suffix}.png",
-                interval_label=interval_label,
-                training_info_label=training_info,
-                color="orange",
-                mean_color="red"
-            )
 
-            # Combined Prediction Plot
-            plot_combined_prediction(
-                samples_load,
-                mean_prior,
-                pct_prior,
-                mean_post,
-                pct_post,
-                input_xy_exp_plt,
-                data_exp_plt,
-                angle_value,
-                f"Predictions ({dir_label})",
-                save_path=figures_dir
-                / f"prediction_combined_{angle_value}_{dir_file_tag}_{suffix}.png",
-                interval_label=interval_label,
-                training_info_label=training_info
-            )
+            # Store for Grid Plot
+            predictions_collection[angle_value][direction] = {
+                'samples_load': samples_load,
+                'mean_post': mean_post,
+                'pct_post': pct_post,
+                'mean_prior': mean_prior,
+                'pct_prior': pct_prior,
+                'prior_y_samples': prior_y_samples,
+                'input_xy_exp': input_xy_exp_plt,
+                'data_exp': data_exp_plt,
+                'training_info': training_info,
+                'post_y_samples': post_y_samples
+            }
 
+    # 6. Grid Predictions (Consolidated Spaghetti)
+    
+    # Prior Grid
+    print("\nGenerating Prior Spaghetti Grid...")
+    plot_grid_spaghetti(
+        predictions_collection,
+        angles_to_predict,
+        save_path=figures_dir / f"prediction_prior_grid_{suffix}.png",
+        title_prefix="Prior"
+    )
+
+    # Posterior Grid
+    print("Generating Posterior Spaghetti Grid...")
+    plot_grid_spaghetti(
+        predictions_collection,
+        angles_to_predict,
+        save_path=figures_dir / f"prediction_posterior_grid_{suffix}.png",
+        title_prefix="Posterior"
+    )
     # 9. Residual Analysis (Optional)
     if config["data"].get("run_residual_analysis", False):
         run_residual_analysis(idata, data_dict, figures_dir)
@@ -734,6 +748,7 @@ def run_residual_analysis(idata, data_dict, figures_dir):
     total_samples = posterior.dims.get(
         "sample", posterior.sizes["sample"]
     )  # Handle deprecation safely
+    num_samples = min(500, total_samples)
     indices = np.random.choice(total_samples, num_samples, replace=False)
 
     def get_batch(key):
