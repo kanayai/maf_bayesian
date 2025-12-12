@@ -24,12 +24,8 @@ model_structure*
 results/tmp/
 results/cache/
 results/debug/
-figures/tmp/
-figures/cache/
-figures/debug/
-
-# Final/important results (tracked - using negation)
 !results/final/
+figures/*
 !figures/final/
 
 # Documentation build artifacts

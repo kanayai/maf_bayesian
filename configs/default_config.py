@@ -25,10 +25,10 @@ config = {
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 4000,
-        "num_samples": 4000,
+        "num_warmup": 3000,
+        "num_samples": 3000,
         "num_chains": 2,
-        "thinning": 4,
+        "thinning": 3,
     },
     # Bias flags
     "bias": {
@@ -50,14 +50,7 @@ config = {
                 "v_23": {"mean": 0.435, "scale": 0.0125},
                 "G_12": {"mean": 5115.0, "scale": 98.0},
             },
-            # For standard model (not reparameterized)
-            "standard": {
-                "E_1": dist.Normal(154900.0, 5050.0),
-                "E_2": dist.Normal(10285.0, 650.0),
-                "v_12": dist.Normal(0.33, 0.015),
-                "v_23": dist.Normal(0.435, 0.0125),
-                "G_12": dist.Normal(5115.0, 98.0),
-            },
+
         },
         # Hyperparameters
         "hyper": {

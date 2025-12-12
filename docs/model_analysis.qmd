@@ -210,6 +210,126 @@ $$ \sigma_{\text{noise}}^2 = \sigma_{\text{constant}}^2 $$
 
 -   **Prior**: The prior for $\sigma_{\text{constant}}$ is configured under `"priors" -> "sigma_constant"`.
 
+## 3. Simulated Data Integration
+
+The Bayesian model (`model_n_hv`) treats the simulated data as "ground truth" observations of the physics, which constrain the Gaussian Process (GP) emulator. While the experimental data drives the calibration of unknown parameters, the simulated data teaches the model the relationship between inputs and outputs.
+
+### 3.1 Data Flow
+
+The following three files are critical for this integration:
+
+#### 1. Control Inputs (`input_load_angle_sim.txt`)
+*   **Content**: 2 columns representing $[P, \alpha]$ (Load, Angle).
+*   **Action**: Loaded directly into `input_xy_sim`.
+*   **Role**: These are concatenated with the experimental inputs to form the full $X$ matrix for the GP covariance function.
+    $$ \mathbf{X}_{total} = \begin{bmatrix} P_{exp} & \alpha_{exp} \\ P_{sim} & \alpha_{sim} \end{bmatrix} $$
+
+#### 2. Physical Parameters (`input_theta_sim.txt`)
+*   **Content**: 5 columns representing $[E_1, E_2, \nu_{12}, \nu_{23}, G_{12}]$.
+*   **Action**: Loaded into `input_theta_sim`.
+*   **Role**: The GP needs a parameter vector $\theta$ for *every* data point.
+    *   **For Experimental points**: The model uses the **sampled/inferred** parameters $\theta_{sampled}$. These are repeated (tiled) for every experimental row.
+    *   **For Simulated points**: The model uses the **known/fixed** parameters from this file.
+    
+    $$ \Theta_{total} = \begin{bmatrix} \text{Tile}(\theta_{sampled}) \\ \Theta_{sim\_fixed} \end{bmatrix} $$
+
+#### 3. Output Response (`data_extension_sim.txt`)
+*   **Content**: Multiple columns representing sensors (Left, Center, Right).
+*   **Action**: These are **averaged immediately** upon loading (`.mean(axis=1)`) to create a single scalar extension value per simulation point.
+*   **Role**: These averaged values become the "observed" $Y$ values for the simulation part of the dataset. They are concatenated with the experimental observations.
+
+### 3.2 The Joint Gaussian Process
+
+By training on this combined dataset, the model learns a single GP function $f(P, \alpha, \theta) \approx \text{Extension}$.
+*   The **experimental data** provides points where $\theta$ is *unknown*. The inference algorithm searches for the $\theta$ that makes the experimental observations likely under the GP function learned from the simulation.
+
+### 3.3 Visualizing the Parameter Matrix (Tiling)
+
+A key physical assumption is that **all experimental data points** come from the same physical specimen (or identical specimens), so they share the exact same material properties ($E_1, E_2$, etc.). To evaluate the Gaussian Process, the model constructs an input matrix where *every single row* corresponds to a data point.
+
+Since $\theta$ is constant for all experiments in a single MCMC step, the model **tiles (repeats)** that single sampled $\theta^*$ vector into every experimental row.
+
+$$
+\text{Input}_{\theta} = 
+\begin{bmatrix} 
+\color{blue}{E_1^*} & \color{blue}{E_2^*} & \dots & \color{blue}{G_{12}^*} \\
+\color{blue}{E_1^*} & \color{blue}{E_2^*} & \dots & \color{blue}{G_{12}^*} \\
+\vdots & \vdots & \ddots & \vdots \\
+\color{blue}{E_1^*} & \color{blue}{E_2^*} & \dots & \color{blue}{G_{12}^*} \\
+\hline
+\color{gray}{E_{1,sim}^{(1)}} & \color{gray}{E_{2,sim}^{(1)}} & \dots & \color{gray}{G_{12,sim}^{(1)}} \\
+\color{gray}{E_{1,sim}^{(2)}} & \color{gray}{E_{2,sim}^{(2)}} & \dots & \color{gray}{G_{12,sim}^{(2)}} \\
+\vdots & \vdots & \ddots & \vdots
+\end{bmatrix}
+\begin{matrix}
+\leftarrow \text{Row 1 (Exp Data Point 1)} \\
+\leftarrow \text{Row 2 (Exp Data Point 2)} \\
+\vdots \\
+\leftarrow \text{Row } N_{exp} \\
+\\
+\leftarrow \text{Row } N_{exp}+1 \text{ (Sim Data Point 1)} \\
+\leftarrow \text{Row } N_{exp}+2 \text{ (Sim Data Point 2)} \\
+\vdots
+\end{matrix}
+$$
+
+*   **Top Section (Blue rows)**: These values change **every MCMC step** as the sampler proposes new candidates for the true material properties.
+*   **Bottom Section (Gray rows)**: These values are **fixed** (loaded from `input_theta_sim.txt`). They anchor the physics of the model.
+
+## 4. Covariance Structure Analysis
+
+This section details the mathematical structure of the covariance matrices used in the likelihood and posterior predictions.
+
+### 4.1 The Total Data Covariance $K_{obs,obs}$
+
+The Gaussian Process covariance matrix (often called the Gram matrix) is constructed over the **joint** set of experimental and simulated data points. Its structure can be visualized as a block matrix:
+
+$$
+\mathbf{K}_{obs,obs} = 
+\begin{bmatrix}
+\mathbf{K}_{EE} & \mathbf{K}_{ES} \\
+\mathbf{K}_{SE} & \mathbf{K}_{SS}
+\end{bmatrix}
+$$
+
+*   **$\mathbf{K}_{EE}$**: Covariance between experimental points. Depends on the distance between inputs $(Load_{exp}, \theta^*)$ and itself.
+*   **$\mathbf{K}_{SS}$**: Covariance between simulation points. Depends on fixed inputs from simulation files.
+*   **$\mathbf{K}_{ES}$**: Cross-covariance. This term is critical; it represents how much the simulation points "inform" the experimental predictions.
+
+### 4.2 Measurement Noise Matrix $\Sigma_\epsilon$
+
+The noise handling is distinct for experimental vs. simulated data. The total noise covariance matrix is diagonal:
+
+$$
+\mathbf{\Sigma}_\epsilon = 
+\begin{bmatrix}
+\mathbf{D}_{exp} & \mathbf{0} \\
+\mathbf{0} & \mathbf{0}
+\end{bmatrix}
++ \mathbf{J}_{jitter}
+$$
+
+*   **$\mathbf{D}_{exp}$**: Diagonal matrix of experimental measurement noise.
+    *   For Proportional Noise: $D_{ii} = \sigma_{measure}^2 \times P_i$
+*   **Simulation Noise**: Effectively **zero**. We assume the Finite Element simulation is a deterministic "truth" of the physics model (no measurement error).
+*   **$\mathbf{J}_{jitter}$**: A tiny constant ($10^{-6}$) added to the entire diagonal for numerical stability (Cholesky decomposition).
+
+### 4.3 Posterior Covariance $\Sigma_{post}$
+
+During prediction (`posterior_predict`), we compute the covariance of the test points conditioned on the observed data. This uses the standard GP formula:
+
+$$
+\mathbf{\Sigma}_{post} = \mathbf{K}_{**} - \mathbf{K}_{*f} (\mathbf{K}_{obs,obs} + \mathbf{\Sigma}_\epsilon)^{-1} \mathbf{K}_{f*}
+$$
+
+Where:
+*   $\mathbf{K}_{**}$: Prior covariance of the test points (the inherent uncertainty of the GP kernel).
+*   $\mathbf{K}_{*f}$: Covariance between test points and all training data (Exp + Sim).
+*   The term $(\mathbf{K}_{obs,obs} + \mathbf{\Sigma}_\epsilon)^{-1}$ acts as the "information gain" from the data, reducing the uncertainty.
+
+> [!NOTE]
+> Because $\mathbf{\Sigma}_\epsilon$ is zero for the simulation block, the GP is forced to pass very close to the simulation means (interpolating them), while it allows "slack" around the experimental points proportional to the measurement noise.
+
 ## Appendix: Legacy Design Decision - Dropping Centered Parameterization
 
 Based on literature regarding Hamiltonian Monte Carlo and NUTS, the centered `model` was dropped in favor of the non-centered (reparameterized) versions (`model_n` / `model_n_hv`).
