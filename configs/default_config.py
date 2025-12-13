@@ -20,6 +20,8 @@ config = {
         "direction": "v",  # 'h' or 'v' for single direction models/plots
         "prediction_interval": 0.95,  # Prediction interval coverage (e.g., 0.95 for 95%)
         "prediction_samples": 1000,  # Number of samples for prediction
+        # Uncertainty bands: "function" (epistemic only), "observation" (includes noise), or "both"
+        "uncertainty_bands": "both",
         "run_residual_analysis": True,  # Validation: Run residual analysis
         "plot_trace": True,  # Validation: Plot MCMC trace for diagnostics
     },
@@ -63,7 +65,7 @@ config = {
             # Length scales (reparameterized logic)
             # val = exp(mean + scale * standard_normal)
             "length_scales": {
-                "lambda_P": {"mean": 3, "scale": 0.5},
+                "lambda_P": {"mean": 2.5, "scale": 0.5},
                 "lambda_alpha": {"mean": 0.34, "scale": 0.5},
                 "lambda_E1": {"mean": 11.0, "scale": 0.5},
                 "lambda_E2": {"mean": 8.3, "scale": 0.5},
@@ -72,7 +74,7 @@ config = {
                 "lambda_G12": {"mean": 7.7, "scale": 0.5},
             },
             # Measurement noise
-            "sigma_measure": {"target_dist": dist.Exponential(100.0)},
+            "sigma_measure": {"target_dist": dist.Exponential(1000.0)},
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)

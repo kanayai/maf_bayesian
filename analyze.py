@@ -581,7 +581,7 @@ Examples:
         num_samples = test_theta.shape[0]
         rng_keys = random.split(random.PRNGKey(42), num_samples)
 
-        means, stds_em, y_samples = vmap_predict(
+        means, stds_em, f_samples = vmap_predict(
             rng_keys,
             mu_em,
             sig_em,
@@ -599,19 +599,27 @@ Examples:
         # Compute total_std for reporting
         loads = current_test_xy[:, 0]
         noise_model = config["data"].get("noise_model", "proportional")
+        n_samples, n_points = f_samples.shape
 
         if noise_model == "additive":
             noise_var = (
                 sig_meas[:, None] ** 2 * loads[None, :] + sig_meas_base[:, None] ** 2
             )
         elif noise_model == "constant":
-            noise_var = sig_const[:, None] ** 2 * jnp.ones_like(loads[None, :])
+            noise_var = sig_const[:, None] ** 2 * jnp.ones((n_samples, n_points))
         else:
             noise_var = sig_meas[:, None] ** 2 * loads[None, :]
 
         total_std = jnp.sqrt(stds_em**2 + noise_var)
 
-        return means, total_std, y_samples
+        # Compute observation samples (y_samples = f_samples + noise)
+        # Uses learned posterior noise values for observation uncertainty bands
+        rng_noise = random.PRNGKey(123)  # Separate key for noise sampling
+        noise_std = jnp.sqrt(noise_var)
+        noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
+        y_samples = f_samples + noise_samples
+
+        return means, total_std, f_samples, y_samples
 
     predictions_collection = {}
 
@@ -656,12 +664,17 @@ Examples:
             # 1. Prior Prediction
             print("    Running prior prediction...")
             # We already have prior samples. Just propagate.
-            _, _, prior_y_samples = predict_batch(
+            _, _, prior_f_samples, prior_y_samples = predict_batch(
                 prior_params_tuple, direction, test_xy, use_prior=True
             )
 
-            mean_prior = jnp.mean(prior_y_samples, axis=0)  # (100,)
-            pct_prior = jnp.percentile(
+            mean_prior = jnp.mean(prior_f_samples, axis=0)  # (100,)
+            # Function uncertainty (epistemic only)
+            pct_prior_f = jnp.percentile(
+                prior_f_samples, q=jnp.array([q_lower, q_upper]), axis=0
+            )
+            # Observation uncertainty (includes noise)
+            pct_prior_y = jnp.percentile(
                 prior_y_samples, q=jnp.array([q_lower, q_upper]), axis=0
             )
             
@@ -671,12 +684,17 @@ Examples:
 
             # 2. Posterior Prediction
             print("    Running posterior prediction...")
-            _, _, post_y_samples = predict_batch(
+            _, _, post_f_samples, post_y_samples = predict_batch(
                 post_params_tuple, direction, test_xy, use_prior=False
             )
 
-            mean_post = jnp.mean(post_y_samples, axis=0)
-            pct_post = jnp.percentile(
+            mean_post = jnp.mean(post_f_samples, axis=0)
+            # Function uncertainty (epistemic only)
+            pct_post_f = jnp.percentile(
+                post_f_samples, q=jnp.array([q_lower, q_upper]), axis=0
+            )
+            # Observation uncertainty (includes noise)
+            pct_post_y = jnp.percentile(
                 post_y_samples, q=jnp.array([q_lower, q_upper]), axis=0
             )
 
@@ -686,17 +704,21 @@ Examples:
             # plot_spaghetti_verification(...)
 
 
-            # Store for Grid Plot
+            # Store for Grid Plot - now with both uncertainty types
             predictions_collection[angle_value][direction] = {
                 'samples_load': samples_load,
                 'mean_post': mean_post,
-                'pct_post': pct_post,
+                'pct_post_f': pct_post_f,  # Function uncertainty
+                'pct_post_y': pct_post_y,  # Observation uncertainty
                 'mean_prior': mean_prior,
-                'pct_prior': pct_prior,
+                'pct_prior_f': pct_prior_f,  # Function uncertainty
+                'pct_prior_y': pct_prior_y,  # Observation uncertainty
+                'prior_f_samples': prior_f_samples,
                 'prior_y_samples': prior_y_samples,
                 'input_xy_exp': input_xy_exp_plt,
                 'data_exp': data_exp_plt,
                 'training_info': training_info,
+                'post_f_samples': post_f_samples,
                 'post_y_samples': post_y_samples
             }
 

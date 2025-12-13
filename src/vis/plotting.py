@@ -486,28 +486,36 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
             training_info = p_data.get('training_info')
 
             # Determine what to plot based on title_prefix or available keys
+            # Now we have both function (_f) and observation (_y) percentiles
             if "Prior" in title_prefix:
-                samples = p_data.get('prior_y_samples')
-                percentiles = p_data.get('pct_prior')
-                color = 'green' # Prior color scheme? Usually we used green bands. 
-                # Wait, prior spaghetti was blue in test? 
-                # Let's stick to Blue spaghetti, Green bands for consistency with test script.
+                samples = p_data.get('prior_f_samples')  # Use function samples for spaghetti
+                pct_f = p_data.get('pct_prior_f')  # Function uncertainty
+                pct_y = p_data.get('pct_prior_y')  # Observation uncertainty
             else:
-                samples = p_data.get('post_y_samples')
-                percentiles = p_data.get('pct_post')
-                color = 'blue'
+                samples = p_data.get('post_f_samples')  # Use function samples for spaghetti
+                pct_f = p_data.get('pct_post_f')  # Function uncertainty
+                pct_y = p_data.get('pct_post_y')  # Observation uncertainty
 
-            # Plot Samples (Spaghetti)
+            # Plot Samples (Spaghetti) - function samples
             if samples is not None:
                 num_samples = samples.shape[0]
                 # Plot ~100 lines max for visibility
                 for s in range(min(num_samples, 100)):
                     ax.plot(samples[s], test_loads, color='blue', alpha=0.1, lw=0.5)
 
-            # Plot Percentiles
-            if percentiles is not None:
-                ax.plot(percentiles[0], test_loads, color='green', linestyle='--', linewidth=1.5, label='95% Interval')
-                ax.plot(percentiles[1], test_loads, color='green', linestyle='--', linewidth=1.5)
+            # Plot Observation Uncertainty Band (outer, wider) - includes noise
+            if pct_y is not None:
+                ax.fill_betweenx(test_loads, pct_y[0], pct_y[1], 
+                                 color='lightblue', alpha=0.3, label='95% Observation')
+                ax.plot(pct_y[0], test_loads, color='blue', linestyle=':', linewidth=1.0)
+                ax.plot(pct_y[1], test_loads, color='blue', linestyle=':', linewidth=1.0)
+
+            # Plot Function Uncertainty Band (inner, narrower) - epistemic only
+            if pct_f is not None:
+                ax.fill_betweenx(test_loads, pct_f[0], pct_f[1],
+                                 color='lightgreen', alpha=0.5, label='95% Function')
+                ax.plot(pct_f[0], test_loads, color='green', linestyle='--', linewidth=1.5)
+                ax.plot(pct_f[1], test_loads, color='green', linestyle='--', linewidth=1.5)
             
             # Overlay Data (Averaged)
             if input_xy_exp is not None and data_exp is not None:

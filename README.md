@@ -8,6 +8,7 @@ This project uses **Bayesian Inference** to calibrate material properties of com
 ## Key Features
 - **Bayesian Inference**: Uses MCMC (Markov Chain Monte Carlo) via `numpyro` and `jax` to estimate posterior distributions of material parameters ($E_1, E_2, \nu_{12}, G_{12}$).
 - **Gaussian Process Emulator**: Bridges the gap between FE models and experimental observations.
+- **Dual Uncertainty Bands**: Prediction plots show both **function uncertainty** (where is the true response?) and **observation uncertainty** (what would a new measurement be?).
 - **Flexible Noise Modeling**: Supports Proportional, Additive, and Constant noise models to capture realistic measurement uncertainty.
 - **ArviZ Integration**: Uses NetCDF for standardized, robust storage and analysis of Bayesian results.
 - **Bias Correction**: Supports different bias correction frameworks (No bias, Bias $E_1$, Bias $\alpha$).
@@ -59,7 +60,8 @@ Modify `configs/default_config.py` to set:
 - **Data**: Select angles and data paths.
 - **Analysis Settings**:
     - `prediction_interval`: Confidence level for prediction plots (default 0.95).
-    - `prediction_samples`: Number of samples to use for prediction (default 2000).
+    - `prediction_samples`: Number of samples to use for prediction (default 1000).
+    - `uncertainty_bands`: Type of bands to display — `"function"`, `"observation"`, or `"both"` (default).
 
 ### 2. Running Inference
 
@@ -148,6 +150,7 @@ For detailed technical documentation, see `docs/`:
 - **`posterior_method_explanation.qmd`**: Deep dive into `posterior_predict` function
 - **`model_analysis.qmd`**: Model structure and analysis details
 - **`residual_analysis.qmd`**: Residual diagnostics
+- **`gp_hyperparameter_analysis.qmd`**: Length scales, uncertainty bands, and noise identifiability
 
 ## Installation
 This project uses `uv` for dependency management.
