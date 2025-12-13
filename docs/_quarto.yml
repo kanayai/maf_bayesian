@@ -20,6 +20,7 @@ book:
         - posterior_method_explanation.qmd
         - prediction_methodology.qmd
         - prior_prediction_issue.qmd
+        - gp_hyperparameter_analysis.qmd
     - part: "Validation"
       chapters:
         - residual_analysis.qmd
