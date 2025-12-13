@@ -63,7 +63,7 @@ config = {
             # Length scales (reparameterized logic)
             # val = exp(mean + scale * standard_normal)
             "length_scales": {
-                "lambda_P": {"mean": 1.5, "scale": 0.5},
+                "lambda_P": {"mean": 3, "scale": 0.5},
                 "lambda_alpha": {"mean": 0.34, "scale": 0.5},
                 "lambda_E1": {"mean": 11.0, "scale": 0.5},
                 "lambda_E2": {"mean": 8.3, "scale": 0.5},

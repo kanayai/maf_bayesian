@@ -1,0 +1,376 @@
+---
+title: "GP Hyperparameter Analysis: Length Scales and Uncertainty Bands"
+author: "Technical Reference"
+date: "2025-12-13"
+format:
+  html:
+    toc: true
+    code-fold: false
+    number-sections: true
+---
+
+# Overview
+
+This document provides mathematical analysis of two key phenomena observed in the GP prediction plots:
+
+1. **Wiggly prior realizations**: Why sampled curves from the prior can appear highly variable
+2. **Narrow posterior prediction bands**: Why uncertainty intervals may appear smaller than expected
+
+Understanding these behaviours requires examining the GP covariance structure and how uncertainty propagates through predictions.
+
+# Length Scales and GP Smoothness
+
+## The Squared Exponential Kernel
+
+The covariance function implemented in `src/core/covariance.py` is a squared exponential (SE) kernel with automatic relevance determination (ARD):
+
+$$
+k(\mathbf{x}, \mathbf{x}') = \sigma_{\text{emulator}}^2 \exp\left(-\frac{(P - P')^2}{\lambda_P^2} - \frac{(\alpha - \alpha')^2}{\lambda_\alpha^2} - \sum_{i=1}^{5} \frac{(\theta_i - \theta'_i)^2}{\lambda_{\theta_i}^2}\right)
+$$
+
+where:
+
+- $P, P'$ = Load values (kN)
+- $\alpha, \alpha'$ = Angle values (radians)
+- $\theta = (E_1, E_2, \nu_{12}, \nu_{23}, G_{12})$ = Material parameters
+- $\lambda_P, \lambda_\alpha, \lambda_{\theta_i}$ = Length scales for each dimension
+- $\sigma_{\text{emulator}}$ = Marginal standard deviation
+
+## Correlation Decay with Distance
+
+The length scale $\lambda_P$ defines the **characteristic distance** over which the function varies significantly. The correlation between function values at two loads $P_1$ and $P_2$ (holding other inputs fixed) is:
+
+$$
+\text{Corr}[f(P_1), f(P_2)] = \exp\left(-\frac{(P_1 - P_2)^2}{\lambda_P^2}\right)
+$$
+
+Key reference points:
+
+| Distance $\Delta P$ | Correlation |
+|---------------------|-------------|
+| $0.5 \lambda_P$ | $e^{-0.25} \approx 0.78$ |
+| $\lambda_P$ | $e^{-1} \approx 0.37$ |
+| $2\lambda_P$ | $e^{-4} \approx 0.02$ |
+| $3\lambda_P$ | $e^{-9} \approx 0.0001$ |
+
+**Interpretation**: Points separated by more than $2\lambda_P$ are effectively independent.
+
+## The Critical Ratio: Length Scale vs. Prediction Range
+
+The "wiggliness" of GP samples depends on the ratio between the prediction range and the length scale.
+
+**Number of effective independent regions**:
+$$
+N_{\text{regions}} \approx \frac{\text{Range}}{\lambda_P}
+$$
+
+With prediction range 0–10 kN:
+
+| Prior Setting | Median $\lambda_P$ | $N_{\text{regions}}$ | Visual Character |
+|---------------|--------------------|-----------------------|------------------|
+| `mean=1.5` | $e^{1.5} \approx 4.5$ kN | ~2.2 | Moderate wiggle |
+| `mean=2.5` | $e^{2.5} \approx 12.2$ kN | ~0.8 | Smooth |
+| `mean=3.0` | $e^{3.0} \approx 20.1$ kN | ~0.5 | Very smooth |
+
+### Prior Variability
+
+The length scale prior is log-normal: $\lambda_P \sim \text{LogNormal}(\mu, \sigma)$ where we parameterise as:
+$$
+\lambda_P = \exp(\mu + \sigma \cdot Z), \quad Z \sim \mathcal{N}(0,1)
+$$
+
+With `scale=0.5`, the 5th and 95th percentiles are:
+$$
+\lambda_{P,5\%} = \exp(\mu - 1.645 \times 0.5), \quad \lambda_{P,95\%} = \exp(\mu + 1.645 \times 0.5)
+$$
+
+| Prior `mean` | 5th %ile (kN) | Median (kN) | 95th %ile (kN) |
+|--------------|---------------|-------------|----------------|
+| 1.5 | 2.0 | 4.5 | 10.0 |
+| 2.5 | 5.4 | 12.2 | 27.2 |
+| 3.0 | 9.0 | 20.1 | 44.9 |
+
+With `mean=1.5`, some prior samples give $\lambda_P \approx 2$ kN, yielding ~5 independent regions over the 10 kN range—hence **wiggly curves**.
+
+## Spectral Interpretation
+
+The SE kernel has a Gaussian spectral density:
+$$
+S(\omega) = \sigma^2 \sqrt{2\pi} \lambda_P \exp\left(-\frac{\omega^2 \lambda_P^2}{2}\right)
+$$
+
+This means GP samples have:
+
+- **Most power at low frequencies** (smooth, slowly-varying components)
+- **Negligible power at frequencies** $\omega > 2/\lambda_P$
+
+The **cutoff frequency** and corresponding minimum wavelength:
+$$
+\omega_{\text{cutoff}} \approx \frac{2}{\lambda_P}, \quad \text{Min wavelength} = \frac{2\pi}{\omega_{\text{cutoff}}} = \pi \lambda_P
+$$
+
+| $\lambda_P$ (kN) | Min wavelength (kN) | Oscillations in 10 kN |
+|------------------|---------------------|------------------------|
+| 2.0 | 6.3 | 1.6 |
+| 4.5 | 14.1 | 0.7 |
+| 12.2 | 38.3 | 0.26 |
+| 20.1 | 63.1 | 0.16 |
+
+With $\lambda_P = 2$ kN, the GP can generate ~1.6 oscillations; with $\lambda_P = 20$ kN, curves are essentially monotonic.
+
+## Summary: Controlling Prior Wiggliness
+
+To reduce wiggliness in prior prediction curves:
+
+1. **Increase `lambda_P` prior mean**: Higher values enforce smoother functions
+2. **Consider physical constraints**: Extension vs. Load should be approximately linear, suggesting $\lambda_P$ should be comparable to or larger than the data range
+3. **Current recommendation**: `mean=3.0` gives median $\lambda_P \approx 20$ kN, ensuring smooth priors
+
+# Posterior Prediction Uncertainty Bands
+
+## Sources of Prediction Uncertainty
+
+The full predictive distribution for a new observation $y_*$ includes three sources of uncertainty:
+
+$$
+y_* = f_* + \varepsilon
+$$
+
+where:
+
+1. **Parameter uncertainty**: Uncertainty in $\theta = (E_1, E_2, \nu_{12}, \nu_{23}, G_{12})$
+2. **GP epistemic uncertainty**: $\text{Var}[f_* | \text{Data}]$ — uncertainty in the latent function
+3. **Measurement noise**: $\varepsilon \sim \mathcal{N}(0, \sigma_{\text{noise}}^2)$ — aleatory uncertainty
+
+## Current Implementation
+
+The prediction code in `analyze.py` uses the following approach:
+
+### Sampling from the GP Posterior
+
+```python
+# In posterior_predict (models.py):
+L = jnp.linalg.cholesky(cov_post_emulator + jitter)
+white_noise = random.normal(rng_key, (n_test,))
+sample_post = L @ white_noise + mean_post_emulator
+
+return mean_post, stdev_post, sample_post
+```
+
+This samples from the **latent function** $f_*$, not the **observation** $y_* = f_* + \varepsilon$.
+
+### Computing Percentile Bands
+
+```python
+# In analyze.py:
+pct_post = jnp.percentile(post_y_samples, q=[2.5, 97.5], axis=0)
+```
+
+The percentile bands are computed from the GP samples, which include:
+
+- ✅ Parameter uncertainty (via sampling from posterior)
+- ✅ GP epistemic uncertainty (via Cholesky sampling)
+- ❌ Measurement noise (not added to samples)
+
+### Why Bands May Appear Narrow
+
+1. **Experimental data is informative**: Near observed points, GP posterior variance collapses
+2. **Missing noise component**: The samples represent $f_*$, not $y_* = f_* + \varepsilon$
+3. **Sample-based percentiles**: Only capture uncertainty in function values, not observations
+
+## Mathematical Analysis
+
+### Full Predictive Variance
+
+The complete predictive variance for an observation at test point $\mathbf{x}_*$ is:
+
+$$
+\text{Var}[y_*] = \underbrace{\text{Var}[f_*]}_{\text{GP epistemic}} + \underbrace{\sigma_{\text{noise}}^2}_{\text{Measurement}}
+$$
+
+For the proportional noise model:
+$$
+\text{Var}[y_*] = \sigma_{\text{emulator}}^2 \cdot k_* + \sigma_{\text{measure}}^2 \cdot P
+$$
+
+where $k_* = 1 - \mathbf{k}_*^T K^{-1} \mathbf{k}_*$ is the GP posterior variance factor.
+
+### Current vs. Complete Uncertainty
+
+The code computes `total_std`:
+
+```python
+noise_var = sig_meas[:, None] ** 2 * loads[None, :]  # Proportional noise
+total_std = jnp.sqrt(stds_em**2 + noise_var)
+```
+
+However, the **percentile bands** are computed from samples that don't include this noise.
+
+### Proper Prediction Intervals
+
+To obtain proper prediction intervals for $y_*$, one should:
+
+1. Sample $f_*$ from GP posterior (current implementation)
+2. Sample $\varepsilon_*$ from noise distribution
+3. Compute $y_* = f_* + \varepsilon_*$
+4. Compute percentiles from $y_*$ samples
+
+```python
+# Proposed correction:
+noise_samples = sigma_measure[:, None] * jnp.sqrt(loads[None, :]) * random.normal(key, shape)
+y_samples = f_samples + noise_samples
+pct_post = jnp.percentile(y_samples, q=[2.5, 97.5], axis=0)
+```
+
+## Summary: Interpreting Uncertainty Bands
+
+- **Current bands**: Show uncertainty in the **mean function** $E[f_*]$
+- **Proper prediction bands**: Should include **measurement noise** for observation uncertainty
+- **Data informativeness**: Experimental data significantly constrains the posterior, collapsing variance near observations
+
+# Practical Recommendations
+
+## Prior Configuration
+
+| Parameter | Current Value | Effect |
+|-----------|---------------|--------|
+| `lambda_P` mean | 3.0 | Smooth prior curves (median ~20 kN) |
+| `sigma_emulator` rate | 20.0 | Expected value ~0.05 mm |
+
+## Uncertainty Interpretation
+
+When interpreting prediction plots:
+
+- **Prior bands**: Wide due to parameter and epistemic uncertainty, smooth with updated $\lambda_P$
+- **Posterior bands**: Narrow due to data conditioning; consider adding noise for observation prediction
+
+## Future Considerations
+
+To obtain proper observation prediction intervals:
+
+1. Add measurement noise samples to GP posterior samples
+2. Compute percentiles from the combined $y_* = f_* + \varepsilon_*$
+3. Document whether bands represent "function uncertainty" or "observation uncertainty"
+
+# Measurement Noise Identifiability
+
+## The Observed Phenomenon
+
+In practice, the posterior for `sigma_measure` often concentrates near zero:
+
+| Parameter | Typical Posterior Mean |
+|-----------|------------------------|
+| `sigma_measure` | ~4.5e-05 (essentially zero) |
+| `sigma_emulator` | ~0.014 |
+
+This is a **variance decomposition / identifiability problem**, not a bug.
+
+## The Additive Covariance Structure
+
+The model constructs total covariance at experimental points as:
+
+$$
+\text{Cov}[y_i, y_j] = \sigma_{\text{emulator}}^2 \cdot k(\mathbf{x}_i, \mathbf{x}_j) + \sigma_{\text{measure}}^2 \cdot P_i \cdot \delta_{ij}
+$$
+
+where $\delta_{ij}$ is the Kronecker delta (noise only on diagonal).
+
+The marginal variance at point $i$ is:
+$$
+\text{Var}[y_i] = \sigma_{\text{emulator}}^2 + \sigma_{\text{measure}}^2 \cdot P_i
+$$
+
+## Why The Model Prefers σ_emulator
+
+### Correlation Structure
+
+- **GP variance**: Explains residuals with **spatial correlation**—if one point deviates, nearby points also deviate
+- **Measurement noise**: Explains residuals as **independent** at each point
+
+With smooth underlying physics, residual patterns show correlation. The GP absorbs this into $\sigma_{\text{emulator}}$.
+
+### The Length Scale Connection
+
+With long length scales (e.g., $\lambda_P \approx 16$ kN > data range):
+
+- GP function is nearly linear over one dataset
+- GP can "flex" to follow trends
+- Residuals appear correlated → absorbed by $\sigma_{\text{emulator}}$
+
+### Mathematical Identifiability
+
+For the data to distinguish the two variance sources:
+
+- Some points need **large P** (noise dominates): $\sigma_{\text{measure}}^2 \cdot P \gg \sigma_{\text{emulator}}^2$
+- Some points need **small P** (GP dominates): $\sigma_{\text{emulator}}^2 \gg \sigma_{\text{measure}}^2 \cdot P$
+
+With `max_load = 10 kN` and low noise, the proportional term $\sigma^2 \cdot P$ stays small.
+
+## Connection to Other Issues
+
+| Issue | Connection |
+|-------|------------|
+| Wiggly priors | Short $\lambda_P$ allowed GP to absorb measurement noise |
+| Narrow posterior bands | If $\sigma_{\text{measure}} \approx 0$, noise adds nothing to bands |
+| $\sigma_{\text{measure}} \approx 0$ | GP flexibility explains all residual variance |
+
+## Implications
+
+1. **Posterior bands are underestimated**: Missing the true observation noise
+2. **Measurement precision not learned**: Cannot infer sensor accuracy from data
+3. **Model is self-consistent**: GP explains data well, just not via the intended mechanism
+
+# Future Work
+
+## Planned Improvements
+
+The following enhancements have been identified but not yet implemented:
+
+### 1. Informative Prior for σ_measure
+
+Set a minimum value based on known sensor physics/accuracy:
+
+```python
+# Example: Gaussian prior centered on known measurement precision
+"sigma_measure": {
+    "target_dist": dist.TruncatedNormal(loc=0.001, scale=0.0005, low=0.0)
+}
+```
+
+**Rationale**: If sensor accuracy is known (e.g., ±0.001 mm), encode this as prior information.
+
+### 2. Additive Noise Model Testing
+
+Test the additive noise configuration:
+
+```python
+"noise_model": "additive"  # σ² = σ_measure² × P + σ_base²
+```
+
+**Benefit**: The constant σ_base term provides more identifiable separation from the GP variance.
+
+### 3. Tighter GP Priors
+
+Further constrain the GP to force residual variance into measurement noise:
+
+- Increase `sigma_emulator` prior rate (e.g., 50 or 100) to push values smaller
+- This would force unexplained variance into σ_measure
+
+### 4. Proper Prediction Intervals
+
+Modify `analyze.py` to include measurement noise in posterior prediction samples:
+
+```python
+# After GP sampling:
+noise_samples = sigma_measure * jnp.sqrt(loads) * random.normal(key, shape)
+y_samples = f_samples + noise_samples
+```
+
+## Priority
+
+| Item | Priority | Effort |
+|------|----------|--------|
+| Informative σ_measure prior | High | Low |
+| Additive noise testing | Medium | Low |
+| Proper prediction intervals | High | Medium |
+| Tighter GP priors | Low | Low |
