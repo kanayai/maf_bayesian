@@ -142,91 +142,119 @@ where:
 2. **GP epistemic uncertainty**: $\text{Var}[f_* | \text{Data}]$ — uncertainty in the latent function
 3. **Measurement noise**: $\varepsilon \sim \mathcal{N}(0, \sigma_{\text{noise}}^2)$ — aleatory uncertainty
 
-## Current Implementation
+## Implementation: Dual Uncertainty Bands
 
-The prediction code in `analyze.py` uses the following approach:
+The prediction code in `analyze.py` computes **both** types of uncertainty bands:
 
-### Sampling from the GP Posterior
+### Step 1: Sampling from the GP Posterior (Function Samples)
 
 ```python
 # In posterior_predict (models.py):
 L = jnp.linalg.cholesky(cov_post_emulator + jitter)
 white_noise = random.normal(rng_key, (n_test,))
-sample_post = L @ white_noise + mean_post_emulator
+f_sample = L @ white_noise + mean_post_emulator  # Function sample
 
-return mean_post, stdev_post, sample_post
+return mean_post, stdev_post, f_sample
 ```
 
-This samples from the **latent function** $f_*$, not the **observation** $y_* = f_* + \varepsilon$.
+This samples from the **latent function** $f_*$, capturing:
 
-### Computing Percentile Bands
+- ✅ Parameter uncertainty (via sampling $\theta$ from posterior)
+- ✅ GP epistemic uncertainty (via Cholesky decomposition)
+- ❌ Measurement noise (not yet included)
+
+### Step 2: Adding Measurement Noise (Observation Samples)
 
 ```python
-# In analyze.py:
-pct_post = jnp.percentile(post_y_samples, q=[2.5, 97.5], axis=0)
+# In predict_batch (analyze.py):
+# Compute noise variance based on noise model
+if noise_model == "additive":
+    noise_var = sig_meas[:, None]**2 * loads[None, :] + sig_meas_base[:, None]**2
+elif noise_model == "constant":
+    noise_var = sig_const[:, None]**2 * jnp.ones((n_samples, n_points))
+else:  # proportional
+    noise_var = sig_meas[:, None]**2 * loads[None, :]
+
+# Sample measurement noise
+noise_std = jnp.sqrt(noise_var)
+noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
+
+# Observation samples = function + noise
+y_samples = f_samples + noise_samples
 ```
 
-The percentile bands are computed from the GP samples, which include:
+### Step 3: Computing Dual Percentile Bands
 
-- ✅ Parameter uncertainty (via sampling from posterior)
-- ✅ GP epistemic uncertainty (via Cholesky sampling)
-- ❌ Measurement noise (not added to samples)
+```python
+# Function uncertainty (epistemic only)
+pct_f = jnp.percentile(f_samples, q=[2.5, 97.5], axis=0)
 
-### Why Bands May Appear Narrow
-
-1. **Experimental data is informative**: Near observed points, GP posterior variance collapses
-2. **Missing noise component**: The samples represent $f_*$, not $y_* = f_* + \varepsilon$
-3. **Sample-based percentiles**: Only capture uncertainty in function values, not observations
+# Observation uncertainty (includes noise)
+pct_y = jnp.percentile(y_samples, q=[2.5, 97.5], axis=0)
+```
 
 ## Mathematical Analysis
 
-### Full Predictive Variance
+### Function Uncertainty
 
-The complete predictive variance for an observation at test point $\mathbf{x}_*$ is:
+The function uncertainty band captures variance in the latent function $f_*$:
 
 $$
-\text{Var}[y_*] = \underbrace{\text{Var}[f_*]}_{\text{GP epistemic}} + \underbrace{\sigma_{\text{noise}}^2}_{\text{Measurement}}
+\text{Var}[f_*] = \underbrace{\text{Var}_{\theta}[\mathbb{E}[f_* | \theta]]}_{\text{parameter uncertainty}} + \underbrace{\mathbb{E}_{\theta}[\text{Var}[f_* | \theta]]}_{\text{GP epistemic}}
 $$
 
-For the proportional noise model:
+The first term captures uncertainty due to not knowing the true material parameters $\theta$. The second term captures GP interpolation uncertainty given fixed parameters.
+
+### Observation Uncertainty
+
+The observation uncertainty band captures variance in a new measurement $y_*$:
+
 $$
-\text{Var}[y_*] = \sigma_{\text{emulator}}^2 \cdot k_* + \sigma_{\text{measure}}^2 \cdot P
+\text{Var}[y_*] = \text{Var}[f_*] + \underbrace{\sigma^2_{\text{noise}}(P)}_{\text{measurement noise}}
 $$
 
-where $k_* = 1 - \mathbf{k}_*^T K^{-1} \mathbf{k}_*$ is the GP posterior variance factor.
+where the noise variance depends on the selected noise model:
 
-### Current vs. Complete Uncertainty
+| Noise Model | Formula | Configuration |
+|-------------|---------|---------------|
+| Proportional | $\sigma^2 = \sigma_{\text{measure}}^2 \cdot P$ | `"noise_model": "proportional"` |
+| Additive | $\sigma^2 = \sigma_{\text{measure}}^2 \cdot P + \sigma_{\text{base}}^2$ | `"noise_model": "additive"` |
+| Constant | $\sigma^2 = \sigma_{\text{constant}}^2$ | `"noise_model": "constant"` |
 
-The code computes `total_std`:
+### Relationship Between Bands
+
+Since $y_* = f_* + \varepsilon$ where $\varepsilon$ is independent noise:
+
+$$
+\text{Width}[\text{Observation Band}] \geq \text{Width}[\text{Function Band}]
+$$
+
+The observation band is always at least as wide as the function band, with the difference reflecting the measurement noise contribution.
+
+## Interpreting the Visualization
+
+The prediction plots display:
+
+| Band | Color | Mathematical Interpretation |
+|------|-------|----------------------------|
+| **Inner (Function)** | Green fill, dashed borders | $\mathbb{P}(f_{2.5\%} \leq f_* \leq f_{97.5\%}) = 0.95$ |
+| **Outer (Observation)** | Blue fill, dotted borders | $\mathbb{P}(y_{2.5\%} \leq y_* \leq y_{97.5\%}) = 0.95$ |
+
+**Use cases:**
+
+- **Function band**: "Where is the true mechanical response?"  
+  Use for comparing with deterministic FE predictions or understanding material behaviour.
+
+- **Observation band**: "What range of measurements should I expect?"  
+  Use for experimental planning and validating model against held-out data.
+
+## Configuration
+
+Control band display via `configs/default_config.py`:
 
 ```python
-noise_var = sig_meas[:, None] ** 2 * loads[None, :]  # Proportional noise
-total_std = jnp.sqrt(stds_em**2 + noise_var)
+"uncertainty_bands": "both",  # Options: "function", "observation", or "both"
 ```
-
-However, the **percentile bands** are computed from samples that don't include this noise.
-
-### Proper Prediction Intervals
-
-To obtain proper prediction intervals for $y_*$, one should:
-
-1. Sample $f_*$ from GP posterior (current implementation)
-2. Sample $\varepsilon_*$ from noise distribution
-3. Compute $y_* = f_* + \varepsilon_*$
-4. Compute percentiles from $y_*$ samples
-
-```python
-# Proposed correction:
-noise_samples = sigma_measure[:, None] * jnp.sqrt(loads[None, :]) * random.normal(key, shape)
-y_samples = f_samples + noise_samples
-pct_post = jnp.percentile(y_samples, q=[2.5, 97.5], axis=0)
-```
-
-## Summary: Interpreting Uncertainty Bands
-
-- **Current bands**: Show uncertainty in the **mean function** $E[f_*]$
-- **Proper prediction bands**: Should include **measurement noise** for observation uncertainty
-- **Data informativeness**: Experimental data significantly constrains the posterior, collapsing variance near observations
 
 # Practical Recommendations
 
@@ -234,23 +262,54 @@ pct_post = jnp.percentile(y_samples, q=[2.5, 97.5], axis=0)
 
 | Parameter | Current Value | Effect |
 |-----------|---------------|--------|
-| `lambda_P` mean | 3.0 | Smooth prior curves (median ~20 kN) |
-| `sigma_emulator` rate | 20.0 | Expected value ~0.05 mm |
+| `lambda_P` mean | 2.5 | Smooth prior curves (median ~12 kN) |
+| `sigma_emulator` rate | 100.0 | Expected value ~0.01 mm |
+| `sigma_measure` rate | 1000.0 | Expected value ~0.001 |
 
-## Uncertainty Interpretation
+## Controlling Prior Observation Band Width
 
-When interpreting prediction plots:
+The **prior observation bands** (blue outer bands in prior plots) can appear very wide. This width is determined by:
 
-- **Prior bands**: Wide due to parameter and epistemic uncertainty, smooth with updated $\lambda_P$
-- **Posterior bands**: Narrow due to data conditioning; consider adding noise for observation prediction
+### 1. Physical Parameter Priors (Dominant Effect)
 
-## Future Considerations
+The `scale` values in `configs/default_config.py` control how much predictions vary:
 
-To obtain proper observation prediction intervals:
+```python
+"reparam": {
+    "E_1": {"mean": 154900.0, "scale": 5050.0},   # ±5050 MPa (3σ ≈ ±15000)
+    "E_2": {"mean": 10285.0, "scale": 650.0},     # ±650 MPa
+    ...
+}
+```
 
-1. Add measurement noise samples to GP posterior samples
-2. Compute percentiles from the combined $y_* = f_* + \varepsilon_*$
-3. Document whether bands represent "function uncertainty" or "observation uncertainty"
+Different θ samples produce different prediction curves. The spread of these curves drives band width.
+
+### 2. Measurement Noise Prior (σ_measure)
+
+```python
+"sigma_measure": {"target_dist": dist.Exponential(1000.0)}  # mean = 0.001
+```
+
+For the **proportional noise model**: $\sigma^2 = \sigma_{\text{measure}}^2 \cdot P$
+
+- Higher rate → smaller expected σ_measure → narrower observation bands
+- Rate 100 gives mean ≈ 0.01 (wider prior bands)
+- Rate 1000 gives mean ≈ 0.001 (narrower prior bands)
+
+### 3. GP Epistemic Uncertainty
+
+Without experimental data conditioning, the GP has high uncertainty. This contributes to both function and observation band width.
+
+## Prior vs Posterior Band Behaviour
+
+| Aspect | Prior Bands | Posterior Bands |
+|--------|-------------|-----------------|
+| **Function band** | Wide (unconstrained θ, GP) | Narrow (θ and GP constrained by data) |
+| **Observation band** | Wider (adds prior σ_measure samples) | Nearly same as function (σ_measure → 0) |
+| **Gap between bands** | Visible (prior σ_measure > 0) | Minimal (learned σ_measure ≈ 0) |
+
+**Key insight**: The posterior observation bands are narrow **not** because of a bug, but because the model learns that σ_measure ≈ 0. The GP absorbs all residual variance into σ_emulator (see [Measurement Noise Identifiability](#measurement-noise-identifiability) below).
+
 
 # Measurement Noise Identifiability
 
@@ -356,21 +415,62 @@ Further constrain the GP to force residual variance into measurement noise:
 - Increase `sigma_emulator` prior rate (e.g., 50 or 100) to push values smaller
 - This would force unexplained variance into σ_measure
 
-### 4. Proper Prediction Intervals
+### 4. Proper Prediction Intervals ✅ IMPLEMENTED
 
-Modify `analyze.py` to include measurement noise in posterior prediction samples:
+**Status**: Implemented in `analyze.py` as of December 2025.
+
+The prediction plots now show **dual uncertainty bands**:
+
+- **Function uncertainty** (inner, green band): Uncertainty in the latent function $f_*$
+- **Observation uncertainty** (outer, blue band): Uncertainty in a new observation $y_* = f_* + \varepsilon$
+
+Configuration via `default_config.py`:
 
 ```python
-# After GP sampling:
-noise_samples = sigma_measure * jnp.sqrt(loads) * random.normal(key, shape)
-y_samples = f_samples + noise_samples
+"uncertainty_bands": "both"  # Options: "function", "observation", or "both"
+```
+
+Implementation details:
+
+```python
+# After GP function sampling (f_samples):
+noise_std = jnp.sqrt(noise_var)
+noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
+y_samples = f_samples + noise_samples  # Observation samples with noise
 ```
 
 ## Priority
 
-| Item | Priority | Effort |
-|------|----------|--------|
-| Informative σ_measure prior | High | Low |
-| Additive noise testing | Medium | Low |
-| Proper prediction intervals | High | Medium |
-| Tighter GP priors | Low | Low |
+| Item | Priority | Effort | Status |
+|------|----------|--------|--------|
+| Informative σ_measure prior | High | Low | Pending |
+| Additive noise testing | Medium | Low | Pending |
+| Proper prediction intervals | High | Medium | ✅ Done |
+| Tighter GP priors | Low | Low | Pending |
+| Band calibration investigation | High | Medium | 🔍 Open |
+
+# Open Investigation: Band Calibration (90° Normal)
+
+## Observed Issue
+
+**Date**: December 2025
+
+In the posterior prediction plot for **90° Normal direction**, some experimental data points fall outside both the function and observation uncertainty bands. For a well-calibrated 95% band, we expect ~5% of points outside. If significantly more points are outside, this indicates **model overconfidence**.
+
+## Diagnosis
+
+| Scenario | Expected | Implication |
+|----------|----------|-------------|
+| ~5% outside 95% band | ✓ | Model is well-calibrated |
+| Many points outside | ✗ | Model is overconfident (underestimates uncertainty) |
+
+## Root Cause
+
+Since **σ_measure → 0** in the posterior (GP absorbs variance), the observation band ≈ function band. If genuine measurement noise exists but isn't captured, bands will be too narrow.
+
+## Next Steps
+
+1. **Run residual analysis**: Set `run_residual_analysis: True` and check if standardized residuals are within ±2
+2. **Try informative σ_measure prior**: Use `dist.TruncatedNormal(loc=0.001, scale=0.0005, low=0.0)` to prevent collapse to zero
+3. **Check 90° Normal specifically**: Investigate if this direction has unusual noise or systematic bias
+4. **Compare noise models**: Test `"noise_model": "additive"` for better identifiability
