@@ -252,20 +252,27 @@ Examples:
                 return None
             
             d = cfg["target_dist"]
+            dist_name = type(d).__name__
             
             # Handle different distribution types
             if isinstance(d, npdist.Exponential):
                 rate = float(d.rate)
                 return expon.pdf(x_vals, scale=1 / rate)
-            elif isinstance(d, npdist.TruncatedNormal):
-                loc = float(d.loc)
-                scale = float(d.scale)
-                low = float(d.low) if hasattr(d, 'low') else -np.inf
-                high = float(d.high) if hasattr(d, 'high') else np.inf
-                # scipy truncnorm uses (a, b) = (low - loc) / scale, (high - loc) / scale
-                a = (low - loc) / scale if low != -np.inf else -np.inf
-                b = (high - loc) / scale if high != np.inf else np.inf
-                return truncnorm.pdf(x_vals, a, b, loc=loc, scale=scale)
+            elif dist_name == "TruncatedDistribution" or "Truncated" in dist_name:
+                # TruncatedNormal creates a TruncatedDistribution object
+                # Extract parameters from the base distribution
+                try:
+                    loc = float(d.loc)
+                    scale = float(d.scale)
+                    low = float(d.low) if hasattr(d, 'low') else -np.inf
+                    high = float(d.high) if hasattr(d, 'high') else np.inf
+                    # scipy truncnorm uses (a, b) = (low - loc) / scale, (high - loc) / scale
+                    a = (low - loc) / scale if low != -np.inf else -np.inf
+                    b = (high - loc) / scale if high != np.inf else np.inf
+                    return truncnorm.pdf(x_vals, a, b, loc=loc, scale=scale)
+                except Exception as e:
+                    print(f"Warning: Could not extract TruncatedNormal params: {e}")
+                    return None
             elif isinstance(d, npdist.Normal):
                 loc = float(d.loc)
                 scale = float(d.scale)
