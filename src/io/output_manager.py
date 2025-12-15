@@ -5,7 +5,8 @@ import numpyro.distributions as dist
 def _serialize_distribution(d):
     """
     Convert a numpyro distribution object to a human-readable string.
-    Extracts the key parameters (rate, scale, loc) from the distribution.
+    Uses full precision for reproducibility.
+    Format: dist.DistributionName(param=value, ...)
     """
     dist_name = d.__class__.__name__
     params = []
@@ -13,33 +14,45 @@ def _serialize_distribution(d):
     # Handle TruncatedDistribution (e.g., TruncatedNormal)
     if "Truncated" in dist_name:
         if hasattr(d, 'loc'):
-            params.append(f"loc={float(d.loc):.6g}")
+            params.append(f"loc={float(d.loc)}")
         if hasattr(d, 'scale'):
-            params.append(f"scale={float(d.scale):.6g}")
+            params.append(f"scale={float(d.scale)}")
         if hasattr(d, 'low'):
-            params.append(f"low={float(d.low):.6g}")
+            params.append(f"low={float(d.low)}")
         if hasattr(d, 'high'):
             high_val = float(d.high)
             if high_val < 1e10:  # Don't show if it's effectively infinity
-                params.append(f"high={high_val:.6g}")
-        return f"TruncatedNormal({', '.join(params)})"
+                params.append(f"high={high_val}")
+        return f"dist.TruncatedNormal({', '.join(params)})"
     
-    # Common parameters for various distributions
+    # Exponential
     if hasattr(d, 'rate'):
-        params.append(f"rate={float(d.rate):.6g}")
-    if hasattr(d, 'scale') and not hasattr(d, 'rate'):  # Avoid duplication for Exponential
-        params.append(f"scale={float(d.scale):.6g}")
+        return f"dist.Exponential({float(d.rate)})"
+    
+    # Normal
+    if dist_name == "Normal":
+        loc = float(d.loc) if hasattr(d, 'loc') else 0.0
+        scale = float(d.scale) if hasattr(d, 'scale') else 1.0
+        return f"dist.Normal(loc={loc}, scale={scale})"
+    
+    # LogNormal
+    if dist_name == "LogNormal":
+        loc = float(d.loc) if hasattr(d, 'loc') else 0.0
+        scale = float(d.scale) if hasattr(d, 'scale') else 1.0
+        return f"dist.LogNormal(loc={loc}, scale={scale})"
+    
+    # Fallback: try common parameters
+    if hasattr(d, 'scale'):
+        params.append(f"scale={float(d.scale)}")
     if hasattr(d, 'loc'):
-        loc_val = float(d.loc)
-        if loc_val != 0.0:  # Only show if non-zero
-            params.append(f"loc={loc_val:.6g}")
+        params.append(f"loc={float(d.loc)}")
     if hasattr(d, 'concentration'):
-        params.append(f"concentration={float(d.concentration):.6g}")
+        params.append(f"concentration={float(d.concentration)}")
     
     if params:
-        return f"{dist_name}({', '.join(params)})"
+        return f"dist.{dist_name}({', '.join(params)})"
     else:
-        return f"{dist_name}()"
+        return f"dist.{dist_name}()"
 
 
 def _config_encoder(obj):
