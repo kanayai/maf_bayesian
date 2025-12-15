@@ -62,9 +62,13 @@ def get_priors_from_config(config, num_exp):
 
     # Emulator Mean
     mean_emulator_n = numpyro.sample("mu_emulator_n", dist.Normal())
-    mean_emulator = (
-        hyper["mu_emulator"]["mean"] + hyper["mu_emulator"]["scale"] * mean_emulator_n
-    )
+    mu_cfg = hyper["mu_emulator"]
+    if "log_mean" in mu_cfg:
+        # LogNormal reparameterization: val = exp(log_mean + log_scale * n)
+        mean_emulator = jnp.exp(mu_cfg["log_mean"] + mu_cfg["log_scale"] * mean_emulator_n)
+    else:
+        # Normal reparameterization: val = mean + scale * n
+        mean_emulator = mu_cfg["mean"] + mu_cfg["scale"] * mean_emulator_n
     numpyro.deterministic("mu_emulator", mean_emulator)
 
     # Emulator Stdev
