@@ -136,8 +136,8 @@ def get_priors_from_config(config, num_exp):
 
     for name in ls_names:
         n_sample = numpyro.sample(f"{name}_n", dist.Normal())
-        # Log-normal like reparameterization: val = exp(mean + scale * n)
-        val = jnp.exp(ls_cfg[name]["mean"] + ls_cfg[name]["scale"] * n_sample)
+        # LogNormal reparameterization: val = exp(log_mean + log_scale * n)
+        val = jnp.exp(ls_cfg[name]["log_mean"] + ls_cfg[name]["log_scale"] * n_sample)
         numpyro.deterministic(name, val)
         ls_vals[name] = val
 

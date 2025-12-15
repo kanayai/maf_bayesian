@@ -57,22 +57,21 @@ config = {
         # Hyperparameters
         "hyper": {
             # Emulator mean - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
-            "mu_emulator": {"log_mean": -4.5, "log_scale": 0.15},  # log(0.01) ≈ -4.605
+            "mu_emulator": {"log_mean": -4.605, "log_scale": 0.15},  # log(0.01) ≈ -4.605
             # Emulator standard deviation - LogNormal reparameterization
-            "sigma_emulator": {"log_mean": -3.912023005428146, "log_scale": 0.01},  # ln(0.02) ≈ -3.91
-            # Length scales (reparameterized logic)
-            # val = exp(mean + scale * standard_normal)
+            "sigma_emulator": {"log_mean": -3.91, "log_scale": 0.03},  # ln(0.02) ≈ -3.91
+            # Length scales - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
             "length_scales": {
-                "lambda_P": {"mean": 3.0, "scale": 0.5},
-                "lambda_alpha": {"mean": 0.34, "scale": 0.5},
-                "lambda_E1": {"mean": 11.0, "scale": 0.5},
-                "lambda_E2": {"mean": 8.3, "scale": 0.5},
-                "lambda_v12": {"mean": -0.80, "scale": 0.5},
-                "lambda_v23": {"mean": -0.80, "scale": 0.5},
-                "lambda_G12": {"mean": 7.7, "scale": 0.5},
+                "lambda_P": {"log_mean": 3.0, "log_scale": 0.5},
+                "lambda_alpha": {"log_mean": 0.34, "log_scale": 0.5},
+                "lambda_E1": {"log_mean": 11.0, "log_scale": 0.5},
+                "lambda_E2": {"log_mean": 8.3, "log_scale": 0.5},
+                "lambda_v12": {"log_mean": -0.80, "log_scale": 0.5},
+                "lambda_v23": {"log_mean": -0.80, "log_scale": 0.5},
+                "lambda_G12": {"log_mean": 7.7, "log_scale": 0.5},
             },
             # Measurement noise - LogNormal reparameterization
-            "sigma_measure": {"log_mean": -9.210340371976184, "log_scale": 0.001},  # ln(0.0001) ≈ -9.21
+            "sigma_measure": {"log_mean": -9.21, "log_scale": 0.005},  # ln(0.0001) ≈ -9.21
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)

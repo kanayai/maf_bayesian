@@ -218,18 +218,14 @@ Examples:
             p = priors_config["theta"]["reparam"][key]
             return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
 
-        # Hyperparameters (Lambdas)
-        # In model_n_hv: lambda_P is sampled as Normal(0, 1).
-        # So if we plot lambda_P, the prior is N(0, 1).
+        # Hyperparameters (Lambdas) - LogNormal reparameterization
         if key.startswith("lambda_"):
-            # lambda ~ LogNormal(mean, scale)
-            # In scipy.stats.lognorm(s, scale):
-            # s = sigma (scale in config)
-            # scale = exp(mu) (exp(mean) in config)
+            # lambda ~ LogNormal via exp(log_mean + log_scale * N(0,1))
+            # In scipy.stats.lognorm(s, scale): s=log_scale, scale=exp(log_mean)
             if key in priors_config["hyper"]["length_scales"]:
                 p = priors_config["hyper"]["length_scales"][key]
-                s = p["scale"]
-                scale = np.exp(p["mean"])
+                s = p["log_scale"]
+                scale = np.exp(p["log_mean"])
                 return lognorm.pdf(x_vals, s=s, scale=scale)
             return None
 
