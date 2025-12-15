@@ -73,9 +73,13 @@ def get_priors_from_config(config, num_exp):
 
     # Emulator Stdev
     stdev_emulator_n = numpyro.sample("sigma_emulator_n", dist.Normal())
-    stdev_emulator = hyper["sigma_emulator"]["target_dist"].icdf(
-        cdf_normal(stdev_emulator_n)
-    )
+    sig_em_cfg = hyper["sigma_emulator"]
+    if "log_mean" in sig_em_cfg:
+        # LogNormal reparameterization: val = exp(log_mean + log_scale * n)
+        stdev_emulator = jnp.exp(sig_em_cfg["log_mean"] + sig_em_cfg["log_scale"] * stdev_emulator_n)
+    else:
+        # icdf transform for target_dist
+        stdev_emulator = sig_em_cfg["target_dist"].icdf(cdf_normal(stdev_emulator_n))
     numpyro.deterministic("sigma_emulator", stdev_emulator)
 
     # Measurement Noise - sample only parameters relevant to chosen noise model
@@ -95,9 +99,11 @@ def get_priors_from_config(config, num_exp):
     elif noise_model == "additive":
         # Additive model: sample sigma_measure and sigma_measure_base
         stdev_measure_n = numpyro.sample("sigma_measure_n", dist.Normal())
-        stdev_measure = hyper["sigma_measure"]["target_dist"].icdf(
-            cdf_normal(stdev_measure_n)
-        )
+        sig_meas_cfg = hyper["sigma_measure"]
+        if "log_mean" in sig_meas_cfg:
+            stdev_measure = jnp.exp(sig_meas_cfg["log_mean"] + sig_meas_cfg["log_scale"] * stdev_measure_n)
+        else:
+            stdev_measure = sig_meas_cfg["target_dist"].icdf(cdf_normal(stdev_measure_n))
         numpyro.deterministic("sigma_measure", stdev_measure)
 
         stdev_measure_base_n = numpyro.sample("sigma_measure_base_n", dist.Normal())
@@ -108,9 +114,11 @@ def get_priors_from_config(config, num_exp):
     else:
         # Proportional model (default): only sample sigma_measure
         stdev_measure_n = numpyro.sample("sigma_measure_n", dist.Normal())
-        stdev_measure = hyper["sigma_measure"]["target_dist"].icdf(
-            cdf_normal(stdev_measure_n)
-        )
+        sig_meas_cfg = hyper["sigma_measure"]
+        if "log_mean" in sig_meas_cfg:
+            stdev_measure = jnp.exp(sig_meas_cfg["log_mean"] + sig_meas_cfg["log_scale"] * stdev_measure_n)
+        else:
+            stdev_measure = sig_meas_cfg["target_dist"].icdf(cdf_normal(stdev_measure_n))
         numpyro.deterministic("sigma_measure", stdev_measure)
 
     # Length Scales
