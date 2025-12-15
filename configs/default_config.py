@@ -57,9 +57,9 @@ config = {
         # Hyperparameters
         "hyper": {
             # Emulator mean - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
-            "mu_emulator": {"log_mean": -4.605, "log_scale": 0.15},  # log(0.01) ≈ -4.605
+            "mu_emulator": {"log_mean": -4.605, "log_scale": 0.2},  # log(0.01) ≈ -4.605
             # Emulator standard deviation - LogNormal reparameterization
-            "sigma_emulator": {"log_mean": -3.91, "log_scale": 0.03},  # ln(0.02) ≈ -3.91
+            "sigma_emulator": {"log_mean": -3.91, "log_scale": 0.5},  # ln(0.02) ≈ -3.91
             # Length scales - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
             "length_scales": {
                 "lambda_P": {"log_mean": 3.0, "log_scale": 0.5},
@@ -71,7 +71,7 @@ config = {
                 "lambda_G12": {"log_mean": 7.7, "log_scale": 0.5},
             },
             # Measurement noise - LogNormal reparameterization
-            "sigma_measure": {"log_mean": -9.21, "log_scale": 0.005},  # ln(0.0001) ≈ -9.21
+            "sigma_measure": {"log_mean": -9.21, "log_scale": 0.5},  # ln(0.0001) ≈ -9.21
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)
