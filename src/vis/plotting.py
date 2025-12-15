@@ -415,8 +415,8 @@ def plot_spaghetti_verification(
         
     # Plot Percentiles
     if percentiles is not None:
-        ax.plot(percentiles[0], test_loads, color='green', linestyle='--', linewidth=2, label='2.5% / 97.5%')
-        ax.plot(percentiles[1], test_loads, color='green', linestyle='--', linewidth=2)
+        ax.plot(percentiles[0], test_loads, color='green', linestyle='--', linewidth=1, label='2.5% / 97.5%')
+        ax.plot(percentiles[1], test_loads, color='green', linestyle='--', linewidth=1)
         
     # Overlay Data
     if input_xy_exp is not None and data_exp is not None:
@@ -507,15 +507,15 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
             if pct_y is not None:
                 ax.fill_betweenx(test_loads, pct_y[0], pct_y[1], 
                                  color='lightblue', alpha=0.3, label='95% Observation')
-                ax.plot(pct_y[0], test_loads, color='blue', linestyle=':', linewidth=1.0)
-                ax.plot(pct_y[1], test_loads, color='blue', linestyle=':', linewidth=1.0)
+                ax.plot(pct_y[0], test_loads, color='blue', linestyle=':', linewidth=0.5)
+                ax.plot(pct_y[1], test_loads, color='blue', linestyle=':', linewidth=0.5)
 
             # Plot Function Uncertainty Band (inner, narrower) - epistemic only
             if pct_f is not None:
                 ax.fill_betweenx(test_loads, pct_f[0], pct_f[1],
                                  color='lightgreen', alpha=0.5, label='95% Function')
-                ax.plot(pct_f[0], test_loads, color='green', linestyle='--', linewidth=1.5)
-                ax.plot(pct_f[1], test_loads, color='green', linestyle='--', linewidth=1.5)
+                ax.plot(pct_f[0], test_loads, color='green', linestyle='--', linewidth=0.8)
+                ax.plot(pct_f[1], test_loads, color='green', linestyle='--', linewidth=0.8)
             
             # Overlay Data (Averaged)
             if input_xy_exp is not None and data_exp is not None:
