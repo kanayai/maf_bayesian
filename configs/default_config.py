@@ -60,12 +60,12 @@ config = {
             "mu_emulator": {"mean": 0.0, "scale": 0.01},
             # Emulator standard deviation
             "sigma_emulator": {
-                "target_dist": dist.Exponential(20.0)  # Target distribution for reparam
+                "target_dist": dist.Exponential(50.0)  # Target distribution for reparam
             },
             # Length scales (reparameterized logic)
             # val = exp(mean + scale * standard_normal)
             "length_scales": {
-                "lambda_P": {"mean": 2.5, "scale": 0.5},
+                "lambda_P": {"mean": 3.0, "scale": 0.5},
                 "lambda_alpha": {"mean": 0.34, "scale": 0.5},
                 "lambda_E1": {"mean": 11.0, "scale": 0.5},
                 "lambda_E2": {"mean": 8.3, "scale": 0.5},
@@ -74,7 +74,11 @@ config = {
                 "lambda_G12": {"mean": 7.7, "scale": 0.5},
             },
             # Measurement noise
-            "sigma_measure": {"target_dist": dist.Exponential(1000.0)},
+            "sigma_measure": {
+                "target_dist": dist.TruncatedNormal(
+                    loc=0.001, scale=0.0005, low=0.0
+                )
+            },
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)
