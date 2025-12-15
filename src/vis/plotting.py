@@ -173,6 +173,11 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
                 axes[i].plot(x_grid, pdf_vals, color='green', linewidth=2, label="Prior")
             
         axes[i].set_title(key)
+        
+        # Custom axis limits for specific parameters
+        if key == "mu_emulator":
+            axes[i].set_xlim(-0.01, 0.01)
+        
         # axes[i].legend() 
         
     # Hide unused subplots
