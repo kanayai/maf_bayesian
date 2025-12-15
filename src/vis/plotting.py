@@ -154,30 +154,36 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
         # Use stat="density" to normalize area to 1 (PDF scale)
         sns.histplot(samples[key], ax=axes[i], kde=False, stat="density", label="Posterior", alpha=0.4)
         
+        # Custom axis limits for specific parameters (set before computing x_grid)
+        custom_xlim = None
+        if key == "mu_emulator":
+            custom_xlim = (-0.01, 0.01)
+        
         # Prior: Analytical PDF
         if prior_pdf_fn is not None:
-            # Create grid based on posterior range (or wider if needed)
-            # We want to show the prior context, so maybe a bit wider than posterior
-            data_min = np.min(samples[key])
-            data_max = np.max(samples[key])
-            data_range = data_max - data_min
-            # If range is 0 (constant), add some buffer
-            if data_range == 0: data_range = 1.0
-            
-            x_grid = np.linspace(data_min - 0.5*data_range, data_max + 0.5*data_range, 200)
+            # Use custom xlim range if set, otherwise use posterior range
+            if custom_xlim is not None:
+                x_grid = np.linspace(custom_xlim[0], custom_xlim[1], 200)
+            else:
+                # Create grid based on posterior range (or wider if needed)
+                data_min = np.min(samples[key])
+                data_max = np.max(samples[key])
+                data_range = data_max - data_min
+                # If range is 0 (constant), add some buffer
+                if data_range == 0: data_range = 1.0
+                x_grid = np.linspace(data_min - 0.5*data_range, data_max + 0.5*data_range, 200)
             
             # Get PDF values
             pdf_vals = prior_pdf_fn(key, x_grid)
             
             if pdf_vals is not None:
                 axes[i].plot(x_grid, pdf_vals, color='green', linewidth=2, label="Prior")
+        
+        # Apply custom xlim after plotting
+        if custom_xlim is not None:
+            axes[i].set_xlim(custom_xlim)
             
         axes[i].set_title(key)
-        
-        # Custom axis limits for specific parameters
-        if key == "mu_emulator":
-            axes[i].set_xlim(-0.01, 0.01)
-        
         # axes[i].legend() 
         
     # Hide unused subplots
