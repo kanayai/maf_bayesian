@@ -158,6 +158,8 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
         custom_xlim = None
         if key == "mu_emulator":
             custom_xlim = (-0.01, 0.01)
+        elif key == "sigma_measure":
+            custom_xlim = (0.0, 0.005)  # Focus on the prior range
         
         # Prior: Analytical PDF
         if prior_pdf_fn is not None:
