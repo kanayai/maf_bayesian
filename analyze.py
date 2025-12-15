@@ -262,8 +262,9 @@ Examples:
                 # TruncatedNormal creates a TruncatedDistribution object
                 # Extract parameters from the base distribution
                 try:
-                    loc = float(d.loc)
-                    scale = float(d.scale)
+                    base = getattr(d, 'base_dist', d)  # Get base distribution
+                    loc = float(base.loc) if hasattr(base, 'loc') else 0.0
+                    scale = float(base.scale) if hasattr(base, 'scale') else 1.0
                     low = float(d.low) if hasattr(d, 'low') else -np.inf
                     high = float(d.high) if hasattr(d, 'high') else np.inf
                     # scipy truncnorm uses (a, b) = (low - loc) / scale, (high - loc) / scale
