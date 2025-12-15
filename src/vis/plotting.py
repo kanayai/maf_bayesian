@@ -158,8 +158,6 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
         custom_xlim = None
         if key == "mu_emulator":
             custom_xlim = (-0.01, 0.01)
-        elif key == "sigma_measure":
-            custom_xlim = (0.0, 0.005)  # Focus on the prior range
         
         # Prior: Analytical PDF
         if prior_pdf_fn is not None:
@@ -173,7 +171,15 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
                 data_range = data_max - data_min
                 # If range is 0 (constant), add some buffer
                 if data_range == 0: data_range = 1.0
-                x_grid = np.linspace(data_min - 0.5*data_range, data_max + 0.5*data_range, 200)
+                
+                x_min = data_min - 0.5*data_range
+                x_max = data_max + 0.5*data_range
+                
+                # For positive-only parameters, ensure x_grid starts at 0
+                if key.startswith("lambda_") or key.startswith("sigma_"):
+                    x_min = max(0, x_min)
+                
+                x_grid = np.linspace(x_min, x_max, 200)
             
             # Get PDF values
             pdf_vals = prior_pdf_fn(key, x_grid)
