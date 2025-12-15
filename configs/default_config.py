@@ -56,11 +56,13 @@ config = {
         },
         # Hyperparameters
         "hyper": {
-            # Emulator mean
-            "mu_emulator": {"mean": 0.0, "scale": 0.01},
+            # Emulator mean - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
+            "mu_emulator": {"log_mean": -4.605170185988091, "log_scale": 0.1},  # log(0.01) ≈ -4.605
             # Emulator standard deviation
             "sigma_emulator": {
-                "target_dist": dist.Exponential(50.0)  # Target distribution for reparam
+                "target_dist": dist.TruncatedNormal(
+                    loc=0.02, scale=0.015, low=0.0
+                )
             },
             # Length scales (reparameterized logic)
             # val = exp(mean + scale * standard_normal)
@@ -76,7 +78,7 @@ config = {
             # Measurement noise
             "sigma_measure": {
                 "target_dist": dist.TruncatedNormal(
-                    loc=0.001, scale=0.0005, low=0.0
+                    loc=0.0001, scale=0.0001, low=0.0
                 )
             },
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},

@@ -234,10 +234,15 @@ Examples:
             return None
 
         # Emulator Mean/Scale
-        # mu_emulator: Normal(mean, scale)
+        # mu_emulator: Normal(mean, scale) or LogNormal(log_mean, log_scale)
         if key == "mu_emulator":
             p = priors_config["hyper"]["mu_emulator"]
-            return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
+            if "log_mean" in p:
+                # LogNormal: val = exp(log_mean + log_scale * N(0,1))
+                # scipy lognorm: s=log_scale, scale=exp(log_mean)
+                return lognorm.pdf(x_vals, s=p["log_scale"], scale=np.exp(p["log_mean"]))
+            else:
+                return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
 
         # Helper to extract PDF from numpyro distribution in config
         def get_pdf_from_target_dist(hyper_key):

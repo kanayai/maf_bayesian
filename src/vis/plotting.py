@@ -156,8 +156,7 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
         
         # Custom axis limits for specific parameters (set before computing x_grid)
         custom_xlim = None
-        if key == "mu_emulator":
-            custom_xlim = (-0.01, 0.01)
+        # No custom xlim currently - add here if needed for specific parameters
         
         # Prior: Analytical PDF
         if prior_pdf_fn is not None:
@@ -175,8 +174,8 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
                 x_min = data_min - 0.5*data_range
                 x_max = data_max + 0.5*data_range
                 
-                # For positive-only parameters, ensure x_grid starts at 0
-                if key.startswith("lambda_") or key.startswith("sigma_"):
+                # For positive-only parameters (LogNormal, Exponential, etc.), ensure x_grid starts at 0
+                if key.startswith("lambda_") or key.startswith("sigma_") or key == "mu_emulator":
                     x_min = max(0, x_min)
                 
                 x_grid = np.linspace(x_min, x_max, 200)
