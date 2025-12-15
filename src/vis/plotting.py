@@ -206,7 +206,7 @@ def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data
     ax.plot(mean_pred, samples_load, color=mean_color, ls="solid", lw=0.5, label="Mean prediction")
     
     # Data
-    sz=3
+    sz=1.5
     # Averaged Data Plotting
     for i in range(len(input_xy_exp_plt)):
         # Calculate mean across columns (positions)
@@ -258,7 +258,7 @@ def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct
     
     # Data
     # Data
-    sz=3
+    sz=1.5
     for i in range(len(input_xy_exp_plt)):
         # Calculate mean across columns (positions)
         mean_ext = np.mean(data_exp_plt[i], axis=1)
@@ -345,7 +345,7 @@ def plot_grid_prediction(predictions_collection, angles, save_path=None, interva
                     data_exp = data['data_exp']
                     
                     # Averaged Data Plotting
-                    sz=3
+                    sz=1.5
                     for i in range(len(input_xy)):
                         mean_ext = np.mean(data_exp[i], axis=1)
                         lbl = "Exp Data (Avg)" if i == 0 else "_nolegend_"
@@ -427,7 +427,7 @@ def plot_spaghetti_verification(
             lbl = "Exp Data (Avg)" if i == 0 else "_nolegend_"
             ax.plot(mean_ext, input_xy_exp[i][:,0], 
                     "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
-                    markersize=3, linewidth=0, alpha=0.7, label=lbl)
+                    markersize=1.5, linewidth=0, alpha=0.7, label=lbl)
 
     dir_label = "Shear" if direction == "h" else "Normal"
     ax.set_title(f"{plot_type} Spaghetti Verification - {angle}° {dir_label}")
@@ -530,7 +530,7 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
                     marker = markers[i % len(markers)]
                     ax.plot(mean_ext, input_xy_exp[i][:,0], 
                             marker, color="black", markerfacecolor="white", markeredgewidth=0.5, 
-                            markersize=4, linewidth=0, alpha=0.8, label=f'Exp {i+1}')
+                            markersize=2, linewidth=0, alpha=0.8, label=f'Exp {i+1}')
 
             # Labels and Limits
             if row_idx == 0:
