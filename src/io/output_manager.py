@@ -10,6 +10,20 @@ def _serialize_distribution(d):
     dist_name = d.__class__.__name__
     params = []
     
+    # Handle TruncatedDistribution (e.g., TruncatedNormal)
+    if "Truncated" in dist_name:
+        if hasattr(d, 'loc'):
+            params.append(f"loc={float(d.loc):.6g}")
+        if hasattr(d, 'scale'):
+            params.append(f"scale={float(d.scale):.6g}")
+        if hasattr(d, 'low'):
+            params.append(f"low={float(d.low):.6g}")
+        if hasattr(d, 'high'):
+            high_val = float(d.high)
+            if high_val < 1e10:  # Don't show if it's effectively infinity
+                params.append(f"high={high_val:.6g}")
+        return f"TruncatedNormal({', '.join(params)})"
+    
     # Common parameters for various distributions
     if hasattr(d, 'rate'):
         params.append(f"rate={float(d.rate):.6g}")
