@@ -291,10 +291,27 @@ Examples:
                 except:
                     return None
 
-        # Hyperparameters with target_dist
+        # Helper to get LogNormal PDF from log_mean/log_scale config
+        def get_lognorm_pdf(hyper_key):
+            """Get LogNormal PDF from log_mean/log_scale config."""
+            if hyper_key not in priors_config["hyper"]:
+                return None
+            cfg = priors_config["hyper"][hyper_key]
+            if "log_mean" not in cfg:
+                return None
+            # scipy lognorm: s=log_scale, scale=exp(log_mean)
+            return lognorm.pdf(x_vals, s=cfg["log_scale"], scale=np.exp(cfg["log_mean"]))
+
+        # Hyperparameters with target_dist or log_mean/log_scale
         if key == "sigma_emulator":
+            cfg = priors_config["hyper"]["sigma_emulator"]
+            if "log_mean" in cfg:
+                return get_lognorm_pdf("sigma_emulator")
             return get_pdf_from_target_dist("sigma_emulator")
         if key == "sigma_measure":
+            cfg = priors_config["hyper"]["sigma_measure"]
+            if "log_mean" in cfg:
+                return get_lognorm_pdf("sigma_measure")
             return get_pdf_from_target_dist("sigma_measure")
         if key == "sigma_measure_base":
             return get_pdf_from_target_dist("sigma_measure_base")
