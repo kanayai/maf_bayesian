@@ -13,10 +13,13 @@ def _serialize_distribution(d):
     
     # Handle TruncatedDistribution (e.g., TruncatedNormal)
     if "Truncated" in dist_name:
-        if hasattr(d, 'loc'):
-            params.append(f"loc={float(d.loc)}")
-        if hasattr(d, 'scale'):
-            params.append(f"scale={float(d.scale)}")
+        # TruncatedDistribution wraps a base distribution - extract params from there
+        base = getattr(d, 'base_dist', None)
+        if hasattr(base, 'loc'):
+            params.append(f"loc={float(base.loc)}")
+        if hasattr(base, 'scale'):
+            params.append(f"scale={float(base.scale)}")
+        # low/high are on the truncated distribution itself
         if hasattr(d, 'low'):
             params.append(f"low={float(d.low)}")
         if hasattr(d, 'high'):
