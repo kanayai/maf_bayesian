@@ -30,7 +30,7 @@ A critical difference is that `model_n_hv` uses a different set of physical prio
 
 ### Understanding `_n` Parameters
 
-You may notice parameters with an `_n` suffix (e.g., `sigma_emulator_n`, `E_1_n`). These are **coupled** but not typically "clones" of their counterparts.
+You may notice parameters with an `_n` suffix (e.g., `sigma_emulator_n`, `E_1_n`). These are **coupled** but not typically "clones" of their counterparts:
 
 *   **`param_n`** is the **normalized** latent variable sampled by the MCMC (usually $\sim \mathcal{N}(0, 1)$).
 *   **`param`** is the **physical** value derived from it: $\theta = \mu + \sigma \cdot \theta_n$ (for Normal) or similar transformations.
@@ -87,8 +87,6 @@ Where:
 
 *   $\boldsymbol{\mu}(\mathbf{x}, \theta)$: The physics-based mean function (Finite Element surrogate).
 *   $\mathbf{K}(\mathbf{x}, \theta)$: The GP covariance matrix representing emulator uncertainty (bias).
-*   $\mathbf{\Sigma}_\epsilon$: Measurement noise matrix. Note that the noise variance is **proportional to the load**: $\mathbf{\Sigma}_{ii} = \sigma_{measure}^2 \times P_i$.
-
 *   $\mathbf{\Sigma}_\epsilon$: Measurement noise matrix. Note that the noise variance is **proportional to the load**: $\mathbf{\Sigma}_{ii} = \sigma_{measure}^2 \times P_i$.
 
 ### 2.1 Experimental Data Aggregation
@@ -294,7 +292,30 @@ $$
 
 *   **$\mathbf{K}_{EE}$**: Covariance between experimental points. Depends on the distance between inputs $(Load_{exp}, \theta^*)$ and itself.
 *   **$\mathbf{K}_{SS}$**: Covariance between simulation points. Depends on fixed inputs from simulation files.
-*   **$\mathbf{K}_{ES}$**: Cross-covariance. This term is critical; it represents how much the simulation points "inform" the experimental predictions.
+*   **$\mathbf{K}_{ES}$**: Cross-covariance between experimental and simulated points. This term is critical; it represents how much the simulation points "inform" the experimental predictions.
+
+#### Understanding $K_{ES}$: The Cross-Covariance Assumption
+
+The cross-covariance $\mathbf{K}_{ES}$ is **not assumed to be zero** — it is computed using the **same Squared Exponential (SE) kernel** as all other covariance blocks:
+
+$$
+K(x_i, x_j) = \sigma_{emulator}^2 \cdot \exp\left( -d_{xy} - d_{\theta} \right)
+$$
+
+where:
+
+*   $d_{xy} = \sum_k \left( \frac{x_{xy,i}^k - x_{xy,j}^k}{\lambda_{xy}^k} \right)^2$ — squared distance in (Load, Angle) space
+*   $d_\theta = \sum_k \left( \frac{\theta_i^k - \theta_j^k}{\lambda_\theta^k} \right)^2$ — squared distance in ($E_1$, $E_2$, $\nu_{12}$, $\nu_{23}$, $G_{12}$) space
+
+When computing $K_{ES}$, the kernel evaluates the distance between:
+
+*   **Experimental point** $i$: $(P_i^{exp}, \alpha_i^{exp}, \theta^*)$ — where $\theta^*$ is the **sampled** (inferred) material parameters
+*   **Simulated point** $j$: $(P_j^{sim}, \alpha_j^{sim}, \theta_j^{sim})$ — where $\theta_j^{sim}$ is **fixed** from the simulation design
+
+> [!IMPORTANT]
+> **Key insight**: If the inferred $\theta^*$ is *close* to a simulation design point $\theta_j^{sim}$ (and the loads/angles are similar), then $K_{ES}[i,j]$ will be **large** — meaning that simulation point strongly informs the experimental prediction.
+
+In essence, $K_{ES}$ encodes "how similar is the candidate material parameter $\theta^*$ to the parameters used in each simulation?" This is the mechanism by which the simulation data **informs** predictions at the experiment. The closer the sampled $\theta^*$ is to one of the simulation grid points $\theta_j^{sim}$, the more the GP "trusts" that simulation's output for predicting the experimental extension.
 
 ### 4.2 Measurement Noise Matrix $\Sigma_\epsilon$
 
@@ -311,7 +332,9 @@ $$
 
 *   **$\mathbf{D}_{exp}$**: Diagonal matrix of experimental measurement noise.
     *   For Proportional Noise: $D_{ii} = \sigma_{measure}^2 \times P_i$
+
 *   **Simulation Noise**: Effectively **zero**. We assume the Finite Element simulation is a deterministic "truth" of the physics model (no measurement error).
+
 *   **$\mathbf{J}_{jitter}$**: A tiny constant ($10^{-6}$) added to the entire diagonal for numerical stability (Cholesky decomposition).
 
 ### 4.3 Posterior Covariance $\Sigma_{post}$
@@ -323,6 +346,7 @@ $$
 $$
 
 Where:
+
 *   $\mathbf{K}_{**}$: Prior covariance of the test points (the inherent uncertainty of the GP kernel).
 *   $\mathbf{K}_{*f}$: Covariance between test points and all training data (Exp + Sim).
 *   The term $(\mathbf{K}_{obs,obs} + \mathbf{\Sigma}_\epsilon)^{-1}$ acts as the "information gain" from the data, reducing the uncertainty.
