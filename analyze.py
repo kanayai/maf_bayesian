@@ -239,31 +239,54 @@ Examples:
             p = priors_config["hyper"]["mu_emulator"]
             return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
 
-        # sigma_emulator: Exponential(20) -> This is target dist for reparam?
-        # In model: sigma_emulator_n ~ N(0,1)
-        # sigma_emulator = TransformedDistribution(Normal(0,1), InverseCDFTransform(Exponential(20)))
-        # Wait, let's check models.py to be sure about sigma_emulator.
-        # It uses get_priors_from_config which does:
-        # base = sample(name + "_n", Normal(0,1))
-        # val = Deterministic(name, target_dist.icdf(Normal(0,1).cdf(base)))
-        # So 'val' follows 'target_dist'.
-        if key == "sigma_emulator":
-            # Exponential(rate) -> pdf = rate * exp(-rate * x)
-            # config has "target_dist": dist.Exponential(20.)
-            # We need the rate.
-            # dist.Exponential(rate)
-            rate = 20.0
-            return expon.pdf(x_vals, scale=1 / rate)
+        # Helper to extract PDF from numpyro distribution in config
+        def get_pdf_from_target_dist(hyper_key):
+            """Extract scipy PDF from numpyro target_dist in config."""
+            from scipy.stats import truncnorm
+            import numpyro.distributions as npdist
+            
+            if hyper_key not in priors_config["hyper"]:
+                return None
+            cfg = priors_config["hyper"][hyper_key]
+            if "target_dist" not in cfg:
+                return None
+            
+            d = cfg["target_dist"]
+            
+            # Handle different distribution types
+            if isinstance(d, npdist.Exponential):
+                rate = float(d.rate)
+                return expon.pdf(x_vals, scale=1 / rate)
+            elif isinstance(d, npdist.TruncatedNormal):
+                loc = float(d.loc)
+                scale = float(d.scale)
+                low = float(d.low) if hasattr(d, 'low') else -np.inf
+                high = float(d.high) if hasattr(d, 'high') else np.inf
+                # scipy truncnorm uses (a, b) = (low - loc) / scale, (high - loc) / scale
+                a = (low - loc) / scale if low != -np.inf else -np.inf
+                b = (high - loc) / scale if high != np.inf else np.inf
+                return truncnorm.pdf(x_vals, a, b, loc=loc, scale=scale)
+            elif isinstance(d, npdist.Normal):
+                loc = float(d.loc)
+                scale = float(d.scale)
+                return norm.pdf(x_vals, loc=loc, scale=scale)
+            else:
+                # Fallback: try to use log_prob if available
+                try:
+                    import jax.numpy as jnp
+                    return np.exp(d.log_prob(jnp.array(x_vals)))
+                except:
+                    return None
 
-        # Hyperparameters - sigma_measure, sigma_emulator, sigma_constant
+        # Hyperparameters with target_dist
+        if key == "sigma_emulator":
+            return get_pdf_from_target_dist("sigma_emulator")
         if key == "sigma_measure":
-            # Exponential(100) dist
-            return expon.pdf(x_vals, scale=1 / 100.0)
+            return get_pdf_from_target_dist("sigma_measure")
         if key == "sigma_measure_base":
-            return expon.pdf(x_vals, scale=1 / 100.0)
+            return get_pdf_from_target_dist("sigma_measure_base")
         if key == "sigma_constant":
-            # Exponential(0.1) dist -> scale = 1/0.1 = 10
-            return expon.pdf(x_vals, scale=10.0)
+            return get_pdf_from_target_dist("sigma_constant")
 
         # Bias
         if key.startswith("b_"):
