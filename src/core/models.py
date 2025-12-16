@@ -12,16 +12,18 @@ def get_priors_from_config(config, num_exp):
     Returns dictionaries of sampled values.
     """
     priors = config["priors"]
+    priors = config["priors"]
     bias_flags = config["bias"]
+    model_type = config.get("model_type", "model_n")
 
     # --- Physical Parameters (Theta) ---
     theta_vals = []
     # Order matters: E1, E2, v12, v23, G12
     param_names = ["E_1", "E_2", "v_12", "v_23", "G_12"]
 
-    if "n" not in config["model_type"]:
+    if "n" not in model_type and "hierarchical" not in model_type:
         raise ValueError(
-            "Only reparameterized models (model_type='model_n' or 'model_n_hv') are supported."
+            "Only reparameterized models (model_type='model_n' or 'model_n_hv' or 'model_hierarchical') are supported."
         )
 
     # Reparameterized models
@@ -92,9 +94,13 @@ def get_priors_from_config(config, num_exp):
     if noise_model == "constant":
         # Constant model: only sample sigma_constant
         stdev_constant_n = numpyro.sample("sigma_constant_n", dist.Normal())
-        stdev_constant = hyper["sigma_constant"]["target_dist"].icdf(
-            cdf_normal(stdev_constant_n)
-        )
+        sig_const_cfg = hyper["sigma_constant"]
+        if "log_mean" in sig_const_cfg:
+             stdev_constant = jnp.exp(sig_const_cfg["log_mean"] + sig_const_cfg["log_scale"] * stdev_constant_n)
+        else:
+            stdev_constant = sig_const_cfg["target_dist"].icdf(
+                cdf_normal(stdev_constant_n)
+            )
         numpyro.deterministic("sigma_constant", stdev_constant)
     elif noise_model == "additive":
         # Additive model: sample sigma_measure and sigma_measure_base
@@ -107,10 +113,23 @@ def get_priors_from_config(config, num_exp):
         numpyro.deterministic("sigma_measure", stdev_measure)
 
         stdev_measure_base_n = numpyro.sample("sigma_measure_base_n", dist.Normal())
-        stdev_measure_base = hyper["sigma_measure_base"]["target_dist"].icdf(
-            cdf_normal(stdev_measure_base_n)
-        )
+        sig_base_cfg = hyper["sigma_measure_base"]
+        if "log_mean" in sig_base_cfg:
+            stdev_measure_base = jnp.exp(sig_base_cfg["log_mean"] + sig_base_cfg["log_scale"] * stdev_measure_base_n)
+        else:
+            stdev_measure_base = sig_base_cfg["target_dist"].icdf(
+                cdf_normal(stdev_measure_base_n)
+            )
         numpyro.deterministic("sigma_measure_base", stdev_measure_base)
+    elif noise_model == "prop_quad":
+        # Quadratic Proportional model: sample sigma_measure
+        stdev_measure_n = numpyro.sample("sigma_measure_n", dist.Normal())
+        sig_meas_cfg = hyper["sigma_measure"]
+        if "log_mean" in sig_meas_cfg:
+             stdev_measure = jnp.exp(sig_meas_cfg["log_mean"] + sig_meas_cfg["log_scale"] * stdev_measure_n)
+        else:
+            stdev_measure = sig_meas_cfg["target_dist"].icdf(cdf_normal(stdev_measure_n))
+        numpyro.deterministic("sigma_measure", stdev_measure)
     else:
         # Proportional model (default): only sample sigma_measure
         stdev_measure_n = numpyro.sample("sigma_measure_n", dist.Normal())
@@ -142,6 +161,17 @@ def get_priors_from_config(config, num_exp):
         ls_vals[name] = val
 
     length_xy = jnp.array([ls_vals["lambda_P"], ls_vals["lambda_alpha"]])
+    
+    # Latent Variance (for hierarchical model)
+    sigma_latent = 0.0
+    if "sigma_latent" in hyper:
+        sl_n = numpyro.sample("sigma_latent_n", dist.Normal())
+        sl_cfg = hyper["sigma_latent"]
+        if "log_mean" in sl_cfg:
+             sigma_latent = jnp.exp(sl_cfg["log_mean"] + sl_cfg["log_scale"] * sl_n)
+        elif "target_dist" in sl_cfg:
+             sigma_latent = sl_cfg["target_dist"].icdf(cdf_normal(sl_n))
+        numpyro.deterministic("sigma_latent", sigma_latent)
     length_theta = jnp.array(
         [
             ls_vals["lambda_E1"],
@@ -163,6 +193,7 @@ def get_priors_from_config(config, num_exp):
         stdev_measure,
         stdev_measure_base,
         stdev_constant,
+        sigma_latent,
     )
 
 
@@ -195,6 +226,7 @@ def model_n(
         stdev_measure,
         stdev_measure_base,
         stdev_constant,
+        _, # sigma_latent unused
     ) = get_priors_from_config(config, num_exp)
 
     # Prepare inputs based on bias
@@ -259,6 +291,9 @@ def model_n(
         # sigma^2 = sigma_constant^2 (constant variance)
         num_exp_points = len(loads_exp)
         noise_diag = stdev_constant**2 * jnp.ones(num_exp_points)
+    elif noise_model == "prop_quad":
+        # sigma^2 = sigma_measure^2 * P^2
+        noise_diag = stdev_measure**2 * loads_exp**2
     else:
         # proportional: sigma^2 = sigma_measure^2 * P
         noise_diag = stdev_measure**2 * loads_exp
@@ -315,6 +350,7 @@ def model_n_hv(
         stdev_measure,
         stdev_measure_base,
         stdev_constant,
+        _, # sigma_latent unused
     ) = get_priors_from_config(config, num_exp)
 
     # Prepare inputs based on bias
@@ -380,6 +416,9 @@ def model_n_hv(
         # sigma^2 = sigma_constant^2 (constant variance)
         num_exp_points = len(loads_exp)
         noise_diag = stdev_constant**2 * jnp.ones(num_exp_points)
+    elif noise_model == "prop_quad":
+        # sigma^2 = sigma_measure^2 * P^2
+        noise_diag = stdev_measure**2 * loads_exp**2
     else:
         # proportional: sigma^2 = sigma_measure^2 * P
         noise_diag = stdev_measure**2 * loads_exp
@@ -410,6 +449,221 @@ def model_n_hv(
     )
 
 
+
+ 
+def model_n_hierarchical(
+    input_xy_exp, # List of arrays (N, 2)
+    input_xy_sim,
+    input_theta_sim,
+    data_exp_h_raw, # List of arrays (N, 3) - Raw multi-sensor data
+    data_exp_v_raw, # List of arrays (N, 3)
+    data_sim_h,
+    data_sim_v,
+    config,
+):
+    """
+    Hierarchical model where each specimen has a latent random effect,
+    and all 3 sensor positions are independent given the latent effect.
+    """
+    num_exp = len(input_xy_exp)
+    add_bias_E1 = config["bias"]["add_bias_E1"]
+    add_bias_alpha = config["bias"]["add_bias_alpha"]
+
+    # Get all priors
+    (
+        theta,
+        bias_E1,
+        bias_alpha,
+        mean_emulator,
+        stdev_emulator,
+        length_xy,
+        length_theta,
+        stdev_measure,
+        stdev_measure_base,
+        stdev_constant,
+        sigma_latent,
+    ) = get_priors_from_config(config, num_exp)
+
+    # Prepare inputs based on bias (SAME AS model_n_hv)
+    data_size_exp = [i.shape[0] for i in input_xy_exp]
+
+    if add_bias_E1:
+        input_xy = jnp.concatenate((*input_xy_exp, input_xy_sim), axis=0)
+        input_theta_exp = []
+        for i in range(num_exp):
+            theta_b = theta.at[0].add(bias_E1[i])
+            input_theta_exp.append(jnp.tile(theta_b, (data_size_exp[i], 1)))
+        input_theta = jnp.concatenate([*input_theta_exp, input_theta_sim], axis=0)
+
+    elif add_bias_alpha:
+        input_xy_exp_b = []
+        for i in range(num_exp):
+            input_xy_exp_b.append(
+                jnp.array(input_xy_exp[i])
+                + jnp.concatenate(
+                    (
+                        jnp.zeros((data_size_exp[i], 1)),
+                        bias_alpha[i] * jnp.ones((data_size_exp[i], 1)),
+                    ),
+                    axis=1,
+                )
+            )
+        input_xy = jnp.concatenate((*input_xy_exp_b, input_xy_sim), axis=0)
+        input_theta = jnp.concatenate(
+            [jnp.tile(theta, (sum(data_size_exp), 1)), input_theta_sim], axis=0
+        )
+
+    else:  # No bias
+        input_xy = jnp.concatenate((*input_xy_exp, input_xy_sim), axis=0)
+    # --- GP SETUP ---
+    
+    # 1. Sample Latent Variables (Explicitly) - One per experiment
+    # epsilon_i ~ N(0, sigma_latent)
+    # We use a non-centered parameterization if possible, or just standard centered.
+    # Centered: sample epsilon directly.
+    # Non-centered: sample eps_raw ~ N(0,1), epsilon = eps_raw * sigma_latent
+    # Let's use centered for simplicity as sigma_latent is sampled.
+    epsilon = numpyro.sample("epsilon", dist.Normal(0.0, sigma_latent), sample_shape=(num_exp,))
+    
+    # Expand epsilon to match observations
+    # For each experiment i, we have N_i points * 3 sensors = 3*N_i obs.
+    # We need to constructing a vector of epsilons matching the flattened data.
+    epsilon_expanded_list = []
+    
+    # Rebuild Inputs for 3x Expansion
+    input_xy_exp_expanded_list = []
+    input_theta_exp_expanded_list = []
+    
+    for i in range(num_exp):
+        n_i = data_size_exp[i]
+        
+        # Epsilon expansion:
+        # epsilon[i] repeated 3 * N_i times
+        epsilon_expanded_list.append(jnp.full((3 * n_i,), epsilon[i]))
+
+        # Base input xy for this exp
+        xy_base = input_xy_exp[i] # (N_i, 2)
+        
+        # Handle alpha bias
+        if add_bias_alpha:
+             xy_base = xy_base + jnp.concatenate(
+                     (jnp.zeros((n_i, 1)), bias_alpha[i] * jnp.ones((n_i, 1))),
+                     axis=1
+                 )
+        
+        # Expand xy 3x
+        xy_expanded = jnp.repeat(xy_base, 3, axis=0) # (3*N_i, 2)
+        input_xy_exp_expanded_list.append(xy_expanded)
+        
+        # Handle theta bias
+        if add_bias_E1:
+             theta_use = theta.at[0].add(bias_E1[i])
+        else:
+             theta_use = theta
+             
+        # Expand theta 3x
+        th_expanded = jnp.tile(theta_use, (3 * n_i, 1))
+        input_theta_exp_expanded_list.append(th_expanded)
+            
+    epsilon_vector = jnp.concatenate(epsilon_expanded_list)
+    
+    input_xy_exp_expanded = jnp.concatenate(input_xy_exp_expanded_list, axis=0)
+    input_theta_exp_final = jnp.concatenate(input_theta_exp_expanded_list, axis=0)
+         
+    # Combine with Sim
+    input_xy_final = jnp.concatenate((input_xy_exp_expanded, input_xy_sim), axis=0)
+    input_theta_final = jnp.concatenate((input_theta_exp_final, input_theta_sim), axis=0)
+    
+    # Compute Covariance Matrix for ALL points
+    cov_matrix = cov_matrix_emulator(
+        input_xy_final,
+        input_theta_final,
+        input_xy_final,
+        input_theta_final,
+        stdev_emulator,
+        length_xy,
+        length_theta,
+    )
+    
+    # Add Jitter
+    cov_matrix += jnp.diag(1e-6 * jnp.ones(input_xy_final.shape[0]))
+    
+    # Noise Variance Diagonal
+    # Exp part
+    loads_exp = input_xy_exp_expanded[:, 0]
+    
+    # Determine noise model diag
+    noise_diag_exp = jnp.where(
+        stdev_constant > 0,
+        stdev_constant**2 * jnp.ones(loads_exp.shape[0]),
+        jnp.where(
+             stdev_measure_base > 0,
+             stdev_measure**2 * loads_exp + stdev_measure_base**2,
+             jnp.where(
+                 config["data"].get("noise_model") == "prop_quad",
+                 stdev_measure**2 * loads_exp**2,
+                 stdev_measure**2 * loads_exp
+             )
+        )
+    )
+    
+    noise_diags = [noise_diag_exp]
+    
+    # Sim noise (jitter/small)
+    noise_diags.append(jnp.zeros(input_xy_sim.shape[0]))
+    
+    noise_diag_vec = jnp.concatenate(noise_diags)
+    cov_matrix += jnp.diag(noise_diag_vec)
+    
+    # PREPARE DATA VECTOR
+    # Flatten raw data (N, 3) -> (3N,)
+    data_h_list = []
+    data_v_list = []
+    
+    for i in range(num_exp):
+        data_h_list.append(data_exp_h_raw[i].flatten()) 
+        data_v_list.append(data_exp_v_raw[i].flatten())
+        
+    data_h_list.append(data_sim_h)
+    data_v_list.append(data_sim_v)
+    
+    data_h_final = jnp.concatenate(data_h_list)
+    data_v_final = jnp.concatenate(data_v_list)
+    
+    # MEAN VECTOR
+    # Add epsilon to mean vector (for experimental part only)
+    # Sim part has epsilon=0 (or distinct?)
+    # Generally latent var is for specimen. Sim is "ideal" specimen? or epsilon=0.
+    # Usually Sim is mean behavior, so epsilon=0 is appropriate.
+    
+    # Construct epsilon vector for full data (Exp + Sim)
+    epsilon_final = jnp.concatenate([epsilon_vector, jnp.zeros(input_xy_sim.shape[0])])
+    
+    # Mean = GP_Mean + Epsilon
+    base_mean_h = mean_emulator * input_xy_final[:, 0] * jnp.sin(input_xy_final[:, 1])
+    base_mean_v = mean_emulator * input_xy_final[:, 0] * jnp.cos(input_xy_final[:, 1])
+    
+    mean_vector_h = base_mean_h + epsilon_final
+    mean_vector_v = base_mean_v + epsilon_final # Epsilon affects both directions same way?
+    # Specimen offset affects the material response.
+    # Ideally epsilon is on the material property or output?
+    # If it's "random offset", likely additive on output.
+    # Simplest: additive on output.
+    
+    
+    # SAMPLE
+    numpyro.sample(
+        "data_h",
+        dist.MultivariateNormal(loc=mean_vector_h, covariance_matrix=cov_matrix),
+        obs=data_h_final,
+    )
+
+    numpyro.sample(
+        "data_v",
+        dist.MultivariateNormal(loc=mean_vector_v, covariance_matrix=cov_matrix),
+        obs=data_v_final,
+    )
+
 def posterior_predict(
     rng_key,
     input_xy_exp,
@@ -424,19 +678,60 @@ def posterior_predict(
     stdev_emulator,
     length_xy,
     length_theta,
-    stdev_measure,
+    stdev_measure=0.0, 
     stdev_measure_base=0.0,
     stdev_constant=0.0,
+    sigma_latent=0.0, 
+    experiment_ids=None,
+    epsilon=None, # New arg: (N_exp,) or None
+    noise_model="proportional", 
     direction="h",
 ):
-    # compute kernels between train and test data, etc.
-    input_xy = jnp.concatenate(
-        (input_xy_exp, input_xy_sim, test_xy[0][None, :]), axis=0
-    )
-    # input_theta_exp = jnp.tile(test_theta, (input_xy_exp.shape[0],1))
-    input_theta = jnp.concatenate(
-        (input_theta_exp, input_theta_sim, test_theta[None, :]), axis=0
-    )
+    # Handle Hierarchical Expansion
+    # Only if experiment_ids provided
+    is_hierarchical = (experiment_ids is not None)
+    
+    # Note: sigma_latent must be provided if is_hierarchical is True, else default 0.0 is used.
+    
+    if is_hierarchical:
+        # Hierarchical mode
+        # Expand Exp Inputs: (N, 2) -> (3N, 2)
+        input_xy_exp_expanded = jnp.repeat(input_xy_exp, 3, axis=0)
+        input_theta_exp_expanded = jnp.repeat(input_theta_exp, 3, axis=0)
+        
+        # Expand Epsilon if provided
+        # epsilon matches max(experiment_ids) + 1?
+        # experiment_ids corresponds to input_xy_exp (N,)
+        # We need to map experiment_ids expanded to epsilon values.
+        # eps_expanded = epsilon[exp_ids_expanded]
+        
+        if epsilon is not None:
+             exp_ids_expanded = jnp.repeat(experiment_ids, 3, axis=0)
+             epsilon_expanded = epsilon[exp_ids_expanded]
+             # Note: indices in experiment_ids must be valid for epsilon array
+        
+        # Combine with Sim
+        # test_xy might be (M, 2)
+        M_test = test_xy.shape[0]
+        t_theta_expanded = jnp.tile(test_theta, (M_test, 1))
+
+        input_xy = jnp.concatenate(
+            (input_xy_exp_expanded, input_xy_sim, test_xy), axis=0
+        )
+        input_theta = jnp.concatenate(
+            (input_theta_exp_expanded, input_theta_sim, t_theta_expanded), axis=0
+        )
+    else:
+        # Standard mode (Legacy)
+        M_test = test_xy.shape[0]
+        t_theta_expanded = jnp.tile(test_theta, (M_test, 1))
+        
+        input_xy = jnp.concatenate(
+            (input_xy_exp, input_xy_sim, test_xy), axis=0
+        )
+        input_theta = jnp.concatenate(
+            (input_theta_exp, input_theta_sim, t_theta_expanded), axis=0
+        )
 
     # covariance matrix for data
     cov_matrix_data = cov_matrix_emulator(
@@ -449,98 +744,144 @@ def posterior_predict(
         length_theta,
     )
     # Cast shape to int to avoid TracerIntegerConversionError
-    zeros_padding = jnp.zeros(int(input_xy_sim.shape[0]) + 1)
+    zeros_padding = jnp.zeros(int(input_xy_sim.shape[0]) + M_test)
+    
+    # Latent Variance (Block Diagonal) REMOVED
+    # Model now handles latent effect in Mean Function via epsilon.
+    
+    # Noise Variance
+    # Loads for noise calc
+    if experiment_ids is not None:
+        loads_exp = input_xy_exp_expanded[:, 0]
+    else:
+        loads_exp = input_xy_exp[:, 0]
 
-    # Noise variance - handle all three models using jnp.where (JAX-compatible)
-    # Use nested where to check: constant > 0 -> constant, else (base > 0 -> additive, else proportional)
-    noise_diag = jnp.where(
-        stdev_constant > 0,
-        stdev_constant**2 * jnp.ones(input_xy_exp.shape[0]),  # Constant model
-        jnp.where(
-            stdev_measure_base > 0,
-            stdev_measure**2 * input_xy_exp[:, 0]
-            + stdev_measure_base**2,  # Additive model
-            stdev_measure**2 * input_xy_exp[:, 0],  # Proportional model
-        ),
-    )
+    # Noise model selection logic...
+    def get_noise_diag(loads):
+        var_const = stdev_constant**2 * jnp.ones_like(loads)
+        var_add = stdev_measure**2 * loads + stdev_measure_base**2
+        var_prop = stdev_measure**2 * loads
+        var_prop_quad = stdev_measure**2 * loads**2
+        
+        if noise_model == "constant":
+            return var_const
+        elif noise_model == "additive":
+            return var_add
+        elif noise_model == "prop_quad":
+            return var_prop_quad
+        else:
+            return var_prop
+
+    noise_diag = get_noise_diag(loads_exp)
 
     diag_line = jnp.concatenate([noise_diag, zeros_padding])
     cov_matrix_measure = jnp.diag(diag_line)
     cov_matrix_data += cov_matrix_measure
     cov_matrix_data += jnp.diag(jnp.ones(cov_matrix_data.shape[0]) * 1e-10)
 
-    # covariance matrix for the interpolation points
-    # Cast shape to int
-    test_theta_p = jnp.tile(test_theta, (int(test_xy.shape[0]), 1))
-    cov_matrix_interp = cov_matrix_emulator(
-        test_xy,
-        test_theta_p,
-        test_xy,
-        test_theta_p,
-        stdev_emulator,
-        length_xy,
-        length_theta,
-    )
+    # --- SIMULATION (Mean + Draw) ---
+    L = jnp.linalg.cholesky(cov_matrix_data)
 
-    # covariance matrix between data and interpolation points
-    cov_matrix_data_interp = cov_matrix_emulator(
-        input_xy,
-        input_theta,
-        test_xy,
-        test_theta_p,
-        stdev_emulator,
-        length_xy,
-        length_theta,
-    )
-    # cov_matrix_interp_data = cov_matrix_emulator(test_xy, test_theta_p, input_xy, input_theta, stdev_emulator, length_xy, length_theta)
-    cov_matrix_interp_data = cov_matrix_data_interp.T
-
-    # cov_matrix_data_inv = jnp.linalg.inv(cov_matrix_data)
-    # mean_post_emulator = mean_emulator + cov_matrix_interp_data @ (cov_matrix_data_inv @ (jnp.concatenate((data_exp, data_sim, np.zeros(1)), axis=0) - mean_emulator))
-    # linear mean function
+    # Mean Vector
+    # Original GP Mean
     if direction == "h":
-        mean_post_emulator = mean_emulator * test_xy[:, 0] * jnp.sin(
-            test_xy[:, 1]
-        ) + cov_matrix_interp_data @ jnp.linalg.solve(
-            cov_matrix_data,
-            (
-                jnp.concatenate((data_exp, data_sim, jnp.zeros(1)), axis=0)
-                - mean_emulator * input_xy[:, 0] * jnp.sin(input_xy[:, 1])
-            ),
-        )
-    elif direction == "v":
-        mean_post_emulator = mean_emulator * test_xy[:, 0] * jnp.cos(
-            test_xy[:, 1]
-        ) + cov_matrix_interp_data @ jnp.linalg.solve(
-            cov_matrix_data,
-            (
-                jnp.concatenate((data_exp, data_sim, jnp.zeros(1)), axis=0)
-                - mean_emulator * input_xy[:, 0] * jnp.cos(input_xy[:, 1])
-            ),
-        )
+        mu_vec = mean_emulator * input_xy[:, 0] * jnp.sin(input_xy[:, 1])
+    else:
+        mu_vec = mean_emulator * input_xy[:, 0] * jnp.cos(input_xy[:, 1])
+        
+    # Add Epsilon (Latent Offset) to Mean
+    if is_hierarchical and epsilon is not None:
+         # epsilon_expanded: (3N_exp,)
+         # sim + test part: 0
+         eps_padding = jnp.zeros(int(input_xy_sim.shape[0]) + M_test)
+         epsilon_vec = jnp.concatenate([epsilon_expanded, eps_padding])
+         mu_vec = mu_vec + epsilon_vec
+         
+    # Generate Sample
+    # draw ~ N(0, I)
+    rng_key, key_u, key_pred = jax.random.split(rng_key, 3)
+    u = jax.random.normal(key_u, shape=(input_xy.shape[0],))
+    f_sample = mu_vec + jnp.dot(L, u)
 
-    # constant mean function
-    # mean_post_emulator = mean_emulator + cov_matrix_interp_data @ jnp.linalg.solve(cov_matrix_data, (jnp.concatenate((data_exp, data_sim, np.zeros(1)), axis=0) - mean_emulator))
-
-    # cov_post_emulator = cov_matrix_interp - jnp.matmul(cov_matrix_interp_data, jnp.matmul(cov_matrix_data_inv, cov_matrix_data_interp))
-    cov_post_emulator = cov_matrix_interp - jnp.matmul(
-        cov_matrix_interp_data,
-        jnp.linalg.solve(cov_matrix_data, cov_matrix_data_interp),
-    )
-    stdev_post_emulator = jnp.sqrt(jnp.clip(jnp.diag(cov_post_emulator), a_min=0.0))
-
-    L = jnp.linalg.cholesky(
-        cov_post_emulator + jnp.diag(jnp.ones(test_xy.shape[0]) * 1e-10)
-    )
-    # Need random here, so we need to import it or pass it
-    # The function signature has rng_key
-    import jax.random as random
-
-    white_noise = random.normal(rng_key, (test_xy.shape[0],))
-    sample_post = L @ white_noise + mean_post_emulator
-    # we return both the mean function, standard deviation and a sample from the posterior predictive for the
-    # given set of hyperparameters
-    return mean_post_emulator, stdev_post_emulator, sample_post
+    # Return prediction for test points
+    # The last M_test points are test points
+    sample_test = f_sample[-M_test:]
+    
+    # Compute Mean Prediction (ignoring sample noise) for return?
+    # Usually we just return the sample. The wrapper computes mean over samples.
+    # But function signature returns (pred_mean, pred_std, sample).
+    # We must calculate conditional mean/std if analyzing GP uncertainty.
+    # Using simple joint sample IS correct for `sample_test`.
+    # But `pred_mean` and `pred_std`?
+    # If we only used Cholesky joint sampling, we don't naturally get the *conditional* mean directly unless we do the solve.
+    # The joint sample is equivalent to posterior sample.
+    # We can skip computing explicit mean/std if only samples are used?
+    # `analyze.py` uses `means, stds_em, f_samples`.
+    # If we skip, we break contract.
+    # We MUST compute conditional mean/std.
+    
+    # ... Implementation of Conditional Logic ... (Copying from previous thought but adapted for M points)
+    # y_all includes loaded data.
+    # K_dd = cov...[:-M, :-M]
+    # k_dt = cov...[:-M, -M:] (Matrix)
+    # k_tt = cov...[-M:, -M:] (Matrix)
+    
+    # Concatenate Data
+    # analyze.py passes flattened data in both cases (or we should ensure it)
+    if is_hierarchical:
+         y_exp = data_exp.flatten()
+    else:
+         y_exp = data_exp # Already flattened by caller?
+         if y_exp.ndim > 1:
+             y_exp = y_exp.flatten()
+    
+    y_all = jnp.concatenate([y_exp, data_sim])
+    
+    # Indices
+    num_data = y_all.shape[0]
+    
+    # Slice Covariance
+    K_dd = cov_matrix_data[:num_data, :num_data]
+    K_dt = cov_matrix_data[:num_data, num_data:] # (N_data, M_test)
+    K_tt = cov_matrix_data[num_data:, num_data:] # (M_test, M_test)
+    
+    # Slice Mean
+    mu_d = mu_vec[:num_data]
+    mu_t = mu_vec[num_data:]
+    
+    # Cholesky of Data Block (already computed? L includes test points. 
+    # Use L[:num_data, :num_data] corresponds to K_dd?
+    # Yes, Cholesky is lower triangular. Block (1,1) depends only on Block (1,1) of K.
+    L_dd = L[:num_data, :num_data] 
+    
+    # Mean
+    # alpha = K_dd^-1 (y - mu_d)
+    # We use L_dd to solve.
+    # solve(L_dd, y-mu) -> tmp
+    # solve(L_dd.T, tmp) -> alpha
+    
+    diff = y_all - mu_d
+    tmp = jax.scipy.linalg.solve_triangular(L_dd, diff, lower=True)
+    alpha_vec = jax.scipy.linalg.solve_triangular(L_dd.T, tmp, lower=False)
+    
+    pred_mean = mu_t + jnp.dot(K_dt.T, alpha_vec)
+    
+    # Variance
+    # v = L_dd^-1 K_dt
+    v_mat = jax.scipy.linalg.solve_triangular(L_dd, K_dt, lower=True)
+    # pred_cov = K_tt - v.T v
+    pred_cov = K_tt - jnp.dot(v_mat.T, v_mat)
+    pred_var = jnp.diag(pred_cov) # We only need diagonal for std
+    pred_std = jnp.sqrt(jnp.maximum(pred_var, 1e-10))
+    
+    # Sample (using joint sample we already computed is fine/better)
+    # OR reconstruct:
+    # pred_sample = pred_mean + pred_std * N(0,1)? (NO, ignores correlations between test points)
+    # Correct would be MVN sample using pred_cov.
+    # But `f_sample[-M:]` IS a valid sample from the joint, effectively posterior sample.
+    sample_test = f_sample[-M_test:]
+    
+    return pred_mean, pred_std, sample_test
 
 
 def gp_predict_pure(
@@ -591,7 +932,11 @@ def gp_predict_pure(
             jnp.where(
                 stdev_measure_base > 0,
                 stdev_measure**2 * loads_train + stdev_measure_base**2,
-                stdev_measure**2 * loads_train # Proportional default
+                jnp.where(
+                    noise_model == "prop_quad",
+                    stdev_measure**2 * loads_train**2,
+                    stdev_measure**2 * loads_train # Proportional default
+                )
             )
         )
         K_ff = K_ff + jnp.diag(noise_diag)

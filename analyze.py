@@ -10,11 +10,12 @@ import pandas as pd
 import seaborn as sns
 from datetime import datetime
 import argparse
+from scipy.stats import norm, expon, lognorm
 
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
-from src.core.models import model_n_hv, posterior_predict
+from src.core.models import model_n_hv, model_n, model_n_hierarchical, posterior_predict
 from src.io.output_manager import save_config_log
 from src.vis.plotting import (
     plot_experimental_data,
@@ -25,7 +26,126 @@ from src.vis.plotting import (
     plot_grid_prediction,
     plot_spaghetti_verification,
     plot_grid_spaghetti,
+    plot_latent_variables,
 )
+
+
+def get_prior_pdf(key, x_vals):
+    priors_config = config["priors"]
+    
+    # Physical parameters (Theta) - Reparameterized
+    if key in priors_config["theta"]["reparam"]:
+        p = priors_config["theta"]["reparam"][key]
+        return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
+
+    # Hyperparameters
+    # Length scales: val = exp(mean + scale * N(0,1)) -> LogNormal
+    if key.startswith("lambda_"):
+        if key in priors_config["hyper"]["length_scales"]:
+            p = priors_config["hyper"]["length_scales"][key]
+            s = p["log_scale"]
+            scale = np.exp(p["log_mean"])
+            return lognorm.pdf(x_vals, s=s, scale=scale)
+        return None
+
+    # Helper to extract PDF from numpyro distribution in config
+    def get_pdf_from_target_dist(hyper_key):
+        """Extract scipy PDF from numpyro target_dist in config."""
+        from scipy.stats import truncnorm
+        import numpyro.distributions as npdist
+        
+        if hyper_key not in priors_config["hyper"]:
+            return None
+        cfg = priors_config["hyper"][hyper_key]
+        if "target_dist" not in cfg:
+            return None
+        
+        d = cfg["target_dist"]
+        dist_name = type(d).__name__
+        
+        # Handle different distribution types
+        if isinstance(d, npdist.Exponential):
+            rate = float(d.rate)
+            return expon.pdf(x_vals, scale=1 / rate)
+        elif dist_name == "TruncatedDistribution" or "Truncated" in dist_name:
+            try:
+                base = getattr(d, 'base_dist', d)
+                loc = float(base.loc) if hasattr(base, 'loc') else 0.0
+                scale = float(base.scale) if hasattr(base, 'scale') else 1.0
+                low = float(d.low) if hasattr(d, 'low') else -np.inf
+                high = float(d.high) if hasattr(d, 'high') else np.inf
+                a = (low - loc) / scale if low != -np.inf else -np.inf
+                b = (high - loc) / scale if high != np.inf else np.inf
+                return truncnorm.pdf(x_vals, a, b, loc=loc, scale=scale)
+            except Exception as e:
+                print(f"Warning: Could not extract TruncatedNormal params: {e}")
+                return None
+        elif isinstance(d, npdist.Normal):
+            loc = float(d.loc)
+            scale = float(d.scale)
+            return norm.pdf(x_vals, loc=loc, scale=scale)
+        else:
+            try:
+                import jax.numpy as jnp
+                return np.exp(d.log_prob(jnp.array(x_vals)))
+            except:
+                return None
+
+    # Helper to get LogNormal PDF from log_mean/log_scale config
+    def get_lognorm_pdf(hyper_key):
+        """Get LogNormal PDF from log_mean/log_scale config."""
+        if hyper_key not in priors_config["hyper"]:
+            return None
+        cfg = priors_config["hyper"][hyper_key]
+        if "log_mean" not in cfg:
+            return None
+        # scipy lognorm: s=log_scale, scale=exp(log_mean)
+        return lognorm.pdf(x_vals, s=cfg["log_scale"], scale=np.exp(cfg["log_mean"]))
+
+    # Hyperparameters
+    if key == "mu_emulator":
+        p = priors_config["hyper"]["mu_emulator"]
+        if "log_mean" in p:
+            return lognorm.pdf(x_vals, s=p["log_scale"], scale=np.exp(p["log_mean"]))
+        else:
+            return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
+
+    if key == "sigma_emulator":
+        cfg = priors_config["hyper"]["sigma_emulator"]
+        if "log_mean" in cfg:
+            return get_lognorm_pdf("sigma_emulator")
+        return get_pdf_from_target_dist("sigma_emulator")
+    if key == "sigma_measure":
+        cfg = priors_config["hyper"]["sigma_measure"]
+        if "log_mean" in cfg:
+            return get_lognorm_pdf("sigma_measure")
+        return get_pdf_from_target_dist("sigma_measure")
+    if key == "sigma_measure_base":
+        cfg = priors_config["hyper"]["sigma_measure_base"]
+        if "log_mean" in cfg:
+            return get_lognorm_pdf("sigma_measure_base")
+        return get_pdf_from_target_dist("sigma_measure_base")
+    if key == "sigma_constant":
+        cfg = priors_config["hyper"]["sigma_constant"]
+        if "log_mean" in cfg:
+            return get_lognorm_pdf("sigma_constant")
+        return get_pdf_from_target_dist("sigma_constant")
+
+    # Bias
+    if key.startswith("b_"):
+        return None
+
+    if key.startswith("sigma_b"):
+        if "E1" in key:
+            return expon.pdf(x_vals, scale=1 / 0.0001)
+        if "alpha" in key:
+            return expon.pdf(x_vals, scale=np.deg2rad(10))
+
+    # Normalized params (_n) - Fallback to N(0,1)
+    if key.endswith("_n"):
+        return norm.pdf(x_vals, loc=0.0, scale=1.0)
+        
+    return None
 
 
 def main():
@@ -179,8 +299,8 @@ Examples:
     print(f"DEBUG_ANALYZE: input_xy_sim shape: {input_xy_sim.shape}")
     print(f"DEBUG_ANALYZE: input_xy_sim head:\n{input_xy_sim[:5]}")
     input_theta_sim = data_dict["input_theta_sim"]
-    data_exp_h = data_dict["data_exp_h"]
-    data_exp_v = data_dict["data_exp_v"]
+    data_exp_h = data_dict["data_exp_h_raw"]
+    data_exp_v = data_dict["data_exp_v_raw"]
     data_sim_h = data_dict["data_sim_h"]
     data_sim_v = data_dict["data_sim_v"]
 
@@ -188,160 +308,6 @@ Examples:
     # We construct functions that return the log_prob (or pdf) for plotting
     # For reparameterized priors (model_n_hv), the physical params E_1 etc are:
     # val = mean + scale * N(0,1) -> val ~ N(mean, scale)
-
-    from scipy.stats import norm, expon, lognorm
-
-    priors_config = config["priors"]
-
-    def get_prior_pdf(key, x_vals):
-        # Physical parameters (Theta) - Reparameterized
-        if key in priors_config["theta"]["reparam"]:
-            p = priors_config["theta"]["reparam"][key]
-            return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
-
-        # Hyperparameters
-        # Length scales: val = exp(mean + scale * N(0,1)) -> LogNormal
-        # But wait, the samples we have for lambda_* are the raw N(0,1) samples?
-        # No, let's check models.py.
-        # lambda_P = numpyro.sample("lambda_P", dist.Normal(0, 1))
-        # length_P = jnp.exp(mu + sigma * lambda_P)
-        # The posterior samples contain "lambda_P" (the N(0,1) variable) AND potentially the transformed one if deterministic?
-        # The user asked for plots of "lambda_P". In the model, "lambda_P" is Standard Normal N(0,1).
-        # So for any parameter that is sampled as N(0,1) in the model (like E_1_n, lambda_P, etc.), the prior is N(0,1).
-
-        # Let's check what keys we are plotting.
-        # Physical: E_1, E_2...
-        # In model_n_hv: E_1 = E_1_mean + E_1_scale * E_1_n
-        # E_1 is a Deterministic node.
-        # So its prior is N(E_1_mean, E_1_scale).
-        if key in priors_config["theta"]["reparam"]:
-            p = priors_config["theta"]["reparam"][key]
-            return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
-
-        # Hyperparameters (Lambdas) - LogNormal reparameterization
-        if key.startswith("lambda_"):
-            # lambda ~ LogNormal via exp(log_mean + log_scale * N(0,1))
-            # In scipy.stats.lognorm(s, scale): s=log_scale, scale=exp(log_mean)
-            if key in priors_config["hyper"]["length_scales"]:
-                p = priors_config["hyper"]["length_scales"][key]
-                s = p["log_scale"]
-                scale = np.exp(p["log_mean"])
-                return lognorm.pdf(x_vals, s=s, scale=scale)
-            return None
-
-        # Emulator Mean/Scale
-        # mu_emulator: Normal(mean, scale) or LogNormal(log_mean, log_scale)
-        if key == "mu_emulator":
-            p = priors_config["hyper"]["mu_emulator"]
-            if "log_mean" in p:
-                # LogNormal: val = exp(log_mean + log_scale * N(0,1))
-                # scipy lognorm: s=log_scale, scale=exp(log_mean)
-                return lognorm.pdf(x_vals, s=p["log_scale"], scale=np.exp(p["log_mean"]))
-            else:
-                return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
-
-        # Helper to extract PDF from numpyro distribution in config
-        def get_pdf_from_target_dist(hyper_key):
-            """Extract scipy PDF from numpyro target_dist in config."""
-            from scipy.stats import truncnorm
-            import numpyro.distributions as npdist
-            
-            if hyper_key not in priors_config["hyper"]:
-                return None
-            cfg = priors_config["hyper"][hyper_key]
-            if "target_dist" not in cfg:
-                return None
-            
-            d = cfg["target_dist"]
-            dist_name = type(d).__name__
-            
-            # Handle different distribution types
-            if isinstance(d, npdist.Exponential):
-                rate = float(d.rate)
-                return expon.pdf(x_vals, scale=1 / rate)
-            elif dist_name == "TruncatedDistribution" or "Truncated" in dist_name:
-                # TruncatedNormal creates a TruncatedDistribution object
-                # Extract parameters from the base distribution
-                try:
-                    base = getattr(d, 'base_dist', d)  # Get base distribution
-                    loc = float(base.loc) if hasattr(base, 'loc') else 0.0
-                    scale = float(base.scale) if hasattr(base, 'scale') else 1.0
-                    low = float(d.low) if hasattr(d, 'low') else -np.inf
-                    high = float(d.high) if hasattr(d, 'high') else np.inf
-                    # scipy truncnorm uses (a, b) = (low - loc) / scale, (high - loc) / scale
-                    a = (low - loc) / scale if low != -np.inf else -np.inf
-                    b = (high - loc) / scale if high != np.inf else np.inf
-                    return truncnorm.pdf(x_vals, a, b, loc=loc, scale=scale)
-                except Exception as e:
-                    print(f"Warning: Could not extract TruncatedNormal params: {e}")
-                    return None
-            elif isinstance(d, npdist.Normal):
-                loc = float(d.loc)
-                scale = float(d.scale)
-                return norm.pdf(x_vals, loc=loc, scale=scale)
-            else:
-                # Fallback: try to use log_prob if available
-                try:
-                    import jax.numpy as jnp
-                    return np.exp(d.log_prob(jnp.array(x_vals)))
-                except:
-                    return None
-
-        # Helper to get LogNormal PDF from log_mean/log_scale config
-        def get_lognorm_pdf(hyper_key):
-            """Get LogNormal PDF from log_mean/log_scale config."""
-            if hyper_key not in priors_config["hyper"]:
-                return None
-            cfg = priors_config["hyper"][hyper_key]
-            if "log_mean" not in cfg:
-                return None
-            # scipy lognorm: s=log_scale, scale=exp(log_mean)
-            return lognorm.pdf(x_vals, s=cfg["log_scale"], scale=np.exp(cfg["log_mean"]))
-
-        # Hyperparameters with target_dist or log_mean/log_scale
-        if key == "sigma_emulator":
-            cfg = priors_config["hyper"]["sigma_emulator"]
-            if "log_mean" in cfg:
-                return get_lognorm_pdf("sigma_emulator")
-            return get_pdf_from_target_dist("sigma_emulator")
-        if key == "sigma_measure":
-            cfg = priors_config["hyper"]["sigma_measure"]
-            if "log_mean" in cfg:
-                return get_lognorm_pdf("sigma_measure")
-            return get_pdf_from_target_dist("sigma_measure")
-        if key == "sigma_measure_base":
-            return get_pdf_from_target_dist("sigma_measure_base")
-        if key == "sigma_constant":
-            return get_pdf_from_target_dist("sigma_constant")
-
-        # Bias
-        if key.startswith("b_"):
-            # b_E1 ~ Normal(0, sigma_b_E1)
-            # This is hierarchical. We can't easily plot a marginal prior for b_E1 without integrating out sigma_b_E1.
-            # Or maybe sigma_b_E1 is fixed? No, it has a prior.
-            # For now, maybe skip prior for bias terms or just plot N(0, 1) if they were normalized?
-            # They are: b_E1 = sigma_b_E1 * b_E1_n. b_E1_n ~ N(0,1).
-            return None
-
-        if key.startswith("sigma_b"):
-            # Exponential priors
-            if "E1" in key:
-                return expon.pdf(x_vals, scale=1 / 0.0001)
-            if "alpha" in key:
-                return expon.pdf(
-                    x_vals, scale=np.deg2rad(10)
-                )  # 1/rate = scale. rate=1/val -> scale=val
-
-        # Normalized params (_n)
-        if key.startswith("lambda_"):
-            if key in priors_config["hyper"]["length_scales"]:
-                p = priors_config["hyper"]["length_scales"][key]
-                s = p["scale"]
-                scale = np.exp(p["mean"])
-                return lognorm.pdf(x_vals, s=s, scale=scale)
-            return norm.pdf(x_vals, loc=0.0, scale=1.0)
-
-        return None
 
     # Plot categories
     import pandas as pd
@@ -402,7 +368,15 @@ Examples:
             prior_pdf_fn=get_prior_pdf,
             save_path=figures_dir / f"posterior_n_{suffix}.png",
         )
-        save_stats_csv(samples_n, f"inference_n_stats_{suffix}.csv")
+        save_stats_csv(samples_n, f"inference_n_stats_{timestamp}.csv")
+
+    # 4. Latent Variables Plot (if present)
+    if "epsilon" in samples and "sigma_latent" in samples:
+        plot_latent_variables(
+            samples["epsilon"],
+            samples["sigma_latent"],
+            save_path=figures_dir / f"posterior_latent_variables_{timestamp}.png"
+        )
 
     # 5. Prediction Plots
     print("Generating prediction plots...")
@@ -435,8 +409,17 @@ Examples:
     rng_key = random.PRNGKey(0)
     rng_key, rng_key_prior, rng_key_post = random.split(rng_key, 3)
 
+    # Select model for prior sampling
+    model_type = config.get("model_type", "model_n_hv")
+    if model_type == "model_hierarchical":
+        model_prior = model_n_hierarchical
+    elif model_type == "model_n":
+        model_prior = model_n
+    else:
+        model_prior = model_n_hv
+
     # We need to run Predictive to get priors for all variables
-    prior_predictive = Predictive(model_n_hv, num_samples=num_pred_samples)
+    prior_predictive = Predictive(model_prior, num_samples=num_pred_samples)
     prior_samples_all = prior_predictive(
         rng_key_prior,
         input_xy_exp,
@@ -492,6 +475,16 @@ Examples:
             sigma_constant = get_batch("sigma_constant")
         except KeyError:
             sigma_constant = jnp.zeros_like(mu_emulator)
+            
+        try:
+            sigma_latent = get_batch("sigma_latent")
+        except KeyError:
+            sigma_latent = jnp.zeros_like(mu_emulator)
+
+        try:
+            epsilon = get_batch("epsilon")
+        except KeyError:
+            epsilon = jnp.zeros((mu_emulator.shape[0], 0)) # Empty if not present
 
         # Length scales
         l_P = get_batch("lambda_P")
@@ -536,6 +529,8 @@ Examples:
             sigma_measure,
             sigma_measure_base,
             sigma_constant,
+            sigma_latent,
+            epsilon,
         )
 
     # Extract Prior Params
@@ -570,10 +565,13 @@ Examples:
             sig_meas,
             sig_meas_base,
             sig_const,
+            sig_latent,
+            eps_samp,
         ) = params_tuple
 
         def predict_point(
             rng,
+            t_theta,
             m_em,
             s_em,
             l_xy,
@@ -581,7 +579,8 @@ Examples:
             s_meas,
             s_meas_base,
             s_const,
-            t_theta,
+            s_latent,
+            eps,
             t_xy,
             direction,
             is_prior,
@@ -596,10 +595,16 @@ Examples:
                 exp_xy = jnp.concatenate(input_xy_exp, axis=0)
                 exp_theta = jnp.tile(t_theta, (exp_xy.shape[0], 1))
                 exp_data = jnp.concatenate(
-                    data_exp_v if direction == "v" else data_exp_h, axis=0
+                    [d.flatten() for d in (data_exp_v if direction == "v" else data_exp_h)]
                 )
 
             sim_data = data_sim_v if direction == "v" else data_sim_h
+
+            # Prepare Experiment IDs for Hierarchical Model
+            # (Matches input_xy_exp structure)
+            num_exps = len(input_xy_exp)
+            exp_ids_list = [jnp.full(input_xy_exp[i].shape[0], i) for i in range(num_exps)]
+            experiment_ids = jnp.concatenate(exp_ids_list)
 
             # Get GP realization via Cholesky sampling from posterior_predict
             mean, std_em, sample = posterior_predict(
@@ -619,12 +624,19 @@ Examples:
                 s_meas,
                 s_meas_base,
                 s_const,
+                # Pass experiment_ids only for posterior prediction (where data exists)
+                # and if we are in hierarchical mode (implied by experiment_ids being created)
+                # We check config via outer scope? or just pass if not is_prior.
+                # If is_prior, exp data is empty so we pass None to avoid expansion mismatch.
+                experiment_ids=(experiment_ids if not is_prior else None),
+                epsilon=eps if not is_prior else None, # Pass epsilon sample
+                noise_model=config["data"].get("noise_model", "proportional"),
                 direction=direction,
             )
             return mean, std_em, sample
 
         vmap_predict = vmap(
-            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None)
+            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None)
         )
 
         num_samples = test_theta.shape[0]
@@ -632,14 +644,16 @@ Examples:
 
         means, stds_em, f_samples = vmap_predict(
             rng_keys,
-            mu_em,
-            sig_em,
-            len_xy,
-            len_th,
+            test_theta,
+            mu_em, 
+            sig_em, 
+            len_xy, 
+            len_th, 
             sig_meas,
             sig_meas_base,
             sig_const,
-            test_theta,
+            sig_latent,
+            eps_samp,
             current_test_xy,
             direction,
             use_prior,
@@ -656,6 +670,8 @@ Examples:
             )
         elif noise_model == "constant":
             noise_var = sig_const[:, None] ** 2 * jnp.ones((n_samples, n_points))
+        elif noise_model == "prop_quad":
+             noise_var = sig_meas[:, None] ** 2 * loads[None, :] ** 2
         else:
             noise_var = sig_meas[:, None] ** 2 * loads[None, :]
 

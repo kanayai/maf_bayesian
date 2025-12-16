@@ -147,7 +147,7 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
     if num_vars > 1:
         axes = axes.flatten()
     else:
-        axes = [axes]
+        axes = np.array([axes]) if not isinstance(axes, np.ndarray) else axes.flatten()
     
     for i, key in enumerate(keys):
         # Posterior: Histogram only (stat="density" to match KDE scale)
@@ -606,6 +606,53 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Saved {title_prefix} spaghetti grid plot to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+def plot_latent_variables(epsilon_samples, sigma_latent_samples, save_path=None):
+    """
+    Plots posterior distributions of latent variables epsilon_i for each specimen
+    along with the prior Normal(0, sigma_latent).
+    
+    Args:
+        epsilon_samples: (N_samples, N_experiments) array
+        sigma_latent_samples: (N_samples,) array
+        save_path: str, optional path to save figure
+    """
+    n_exp = epsilon_samples.shape[1]
+    
+    # Grid layout: try to be roughly square
+    n_cols = 4
+    n_rows = (n_exp + n_cols - 1) // n_cols
+    
+    plt.figure(figsize=(15, 3.5 * n_rows))
+    
+    # Calculate average sigma_latent for prior plotting
+    sigma_mean = np.mean(sigma_latent_samples)
+    x_grid = np.linspace(-4 * sigma_mean, 4 * sigma_mean, 200)
+    prior_pdf = (1 / (sigma_mean * np.sqrt(2 * np.pi))) * np.exp(-0.5 * (x_grid / sigma_mean)**2)
+    
+    for i in range(n_exp):
+        ax = plt.subplot(n_rows, n_cols, i+1)
+        
+        # Plot Posterior
+        sns.histplot(epsilon_samples[:, i], stat="density", kde=True, 
+                     color='blue', alpha=0.4, label='Posterior', ax=ax)
+        
+        # Plot Prior
+        ax.plot(x_grid, prior_pdf, 'r--', linewidth=2, label=f'Prior N(0, {sigma_mean:.3f})')
+        
+        ax.set_title(f"Specimen {i+1}")
+        ax.set_xlabel(r"$\epsilon_i$")
+        if i == 0:
+            ax.legend(loc='best')
+            
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path)
+        print(f"Saved latent variables plot to {save_path}")
     else:
         plt.show()
     plt.close()

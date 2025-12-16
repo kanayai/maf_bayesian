@@ -8,7 +8,7 @@ import argparse
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
-from src.core.models import model_n_hv, model_n
+from src.core.models import model_n_hv, model_n, model_n_hierarchical
 
 def run_inference(model, rng_key, data_dict, config):
     """
@@ -58,6 +58,17 @@ def run_inference(model, rng_key, data_dict, config):
                  data_exp,
                  data_sim,
                  config)
+    elif config["model_type"] == "model_hierarchical":
+        # model_n_hierarchical(input_xy_exp, input_xy_sim, input_theta_sim, data_exp_h_raw, data_exp_v_raw, data_sim_h, data_sim_v, config)
+        mcmc.run(rng_key,
+                 data_dict["input_xy_exp"],
+                 data_dict["input_xy_sim"],
+                 data_dict["input_theta_sim"],
+                 data_dict["data_exp_h_raw"], # Use RAW data
+                 data_dict["data_exp_v_raw"],
+                 data_dict["data_sim_h"],
+                 data_dict["data_sim_v"],
+                 config)
     
     mcmc.print_summary()
     return mcmc
@@ -90,7 +101,7 @@ def save_results(mcmc, config, output_mode="default"):
     angles = config["data"]["angles"]
     model_type = config["model_type"]
     
-    if model_type == "model_n_hv":
+    if model_type == "model_n_hv" or model_type == "model_hierarchical":
         suffix = "hv" + "".join([f"_{i}" for i in angles]) if len(angles) != 3 else "hv"
     else:
         # For model_n, include direction
@@ -165,6 +176,8 @@ Examples:
         model = model_n_hv
     elif config["model_type"] == "model_n":
         model = model_n
+    elif config["model_type"] == "model_hierarchical":
+        model = model_n_hierarchical
     else:
         raise NotImplementedError(f"Model {config['model_type']} not yet implemented in main.py")
 

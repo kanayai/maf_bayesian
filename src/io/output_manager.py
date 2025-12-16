@@ -66,6 +66,12 @@ def _config_encoder(obj):
     # Check if it's a numpyro distribution
     if isinstance(obj, dist.Distribution):
         return _serialize_distribution(obj)
+    
+    # Handle numpy scalars
+    import numpy as np
+    if isinstance(obj, (np.generic)):
+        return obj.item()
+        
     # Fallback to string representation
     return str(obj)
 
