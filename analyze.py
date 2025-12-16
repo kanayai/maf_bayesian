@@ -299,8 +299,8 @@ Examples:
     print(f"DEBUG_ANALYZE: input_xy_sim shape: {input_xy_sim.shape}")
     print(f"DEBUG_ANALYZE: input_xy_sim head:\n{input_xy_sim[:5]}")
     input_theta_sim = data_dict["input_theta_sim"]
-    data_exp_h = data_dict["data_exp_h_raw"]
-    data_exp_v = data_dict["data_exp_v_raw"]
+    data_exp_h = data_dict["data_exp_h"]
+    data_exp_v = data_dict["data_exp_v"]
     data_sim_h = data_dict["data_sim_h"]
     data_sim_v = data_dict["data_sim_v"]
 
@@ -628,7 +628,11 @@ Examples:
                 # and if we are in hierarchical mode (implied by experiment_ids being created)
                 # We check config via outer scope? or just pass if not is_prior.
                 # If is_prior, exp data is empty so we pass None to avoid expansion mismatch.
-                experiment_ids=(experiment_ids if not is_prior else None),
+                experiment_ids=(
+                    experiment_ids
+                    if (not is_prior and config["model_type"] == "model_hierarchical")
+                    else None
+                ),
                 epsilon=eps if not is_prior else None, # Pass epsilon sample
                 noise_model=config["data"].get("noise_model", "proportional"),
                 direction=direction,
