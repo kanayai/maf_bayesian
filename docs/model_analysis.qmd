@@ -8,13 +8,13 @@ This document provides a detailed analysis of the two active model definitions i
 
 The file contains three distinct model formulations. The key differences lie in their **parameterization strategy** (Centered vs. Non-Centered), **data handling** (Single vs. Multi-output), and **prior distributions**.
 
-| Feature | `model_n` | `model_n_hv` |
-| :--- | :--- | :--- |
-| **Type** | Reparameterized | Multi-Output Reparameterized |
-| **Parameterization** | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. |
-| **Outputs** | Single (Switchable S/N) | **Dual (Shear & Normal)** |
-| **Mean Function** | $P \sin(\alpha)$ OR $P \cos(\alpha)$ | $P \sin(\alpha)$ AND $P \cos(\alpha)$ |
-| **Priors** | **Current** | **Current** |
+| Feature | `model_n` | `model_n_hv` | `model_hierarchical` |
+| :--- | :--- | :--- | :--- |
+| **Type** | Reparameterized | Multi-Output Reparameterized | Hierarchical Multi-Output |
+| **Parameterization** | **Non-Centered** | **Non-Centered** | **Non-Centered** + Latent Mapping |
+| **Outputs** | Single | **Dual (S & N)** | **Dual (S & N)** |
+| **Mean Function** | $P \sin(\alpha)$ OR $P \cos(\alpha)$ | $P \sin(\alpha)$ AND $P \cos(\alpha)$ | $P \sin(\alpha) + \epsilon_i$ ... |
+| **Priors** | Set A | Set A | Set A + $\sigma_{latent}$ |
 
 ### Detailed Prior Comparison
 
@@ -368,3 +368,40 @@ Based on literature regarding Hamiltonian Monte Carlo and NUTS, the centered `mo
 2.  **Efficiency**:
     *   For the type of GP inference performed here (learning separate length scales and variances), the non-centered implementations (`model_n`) will almost always converge faster and produce more reliable chains than the centered `model`.
 
+
+## 5. Hierarchical Model (`model_hierarchical`)
+
+The `model_hierarchical` function expands on `model_n_hv` by introducing a **Latent Variable** for each specimen to account for specimen-specific variability that systematic trends (`theta`) cannot capture.
+
+### 5.1 Mathematical Formulation
+
+For each experiment (specimen) $i$:
+
+1.  Sample a latent offset:
+    83000 \epsilon_i \sim \mathcal{N}(0, \sigma_{\text{latent}}^2) 83000
+    where $\sigma_{\text{latent}} \sim \text{LogNormal}(-5, 1.0)$ (prior mean $\approx 0.01$).
+
+2.  Modify the Mean Function:
+    83000 \boldsymbol{\mu}_{total}(\mathbf{x}_i, \theta) = \boldsymbol{\mu}_{physics}(\mathbf{x}_i, \theta) + \epsilon_i 83000
+    
+    This effectively shifts the entire predicted curve (Strain vs Load) up or down for that specific specimen.
+
+### 5.2 Data Expansion and Performance
+
+To implement this correctly, the Gaussian Process must treat "Experiment $i$" as distinct from "Experiment $j$" even if they are at the same angle, because they have different $\epsilon_i$.
+
+*   **Implementation**: This is achieved by explicitly tracking experiment IDs.
+*   **Data Expansion**: The experimental dataset is expanded by a factor of 3 (because each experiment has 3 simultaneous sensor readings that share the same $\epsilon_i$).
+    *   Standard Model: $N \approx 200$ points.
+    *   Hierarchical Model: $N \approx 600$ points.
+*   **Computational Cost**: Since GP inference scales as $O(N^3)$, increasing $N$ by $3\times$ increases computational cost by $3^3 = 27\times$ (theoretically), though practically observed as ~12-13x due to optimizations and simulation data being constant.
+
+### 5.3 Motivation
+
+Standard models assume that all scatter around the mean prediction is independent measurement noise ($\Sigma_\epsilon$). However, real composite specimens often show **systematic offsets**: one specimen might be consistently stiffer than another due to fiber volume fraction variations or curing differences.
+
+The hierarchical model disentangles:
+*   **Measurement Noise** ($\sigma_{measure}$): Point-to-point scatter (jitter).
+*   **Latent Offset** ($\sigma_{latent}$): Specimen-to-specimen scatter (shift).
+
+This results in more accurate parameter estimates ($\theta$) by preventing specimen-specific outliers from skewing the global mean.

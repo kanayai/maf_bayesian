@@ -5,7 +5,16 @@ Bayesian parameter estimation and prediction in multidirectional composite lamin
 ## Overview
 This project uses **Bayesian Inference** to calibrate material properties of composite laminates by combining experimental data with Finite Element (FE) simulation results. It employs a **Gaussian Process (GP) emulator** to correct for potential biases between the simulation and reality.
 
+### 3. Hierarchical Model (`model_hierarchical`)
+A hierarchical formulation where each specimen has a latent random effect, modeling specimen-specific variability that persists across different angles.
+- **Latent Variable**: $\epsilon_i \sim \mathcal{N}(0, \sigma_{\text{latent}}^2)$ for each specimen $i$.
+- **Mean Function**: $\mu(x, \theta) + \epsilon_i$.
+- **Performance**: Computationally more expensive (~12x slower) due to data expansion (3x points per experiment) and $O(N^3)$ Gaussian Process scaling.
+
 ## Key Features
+- **Explicit Latent Variable Tracking**: The analysis pipeline explicitly samples and visualizes the latent variables $\epsilon_i$ to understand specimen-specific deviations.
+- **Unified Interface**: `analyze.py` handles data loading, model selection, inference, and plotting through a single entry point.
+- **Reproducibility**: Configuration-driven workflow with random seed control.
 - **Bayesian Inference**: Uses MCMC (Markov Chain Monte Carlo) via `numpyro` and `jax` to estimate posterior distributions of material parameters ($E_1, E_2, \nu_{12}, G_{12}$).
 - **Gaussian Process Emulator**: Bridges the gap between FE models and experimental observations.
 - **Dual Uncertainty Bands**: Prediction plots show both **function uncertainty** (where is the true response?) and **observation uncertainty** (what would a new measurement be?).
