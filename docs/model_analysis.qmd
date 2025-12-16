@@ -378,11 +378,11 @@ The `model_hierarchical` function expands on `model_n_hv` by introducing a **Lat
 For each experiment (specimen) $i$:
 
 1.  Sample a latent offset:
-    83000 \epsilon_i \sim \mathcal{N}(0, \sigma_{\text{latent}}^2) 83000
+    $$ \epsilon_i \sim \mathcal{N}(0, \sigma_{\text{latent}}^2) $$
     where $\sigma_{\text{latent}} \sim \text{LogNormal}(-5, 1.0)$ (prior mean $\approx 0.01$).
 
 2.  Modify the Mean Function:
-    83000 \boldsymbol{\mu}_{total}(\mathbf{x}_i, \theta) = \boldsymbol{\mu}_{physics}(\mathbf{x}_i, \theta) + \epsilon_i 83000
+    $$ \boldsymbol{\mu}_{total}(\mathbf{x}_i, \theta) = \boldsymbol{\mu}_{physics}(\mathbf{x}_i, \theta) + \epsilon_i $$
     
     This effectively shifts the entire predicted curve (Strain vs Load) up or down for that specific specimen.
 
