@@ -127,11 +127,12 @@ def plot_averaged_experimental_data(data_dict, save_path=None):
         plt.show()
     plt.close()
 
-def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, layout_rows=None):
+def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None, save_path=None, layout_rows=None):
     """
     Plots histograms of posterior samples for all parameters.
     If prior_pdf_fn is provided, plots analytical prior density as a green line.
     prior_pdf_fn(key, x_vals) -> pdf_vals
+    If prior_samples is provided (dict), plots prior histogram for matching keys.
     """
     keys = list(samples.keys())
     num_vars = len(keys)
@@ -151,42 +152,39 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, save_path=None, lay
     
     for i, key in enumerate(keys):
         # Posterior: Histogram only (stat="density" to match KDE scale)
-        # Use stat="density" to normalize area to 1 (PDF scale)
         sns.histplot(samples[key], ax=axes[i], kde=False, stat="density", label="Posterior", alpha=0.4)
         
-        # Custom axis limits for specific parameters (set before computing x_grid)
-        custom_xlim = None
-        # No custom xlim currently - add here if needed for specific parameters
-        
+        # Prior: Samples (Histogram)
+        if prior_samples is not None and key in prior_samples:
+            # Flatten if necessary (e.g. if chains dim exists)
+            p_s = np.array(prior_samples[key]).flatten()
+            sns.histplot(p_s, ax=axes[i], kde=False, stat="density", color='green', alpha=0.2, label="Prior (Sampled)")
+
+        # Custom axis limits based on Posterior to avoid "single line" plots
+        # We calculate range from posterior samples ONLY.
+        p_min = np.min(samples[key])
+        p_max = np.max(samples[key])
+        p_range = p_max - p_min
+        if p_range == 0:
+            scale = abs(p_min) * 0.1 if p_min != 0 else 1.0
+            custom_xlim = (p_min - 5*scale, p_max + 5*scale)
+        else:
+            # Add padding (e.g., 30% on each side)
+            padding = 0.3 * p_range
+            custom_xlim = (p_min - padding, p_max + padding)
+
         # Prior: Analytical PDF
         if prior_pdf_fn is not None:
-            # Use custom xlim range if set, otherwise use posterior range
-            if custom_xlim is not None:
-                x_grid = np.linspace(custom_xlim[0], custom_xlim[1], 200)
-            else:
-                # Create grid based on posterior range (or wider if needed)
-                data_min = np.min(samples[key])
-                data_max = np.max(samples[key])
-                data_range = data_max - data_min
-                # If range is 0 (constant), add some buffer
-                if data_range == 0: data_range = 1.0
-                
-                x_min = data_min - 0.5*data_range
-                x_max = data_max + 0.5*data_range
-                
-                # For positive-only parameters (LogNormal, Exponential, etc.), ensure x_grid starts at 0
-                if key.startswith("lambda_") or key.startswith("sigma_") or key == "mu_emulator":
-                    x_min = max(0, x_min)
-                
-                x_grid = np.linspace(x_min, x_max, 200)
+             # Use the zoomed-in grid for evaluating PDF to ensure resolution
+            x_grid = np.linspace(custom_xlim[0], custom_xlim[1], 200)
             
             # Get PDF values
             pdf_vals = prior_pdf_fn(key, x_grid)
             
             if pdf_vals is not None:
-                axes[i].plot(x_grid, pdf_vals, color='green', linewidth=2, label="Prior")
+                axes[i].plot(x_grid, pdf_vals, color='green', linewidth=2, label="Prior (Analytic)")
         
-        # Apply custom xlim after plotting
+        # Apply custom xlim
         if custom_xlim is not None:
             axes[i].set_xlim(custom_xlim)
             

@@ -498,6 +498,7 @@ def model_empirical(
     input_xy_exp,
     data_exp_h,
     data_exp_v,
+    exp_angle_indices, # Array of indices mapping experiment -> standard angle index
     config,
 ):
     """
@@ -509,9 +510,9 @@ def model_empirical(
     # Get priors (special handling in get_priors_from_config for empirical)
     (
         _,
-        bias_slope, # List of bias terms per experiment
+        bias_slope, 
         _,
-        mean_emulator, # The global slope
+        mean_emulator, 
         _,
         _,
         _,
@@ -522,28 +523,42 @@ def model_empirical(
 
     noise_model = config["data"].get("noise_model", "proportional")
     
+    # Standard angles 
+    standard_angles_deg = [45, 90, 135]
+    
+    # Sample gammas for each standard angle
+    # Store in a list/array for indexing
+    gamma_v_list = []
+    gamma_h_list = []
+    gamma_scale = config.get("empirical", {}).get("gamma_scale", 0.1)
+
+    for ang_deg in standard_angles_deg:
+        ang_rad = jnp.radians(ang_deg)
+        # Sample shared gamma for this angle
+        # Naming convention: gamma_v_45
+        gv = numpyro.sample(f"gamma_v_{ang_deg}", dist.Normal(jnp.cos(ang_rad), gamma_scale))
+        gh = numpyro.sample(f"gamma_h_{ang_deg}", dist.Normal(jnp.sin(ang_rad), gamma_scale))
+        gamma_v_list.append(gv)
+        gamma_h_list.append(gh)
+        
+    # Convert list to array for indexing if needed, or use list indexing manually?
+    # JAX array indexing is better. Stack them.
+    gamma_v_arr = jnp.stack(gamma_v_list)
+    gamma_h_arr = jnp.stack(gamma_h_list)
+
     for i in range(num_exp):
         # Data for this experiment
         xy = input_xy_exp[i]
         load = xy[:, 0]
-        angle = xy[:, 1] # radians
+        # Angle info is now coming from indices passed in
         
-        # Current Angle (Scalar for gamma prior)
-        # Assuming angle is constant per experiment
-        current_angle = angle[0]
-        
-        gamma_scale = config.get("empirical", {}).get("gamma_scale", 0.1)
-        
-        # Sample Gammas
-        gamma_v = numpyro.sample(f"gamma_v_{i}", dist.Normal(jnp.cos(current_angle), gamma_scale))
-        gamma_h = numpyro.sample(f"gamma_h_{i}", dist.Normal(jnp.sin(current_angle), gamma_scale))
+        # Get shared gamma using the passed index
+        idx = exp_angle_indices[i]
+        gamma_v = gamma_v_arr[idx]
+        gamma_h = gamma_h_arr[idx]
 
         # Determine effective slopes (Betas)
-        # Bias b_i is shared? "b_i is the random effect... specific to experiment"
-        # The user formula: beta = mu * gamma + b_i
-        # So b_i is added to both beta_v and beta_h? Or are they separate biases?
-        # "b_i... has prior N(0, sigma_b_slope)" implies a single b_i per experiment.
-        
+        # Bias b_i is shared? "b_i... specific to experiment"
         bias = 0.0
         if bias_slope:
             bias = bias_slope[i]
@@ -637,8 +652,10 @@ def posterior_predict(
         # Generate random noise for gamma
         if rng_key is not None:
              keys = random.split(rng_key, 2)
-             gamma_v = mu_gamma_v + gamma_scale * random.normal(keys[0], shape=mu_gamma_v.shape)
-             gamma_h = mu_gamma_h + gamma_scale * random.normal(keys[1], shape=mu_gamma_h.shape)
+             # Sample SCALAR noise for the experiment/curve, not per-point noise
+             # This ensures the prediction line is straight (constant slope)
+             gamma_v = mu_gamma_v + gamma_scale * random.normal(keys[0], shape=())
+             gamma_h = mu_gamma_h + gamma_scale * random.normal(keys[1], shape=())
         else:
              # If no RNG, just use mean (no variability in gamma? or fail?)
              # Usually we want variability.

@@ -17,102 +17,61 @@ This approach is particularly useful when:
 
 ### Core Regression
 
-The foundational assumption is that extension ($y$) is linearly related to Load ($P$) through an effective slope ($\mu_{effective}$), modulated by the test angle ($\alpha$):
+The model posits that the extension ($y$) is linearly related to Load ($P$) through an effective slope ($\beta$), which accounts for both the global material response, geometric projection, and experimental variability:
 
-$$
-y_{shear} = \mu_{effective} \cdot P \cdot \sin(\alpha) + \epsilon
-$$
-
-$$
-y_{normal} = \mu_{effective} \cdot P \cdot \cos(\alpha) + \epsilon
-$$
+$$ y_v = P \cdot \beta_v + \epsilon $$
+$$ y_h = P \cdot \beta_h + \epsilon $$
 
 ### Hierarchical Structure
 
-To account for variability between different experiments (e.g., slight manufacturing differences, clamping variations), we introduce a hierarchical structure on the slope.
+The effective slopes $\beta$ are constructed from a global emulator slope, probabilistic geometric factors ($\gamma$), and an experiment-specific bias ($b_i$):
 
-The effective slope for experiment $i$, denoted $\mu_i$, is defined as:
-
-$$
-\mu_i = \mu_{emulator} + b_i
-$$
+$$ \beta_{v,i} = \mu_{emulator} \cdot \gamma_{v,\alpha_i} + b_i $$
+$$ \beta_{h,i} = \mu_{emulator} \cdot \gamma_{h,\alpha_i} + b_i $$
 
 Where:
 
-*   $\mu_{emulator}$: The global mean slope (or "emulator" slope) shared across all experiments.
-*   $b_i$: The random effect (bias) specific to experiment $i$.
-
-### Priors
-
-The model places the following priors on the parameters:
-
-*   **Global Slope**: LogNormal (or Normal) prior to ensure positivity.
+*   **Global Slope** ($\mu_{emulator}$): The foundational stiffness/compliance parameter share across all experiments.
     $$ \mu_{emulator} \sim \text{LogNormal}(\dots) $$
 
-*   **Experiment Bias**: Modeled as deviations centered around zero.
-    $$ b_i \sim \text{Normal}(0, \sigma_{b\_slope}^2) $$
-    
-    *   $\sigma_{b\_slope}$: The hyperparameter controlling the magnitude of inter-experiment variability. It typically has an Exponential or HalfNormal prior.
+*   **Geometric Factors** ($\gamma$): Probabilistic terms that typically track the trigonometric projection ($\cos \alpha, \sin \alpha$) but allow for deviation (e.g., misalignment).
+    *   **Shared per Angle**: All experiments conducted at the same angle $\alpha$ share the same $\gamma$ parameters.
+    $$ \gamma_{v,\alpha} \sim \mathcal{N}(\cos(\alpha), \sigma_\gamma^2) $$
+    $$ \gamma_{h,\alpha} \sim \mathcal{N}(\sin(\alpha), \sigma_\gamma^2) $$
+    *   $\sigma_\gamma$ (`gamma_scale`) is a configurable hyperparameter.
+
+*   **Experiment Bias** ($b_i$): An additive offset to the slope for experiment $i$.
+    $$ b_i \sim \mathcal{N}(0, \sigma_{b\_slope}^2) $$
+
+*   **Test Angle** ($\alpha_i$): The angle (radians or degrees) at which experiment $i$ was conducted.
+    *   Standard configuration: $45^\circ, 90^\circ, 135^\circ$ (Consistent with previous Certest models).
 
 ### Likelihood
 
-The likelihood function assumes the observed data $y_{obs}$ follows a Multivariate Normal distribution centered on the model predictions:
-
-$$
-y_{obs} \sim \mathcal{N}(\boldsymbol{\mu}_{model}, \Sigma)
-$$
-
-The covariance matrix $\Sigma$ is diagonal (assuming independent measurement noise) with variance $\sigma^2$:
-
-$$
-\sigma^2 = \sigma_{measure}^2 \cdot P + \sigma_{constant}^2
-$$
-
-(Note: The default noise model is proportional to Load $P$).
+The likelihood assumes independent Gaussian noise around the mean prediction:
+$$ y_{obs} \sim \mathcal{N}(P \cdot \beta, \Sigma_{noise}) $$
 
 ## Implementation Details
 
 ### Code Structure
 
-The model is implemented in `src/core/models.py` as `model_empirical`.
+The model is implemented in `src/core/models.py` (`model_empirical`).
 
-*   **Inputs**: It takes `input_xy_exp` (Load, Angle) and `data_exp` (Extension) as inputs. It *ignores* simulation inputs.
-*   **Parameters**:
-    *   `mu_emulator`: Global slope.
-    *   `b_{i}_slope`: Bias for experiment $i$.
-    *   `sigma_b_slope`: Variance of the bias.
-    *   `sigma_measure`: Measurement noise scaling.
-
-### JAX/NumPyro Implementation
-
-The implementation uses a loop over the number of experiments to sample specific bias terms $b_i$ and compute the likelihood for that experiment's batch.
-
-```python
-# Simplified pseudocode
-for i in range(num_exp):
-    # Sample bias for this experiment
-    b_i = numpyro.sample(f"b_{i+1}_slope", dist.Normal(0, sigma_b_slope))
-    
-    # Effective slope
-    slope_eff = mu_emulator + b_i
-    
-    # Compute mean prediction
-    mean_pred = slope_eff * load * trig_func(angle)
-    
-    # Likelihood
-    numpyro.sample(f"obs_{i}", dist.MultivariateNormal(mean_pred, cov), obs=data)
-```
+*   **Gamma Sampling**: The model identifies unique angles (e.g., 45, 90, 135) and samples a shared $\gamma_v$ and $\gamma_h$ for each unique angle derived from the data. These shared parameters are then mapped to each experiment.
+*   **Prediction**: The `posterior_predict` function replicates this generative process, sampling latent $\gamma$ values to generate uncertainty bands that reflect potential geometric misalignment.
 
 ### Configuration
 
-To use this model, update `configs/default_config.py`:
+Update `configs/default_config.py` to control the model:
 
 ```python
 config = {
     "model_type": "model_empirical",
-    "bias": {
-        "add_bias_slope": True,  # Enables the hierarchical bias term
+    "empirical": {
+        "gamma_scale": 0.1,  # Standard deviation for gamma factors
     },
-    # ...
+    "bias": {
+        "add_bias_slope": True,
+    },
 }
 ```
