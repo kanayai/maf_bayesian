@@ -21,6 +21,7 @@ book:
         - prediction_methodology.qmd
         - prior_prediction_issue.qmd
         - gp_hyperparameter_analysis.qmd
+        - empirical_model.qmd
     - part: "Validation"
       chapters:
         - residual_analysis.qmd

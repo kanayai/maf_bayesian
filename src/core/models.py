@@ -19,12 +19,96 @@ def get_priors_from_config(config, num_exp):
     # Order matters: E1, E2, v12, v23, G12
     param_names = ["E_1", "E_2", "v_12", "v_23", "G_12"]
 
-    if "n" not in config["model_type"]:
+    if "n" not in config["model_type"] and "empirical" not in config["model_type"]:
         raise ValueError(
-            "Only reparameterized models (model_type='model_n' or 'model_n_hv') are supported."
+            "Only reparameterized models (model_type='model_n' or 'model_n_hv') or 'model_empirical' are supported."
         )
 
-    # Reparameterized models
+    if "empirical" in config["model_type"]:
+         # Empirical model only needs mu_emulator (slope) and noise
+         # and potentially bias if hierarchical
+         
+         # --- Slope (mu_emulator) ---
+         hyper = priors["hyper"]
+         mean_emulator_n = numpyro.sample("mu_emulator_n", dist.Normal())
+         mu_cfg = hyper["mu_emulator"]
+         if "log_mean" in mu_cfg:
+             mean_emulator = jnp.exp(mu_cfg["log_mean"] + mu_cfg["log_scale"] * mean_emulator_n)
+         else:
+             mean_emulator = mu_cfg["mean"] + mu_cfg["scale"] * mean_emulator_n
+         numpyro.deterministic("mu_emulator", mean_emulator)
+         
+         # --- Measurement Noise ---
+         noise_model = config["data"].get("noise_model", "proportional")
+         stdev_measure = 0.0
+         stdev_measure_base = 0.0
+         stdev_constant = 0.0
+         
+         cdf_normal = dist.Normal().cdf
+         
+         if noise_model == "constant":
+             stdev_constant_n = numpyro.sample("sigma_constant_n", dist.Normal())
+             stdev_constant = hyper["sigma_constant"]["target_dist"].icdf(
+                 cdf_normal(stdev_constant_n)
+             )
+             numpyro.deterministic("sigma_constant", stdev_constant)
+         elif noise_model == "additive":
+             stdev_measure_n = numpyro.sample("sigma_measure_n", dist.Normal())
+             sig_meas_cfg = hyper["sigma_measure"]
+             if "log_mean" in sig_meas_cfg:
+                 stdev_measure = jnp.exp(sig_meas_cfg["log_mean"] + sig_meas_cfg["log_scale"] * stdev_measure_n)
+             else:
+                 stdev_measure = sig_meas_cfg["target_dist"].icdf(cdf_normal(stdev_measure_n))
+             numpyro.deterministic("sigma_measure", stdev_measure)
+
+             stdev_measure_base_n = numpyro.sample("sigma_measure_base_n", dist.Normal())
+             stdev_measure_base = hyper["sigma_measure_base"]["target_dist"].icdf(
+                 cdf_normal(stdev_measure_base_n)
+             )
+             numpyro.deterministic("sigma_measure_base", stdev_measure_base)
+         else:
+             stdev_measure_n = numpyro.sample("sigma_measure_n", dist.Normal())
+             sig_meas_cfg = hyper["sigma_measure"]
+             if "log_mean" in sig_meas_cfg:
+                 stdev_measure = jnp.exp(sig_meas_cfg["log_mean"] + sig_meas_cfg["log_scale"] * stdev_measure_n)
+             else:
+                 stdev_measure = sig_meas_cfg["target_dist"].icdf(cdf_normal(stdev_measure_n))
+             numpyro.deterministic("sigma_measure", stdev_measure)
+             
+         # --- Hierarchical Bias ---
+         # Using bias_priors: sigma_b_E1 (repurposed for slope bias sigma) or new key?
+         # Let's use a generic 'sigma_b_slope' if available, or fall back to 'sigma_b_E1' 
+         # since user said "additively to mu_emulator... similar to how it was on E_1"
+         
+         bias_slope = []
+         if bias_flags.get("add_bias_slope", False):
+              # Check for sigma_b_slope, else use E1 prior as fallback or fail? 
+              # Using sigma_b_E1 for simplicity if sigma_b_slope not defined, 
+              # but better to look for sigma_b_slope.
+              prior_dist = priors["bias_priors"].get("sigma_b_slope", priors["bias_priors"].get("sigma_b_E1"))
+              
+              sigma_b_slope = numpyro.sample("sigma_b_slope", prior_dist)
+              for i in range(num_exp):
+                  b_slope_n = numpyro.sample(f"b_{i+1}_slope_n", dist.Normal())
+                  b_slope = 0.0 + sigma_b_slope * b_slope_n
+                  numpyro.deterministic(f"b_{i+1}_slope", b_slope)
+                  bias_slope.append(b_slope)
+
+         # Return only relevant params. Others as None/Empty.
+         return (
+             None, # theta
+             bias_slope, # bias_E1 (repurposed as bias_slope list)
+             None, # bias_alpha
+             mean_emulator,
+             None, # stdev_emulator
+             None, # length_xy
+             None, # length_theta
+             stdev_measure,
+             stdev_measure_base,
+             stdev_constant
+         )
+
+    # Reparameterized models (original logic)
     reparam_cfg = priors["theta"]["reparam"]
     for name in param_names:
         n_sample = numpyro.sample(f"{name}_n", dist.Normal())
@@ -410,6 +494,107 @@ def model_n_hv(
     )
 
 
+def model_empirical(
+    input_xy_exp,
+    data_exp_h,
+    data_exp_v,
+    config,
+):
+    """
+    Empirical hierarchical model directly linking Load (P) to Extension (d) via effective slope.
+    Slope = mu_emulator + bias_i
+    """
+    num_exp = len(input_xy_exp)
+    
+    # Get priors (special handling in get_priors_from_config for empirical)
+    (
+        _,
+        bias_slope, # List of bias terms per experiment
+        _,
+        mean_emulator, # The global slope
+        _,
+        _,
+        _,
+        stdev_measure,
+        stdev_measure_base,
+        stdev_constant,
+    ) = get_priors_from_config(config, num_exp)
+
+    noise_model = config["data"].get("noise_model", "proportional")
+    
+    for i in range(num_exp):
+        # Data for this experiment
+        xy = input_xy_exp[i]
+        load = xy[:, 0]
+        angle = xy[:, 1] # radians
+        
+        # Current Angle (Scalar for gamma prior)
+        # Assuming angle is constant per experiment
+        current_angle = angle[0]
+        
+        gamma_scale = config.get("empirical", {}).get("gamma_scale", 0.1)
+        
+        # Sample Gammas
+        gamma_v = numpyro.sample(f"gamma_v_{i}", dist.Normal(jnp.cos(current_angle), gamma_scale))
+        gamma_h = numpyro.sample(f"gamma_h_{i}", dist.Normal(jnp.sin(current_angle), gamma_scale))
+
+        # Determine effective slopes (Betas)
+        # Bias b_i is shared? "b_i is the random effect... specific to experiment"
+        # The user formula: beta = mu * gamma + b_i
+        # So b_i is added to both beta_v and beta_h? Or are they separate biases?
+        # "b_i... has prior N(0, sigma_b_slope)" implies a single b_i per experiment.
+        
+        bias = 0.0
+        if bias_slope:
+            bias = bias_slope[i]
+            
+        beta_v = mean_emulator * gamma_v + bias
+        beta_h = mean_emulator * gamma_h + bias
+
+        # Model Mean
+        # Vertical: mean = P * beta_v
+        # Horizontal: mean = P * beta_h
+        
+        mean_v = load * beta_v
+        mean_h = load * beta_h
+        
+        # Noise
+        if noise_model == "additive":
+            noise_var = stdev_measure**2 * load + stdev_measure_base**2
+        elif noise_model == "constant":
+            noise_var = stdev_constant**2 * jnp.ones_like(load)
+        else:
+            noise_var = stdev_measure**2 * load
+            
+        cov_matrix = jnp.diag(noise_var)
+        cov_matrix += 1e-6 * jnp.eye(len(load))
+        
+        # Sample H
+        if data_exp_h is not None and len(data_exp_h) > i:
+             # Check if data exists for this experiment
+             if data_exp_h[i].shape[0] > 0:
+                  # Data shape is (N, 3) -> Transpose to (3, N) for batching
+                  # The distribution has event_shape (N,). 
+                  # Providing obs of shape (3, N) implies a batch_shape of (3,).
+                  obs_data = data_exp_h[i].T
+                  numpyro.sample(
+                      f"obs_h_{i}",
+                      dist.MultivariateNormal(loc=mean_h, covariance_matrix=cov_matrix),
+                      obs=obs_data
+                  )
+                  
+        # Sample V
+        if data_exp_v is not None and len(data_exp_v) > i:
+             if data_exp_v[i].shape[0] > 0:
+                  obs_data = data_exp_v[i].T
+                  numpyro.sample(
+                      f"obs_v_{i}",
+                      dist.MultivariateNormal(loc=mean_v, covariance_matrix=cov_matrix),
+                      obs=obs_data
+                  )
+
+
+
 def posterior_predict(
     rng_key,
     input_xy_exp,
@@ -428,7 +613,65 @@ def posterior_predict(
     stdev_measure_base=0.0,
     stdev_constant=0.0,
     direction="h",
+    bias_slope=None,
+    gamma_scale=0.1,
 ):
+    # Check if we should use empirical logic.
+    if bias_slope is not None:
+        # Empirical Model Logic
+        # Empirical Model Logic
+        # New inputs for prediction?
+        # We need to sample gamma_v and gamma_h for the prediction point
+        
+        # current_test_xy contains [load, angle]
+        load = test_xy[:, 0]
+        angle = test_xy[:, 1]
+        
+        # Sample gammas for the test points
+        import jax.random as random
+        
+        # Gamma Means
+        mu_gamma_v = jnp.cos(angle) 
+        mu_gamma_h = jnp.sin(angle)
+        
+        # Generate random noise for gamma
+        if rng_key is not None:
+             keys = random.split(rng_key, 2)
+             gamma_v = mu_gamma_v + gamma_scale * random.normal(keys[0], shape=mu_gamma_v.shape)
+             gamma_h = mu_gamma_h + gamma_scale * random.normal(keys[1], shape=mu_gamma_h.shape)
+        else:
+             # If no RNG, just use mean (no variability in gamma? or fail?)
+             # Usually we want variability.
+             gamma_v = mu_gamma_v
+             gamma_h = mu_gamma_h
+        
+        # Bias
+        # bias_slope passed is likely the sampled value for this iteration (scalar if vmapped, or array if not?)
+        # analyze.py vmap maps over samples. So bias_slope is scalar (for one sample).
+        # We add it to the slope.
+        
+        bias = bias_slope
+        if isinstance(bias, (list, tuple)):
+             bias = 0.0
+        
+        if direction == "h":
+             beta = mean_emulator * gamma_h + bias
+             means = load * beta
+        else:
+             beta = mean_emulator * gamma_v + bias
+             means = load * beta
+             
+        # stds? 
+        # The function uncertainty comes from the distribution of 'beta' and 'gamma' across samples.
+        # Here we return a single realization (mean of the curve for this sample).
+        # The 'sigma' return usually represents GP sigma?
+        # Here we return 0 sigma (deterministic given parameters).
+        
+        stds = jnp.zeros_like(means)
+        sample = means # No extra latent noise
+        
+        return means, stds, sample
+
     # compute kernels between train and test data, etc.
     input_xy = jnp.concatenate(
         (input_xy_exp, input_xy_sim, test_xy[0][None, :]), axis=0

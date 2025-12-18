@@ -8,7 +8,7 @@ import argparse
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
-from src.core.models import model_n_hv, model_n
+from src.core.models import model_n_hv, model_n, model_empirical
 
 def run_inference(model, rng_key, data_dict, config):
     """
@@ -57,6 +57,13 @@ def run_inference(model, rng_key, data_dict, config):
                  data_dict["input_theta_sim"],
                  data_exp,
                  data_sim,
+                 config)
+    elif config["model_type"] == "model_empirical":
+        # model_empirical(input_xy_exp, data_exp_h, data_exp_v, config)
+        mcmc.run(rng_key,
+                 data_dict["input_xy_exp"],
+                 data_dict["data_exp_h_raw"],
+                 data_dict["data_exp_v_raw"],
                  config)
     
     mcmc.print_summary()
@@ -165,6 +172,8 @@ Examples:
         model = model_n_hv
     elif config["model_type"] == "model_n":
         model = model_n
+    elif config["model_type"] == "model_empirical":
+        model = model_empirical
     else:
         raise NotImplementedError(f"Model {config['model_type']} not yet implemented in main.py")
 

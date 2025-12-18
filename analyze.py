@@ -14,7 +14,7 @@ import argparse
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
-from src.core.models import model_n_hv, posterior_predict
+from src.core.models import model_n_hv, model_empirical, posterior_predict
 from src.io.output_manager import save_config_log
 from src.vis.plotting import (
     plot_experimental_data,
@@ -436,17 +436,32 @@ Examples:
     rng_key, rng_key_prior, rng_key_post = random.split(rng_key, 3)
 
     # We need to run Predictive to get priors for all variables
-    prior_predictive = Predictive(model_n_hv, num_samples=num_pred_samples)
+    # Select model function and arguments
+    if model_type == "model_empirical":
+        model_func = model_empirical
+        model_args = (
+            data_dict["input_xy_exp"],
+            data_dict["data_exp_h_raw"],
+            data_dict["data_exp_v_raw"],
+            config,
+        )
+    else:
+        model_func = model_n_hv
+        model_args = (
+            input_xy_exp,
+            input_xy_sim,
+            input_theta_sim,
+            data_exp_h,
+            data_exp_v,
+            data_sim_h,
+            data_sim_v,
+            config,
+        )
+
+    prior_predictive = Predictive(model_func, num_samples=num_pred_samples)
     prior_samples_all = prior_predictive(
         rng_key_prior,
-        input_xy_exp,
-        input_xy_sim,
-        input_theta_sim,
-        data_exp_h,
-        data_exp_v,
-        data_sim_h,
-        data_sim_v,
-        config,
+        *model_args
     )
 
     # Extract only what we need for prediction (exclude lambdas if they are not needed by predict_batch,
@@ -458,11 +473,27 @@ Examples:
 
     # Helper to extract params from samples dict
     def extract_params(samples_dict, idxs=None):
+        # Determine number of samples from a common key
+        if "E_1" in samples_dict:
+            n_samples = samples_dict["E_1"].shape[0]
+        elif "mu_emulator" in samples_dict:
+            n_samples = samples_dict["mu_emulator"].shape[0]
+        else:
+            # Fallback
+            keys = list(samples_dict.keys())
+            if keys:
+                n_samples = samples_dict[keys[0]].shape[0]
+            else:
+                n_samples = 0
+
         if idxs is None:
-            idxs = jnp.arange(samples_dict["E_1"].shape[0])
+            idxs = jnp.arange(n_samples)
 
         def get_batch(key):
-            return samples_dict[key][idxs]
+            if key in samples_dict:
+                return samples_dict[key][idxs]
+            else:
+                return jnp.zeros(len(idxs))
 
         # Physical
         E_1 = get_batch("E_1")
@@ -527,6 +558,26 @@ Examples:
         length_xy = jnp.stack([l_P, l_alpha], axis=1)
         length_theta = jnp.stack([l_E1, l_E2, l_v12, l_v23, l_G12], axis=1)
 
+
+
+         # Empirical Model Params
+        bias_slope = []
+        if "b_1_slope" in samples_dict:
+             # Assume we have b_1_slope to b_{num_exp}_slope
+             # We need to find how many experiments.
+             # We can count keys starting with "b_" and ending "slope"
+             n_exp = 0
+             while f"b_{n_exp+1}_slope" in samples_dict:
+                 n_exp += 1
+             
+             for i in range(n_exp):
+                 bias_slope.append(get_batch(f"b_{i+1}_slope"))
+        
+        # If empty (prior or not empirical), might return empty list or None
+        # But we need consistent tuple size? 
+        # Actually bias_slope is specific to empirical.
+        # Let's add it to end of tuple.
+        
         return (
             test_theta,
             mu_emulator,
@@ -536,6 +587,7 @@ Examples:
             sigma_measure,
             sigma_measure_base,
             sigma_constant,
+            bias_slope, # List of arrays (N,)
         )
 
     # Extract Prior Params
@@ -543,8 +595,14 @@ Examples:
 
     # --- Posterior Prediction Setup (ONCE) ---
     # Use a subset of samples
-    num_samples = min(num_pred_samples, samples["E_1"].shape[0])
-    indices = np.random.choice(samples["E_1"].shape[0], num_samples, replace=False)
+    # Check what key works
+    if "E_1" in samples:
+         total_samples = samples["E_1"].shape[0]
+    else:
+         total_samples = samples["mu_emulator"].shape[0]
+
+    num_samples = min(num_pred_samples, total_samples)
+    indices = np.random.choice(total_samples, num_samples, replace=False)
 
     post_params_tuple = extract_params(samples, indices)
 
@@ -570,6 +628,7 @@ Examples:
             sig_meas,
             sig_meas_base,
             sig_const,
+            bias_slope_list,
         ) = params_tuple
 
         def predict_point(
@@ -581,11 +640,21 @@ Examples:
             s_meas,
             s_meas_base,
             s_const,
+            bias_slope_item, # Tuple/List of scalars for this sample? No, JAX vmap needs arrays.
+                             # bias_slope_list is a LIST of arrays (N_samples,).
+                             # When vmapped, we get a list of scalars?
+                             # Dealing with list in vmap can be tricky if structure matches.
             t_theta,
             t_xy,
             direction,
             is_prior,
         ):
+            model_type = config.get("model_type", "unknown")
+            
+            # Model specific logic handled inside posterior_predict
+            # if model_type == "model_empirical": logic removed in favor of unified call below
+
+
             if is_prior:
                 # Prior: condition only on simulation data
                 exp_xy = jnp.empty((0, 2))
@@ -620,11 +689,18 @@ Examples:
                 s_meas_base,
                 s_const,
                 direction=direction,
+                bias_slope=bias_slope_item,
+                gamma_scale=config.get("empirical", {}).get("gamma_scale", 0.1),
             )
             return mean, std_em, sample
 
+        # Prepare vmap inputs
+        # bias_slope_list is [array(N), array(N)...]
+        # We need to stack it? Or pass as list? vmap handles lists/tuples if tree structure matches.
+        # Yes, pass bias_slope_list as is. vmap will map over 0-axis of each array in the list.
+        
         vmap_predict = vmap(
-            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None)
+            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None)
         )
 
         num_samples = test_theta.shape[0]
@@ -639,6 +715,7 @@ Examples:
             sig_meas,
             sig_meas_base,
             sig_const,
+            bias_slope_list, # Passed to bias_slope_item
             test_theta,
             current_test_xy,
             direction,
@@ -791,7 +868,7 @@ Examples:
         title_prefix="Posterior"
     )
     # 9. Residual Analysis (Optional)
-    if config["data"].get("run_residual_analysis", False):
+    if config["data"].get("run_residual_analysis", False) and config.get("model_type") != "model_empirical":
         run_residual_analysis(idata, data_dict, figures_dir)
 
     # 10. Traceplots (Optional)
@@ -952,18 +1029,44 @@ def run_residual_analysis(idata, data_dict, figures_dir):
                 + jnp.var(means, axis=0)
             )
 
-            y_obs = (data_exp_h[i] if direction == "h" else data_exp_v[i]).flatten()
-            resid = y_obs - mu_post
-            std_resid = resid / total_std
+            # Retrieve raw data for plotting (N, 3)
+            # We need to correctly handle if data_exp_raw was passed or if we need to lookup
+            # data_exp_h/v were passed as arguments to this function 'generate_prediction_plots'.
+            # Inspecting main(), we passed data_dict["data_exp_h_raw"]. So 'data_exp_h' arg IS the raw list.
+            
+            raw_data = (data_exp_h[i] if direction == "h" else data_exp_v[i]) # Shape (N, 3)
+            
+            # Scatter Plot Data Preparation
+            # We want to plot all 3 points for each load.
+            # loads is (N,)
+            # means (mu_post) is (N,)
+            # raw_data is (N, 3)
+            
+            # Flatten raw_data to (3N,)
+            y_obs_flat = raw_data.flatten() # defaults to row-major (C-style)? (N,3) -> n1,n2,n3
+            # Checked numpy default: 'C'. So it goes row by row. 
+            # Row 0 (Load 0): [L, C, R].
+            
+            # Repeat loads and means to match
+            # We need to repeat each element 3 times to match the row-major flattening
+            loads_flat = np.repeat(loads, 3)
+            mu_post_flat = np.repeat(mu_post, 3)
+            
+            # Residuals
+            resid_flat = y_obs_flat - mu_post_flat
+            
+            # Std for normalization (scalar per load step, repeated)
+            total_std_flat = np.repeat(total_std, 3)
+            std_resid_flat = resid_flat / total_std_flat
 
-            for k in range(len(loads)):
+            for k in range(len(loads_flat)):
                 rows.append(
                     {
                         "Angle": angle_deg,
                         "Direction": label,
-                        "Load": float(loads[k]),
-                        "Residual": float(resid[k]),
-                        "StdResidual": float(std_resid[k]),
+                        "Load": float(loads_flat[k]),
+                        "Residual": float(resid_flat[k]),
+                        "StdResidual": float(std_resid_flat[k]),
                     }
                 )
 
