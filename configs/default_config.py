@@ -26,7 +26,7 @@ config = {
         "plot_trace": True,  # Validation: Plot MCMC trace for diagnostics
     },
     "empirical": {
-        "gamma_scale": 0.2, # SD for gamma_v/h ~ N(cos/sin(alpha), scale)
+        # Gamma scales are now inferred (see priors["hyper"])
     },
     # MCMC settings
     "mcmc": {
@@ -75,17 +75,19 @@ config = {
                 "lambda_G12": {"log_mean": 7.7, "log_scale": 0.5},
             },
             # Measurement noise - LogNormal reparameterization
-            "sigma_measure": {"log_mean": np.log(0.001), "log_scale": 0.5},  # ln(0.0001) ≈ -9.21
+            "sigma_measure": {"log_mean": np.log(0.001), "log_scale": 0.3},  # ln(0.0001) ≈ -9.21
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)
             },  # For constant noise model
+            "gamma_scale_v": {"target_dist": dist.Exponential(10)}, # Mean=0.01
+            "gamma_scale_h": {"target_dist": dist.Exponential(10)}, # Mean=0.01
         },
         # Bias Priors
         "bias_priors": {
             "sigma_b_E1": dist.Exponential(0.001),
             "sigma_b_alpha": dist.Exponential(1 / np.deg2rad(10)),
-            "sigma_b_slope": dist.Exponential(100), # For model_empirical
+            "sigma_b_slope": dist.Exponential(1000), # Mean = 1/1000 = 0.001. Strong regularization (bias ~ 0.1% of slope).
         },
     },
 }

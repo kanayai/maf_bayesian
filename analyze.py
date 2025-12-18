@@ -148,6 +148,9 @@ Examples:
         "sigma_measure",
         "sigma_measure_base",
         "sigma_constant",
+        "sigma_b_slope",
+        "gamma_scale_v",
+        "gamma_scale_h",
         "lambda_P",
         "lambda_alpha",
         "lambda_E1",
@@ -168,7 +171,7 @@ Examples:
     samples_bias = {
         k: v
         for k, v in samples.items()
-        if (k.startswith("b_") or k.startswith("sigma_b")) and not k.endswith("_n")
+        if (k.startswith("b_") or (k.startswith("sigma_b") and k != "sigma_b_slope")) and not k.endswith("_n")
     }
     # Separate _n parameters (normalized)
     samples_n = {k: v for k, v in samples.items() if k.endswith("_n")}
@@ -374,13 +377,24 @@ Examples:
             return None
 
         if key.startswith("sigma_b"):
-            # Exponential priors
-            if "E1" in key:
-                return expon.pdf(x_vals, scale=1 / 0.0001)
-            if "alpha" in key:
+             # bias_priors in config
+             bias_priors = priors_config.get("bias_priors", {})
+             if key in bias_priors:
+                 d = bias_priors[key]
+                 # If it is a distribution object
+                 import numpyro.distributions as npdist
+                 if isinstance(d, npdist.Exponential):
+                     rate = float(d.rate)
+                     return expon.pdf(x_vals, scale=1 / rate)
+             
+             # Fallback for old/hardcoded
+             if "E1" in key:
+                return expon.pdf(x_vals, scale=1 / 0.001) # 0.001 from old default? or 0.0001?
+             if "alpha" in key:
                 return expon.pdf(
                     x_vals, scale=np.deg2rad(10)
-                )  # 1/rate = scale. rate=1/val -> scale=val
+                ) 
+
 
         # Normalized params (_n)
         if key.startswith("lambda_"):
@@ -393,6 +407,13 @@ Examples:
 
         # Gamma factors (Empirical Model)
         if key.startswith("gamma_"):
+            # Handle gamma_scale_v and gamma_scale_h which are now Exponential(100) -> Mean=0.01
+            # They start with gamma_ but are hyperparameters, not angle-specific factors
+            if key in ["gamma_scale_v", "gamma_scale_h"]:
+                 # Exponential PDF: rate * exp(-rate * x)
+                 rate = 10.0
+                 return rate * np.exp(-rate * x_vals) * (x_vals >= 0)
+
             try:
                 # key format: "gamma_v_45" or "gamma_h_135"
                 parts = key.split("_")
@@ -401,12 +422,22 @@ Examples:
                 angle_deg = int(parts[2])
                 angle_rad = np.deg2rad(angle_deg)
                 
-                gamma_scale = config.get("empirical", {}).get("gamma_scale", 0.1)
+                # Get priors from samples if possible? 
+                # For plotting prior *density*, we usually use the configured mean/std.
+                # Now that gamma_scale is inferred, we should technically integrate over the prior of gamma_scale?
+                # Or just use the mean of the prior of gamma_scale (0.01) for visualization?
+                # Using 0.01 is a reasonable approximation for "prior density of gamma given mean prior".
+                
+                empirical_config = config.get("empirical", {})
+                gamma_scale_v = 0.01 
+                gamma_scale_h = 0.01
                 
                 if direction == "v":
-                    mu = np.cos(angle_rad)
+                    mu = jnp.cos(angle_rad)
+                    gamma_scale = gamma_scale_v
                 else:
-                    mu = np.sin(angle_rad)
+                    mu = jnp.sin(angle_rad)
+                    gamma_scale = gamma_scale_h
                     
                 return norm.pdf(x_vals, loc=mu, scale=gamma_scale)
             except (ValueError, IndexError):
@@ -637,6 +668,8 @@ Examples:
             sigma_measure_base,
             sigma_constant,
             bias_slope, # List of arrays (N,)
+            get_batch("gamma_scale_v") if "gamma_scale_v" in samples_dict else jnp.full(len(idxs), 0.01),
+            get_batch("gamma_scale_h") if "gamma_scale_h" in samples_dict else jnp.full(len(idxs), 0.01),
         )
 
     # Extract Prior Params
@@ -678,6 +711,8 @@ Examples:
             sig_meas_base,
             sig_const,
             bias_slope_list,
+            gamma_scale_v_list,
+            gamma_scale_h_list,
         ) = params_tuple
 
         def predict_point(
@@ -697,6 +732,8 @@ Examples:
             t_xy,
             direction,
             is_prior,
+            g_scale_v,
+            g_scale_h,
         ):
             model_type = config.get("model_type", "unknown")
             
@@ -739,7 +776,8 @@ Examples:
                 s_const,
                 direction=direction,
                 bias_slope=bias_slope_item,
-                gamma_scale=config.get("empirical", {}).get("gamma_scale", 0.1),
+                gamma_scale_v=g_scale_v,
+                gamma_scale_h=g_scale_h,
             )
             return mean, std_em, sample
 
@@ -749,7 +787,7 @@ Examples:
         # Yes, pass bias_slope_list as is. vmap will map over 0-axis of each array in the list.
         
         vmap_predict = vmap(
-            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None)
+            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None, 0, 0)
         )
 
         num_samples = test_theta.shape[0]
@@ -769,6 +807,8 @@ Examples:
             current_test_xy,
             direction,
             use_prior,
+            gamma_scale_v_list,
+            gamma_scale_h_list,
         )
 
         # Compute total_std for reporting

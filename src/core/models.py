@@ -530,14 +530,41 @@ def model_empirical(
     # Store in a list/array for indexing
     gamma_v_list = []
     gamma_h_list = []
-    gamma_scale = config.get("empirical", {}).get("gamma_scale", 0.1)
+    # Sample gamma scales (now inferred)
+    hyper_priors = config["priors"]["hyper"]
+    
+    # helper for sampling hyperparameter
+    def sample_hyper(name, default_val=0.01):
+        if name in hyper_priors:
+             # It acts like other hypers, but simpler: val ~ dist
+             # Reuse helper or just sample directly since we know it's simple exponential target_dist
+             # We need to replicate logic for "target_dist" vs "reparam"
+             # But here we just set it as target_dist: Exponential(100)
+             # Let's check keys available in get_priors_from_config logic? 
+             # Wait, get_priors_from_config returns `stdev_constant` etc. 
+             # We should probably add gamma_scale_v/h to get_priors_from_config return tuple for consistency?
+             # For now, let's keep it here but respect the config structure.
+             
+             cfg = hyper_priors[name]
+             if "target_dist" in cfg:
+                  # Assuming simple 1D sampling
+                  # Sample normalized and transform? 
+                  # Or strict sample? 
+                  # Previous hypers use reparam or icdf. 
+                  # Let's do simple sample for now unless reparam requested.
+                  # Standard numpyro sample:
+                  return numpyro.sample(name, cfg["target_dist"])
+        return default_val
+
+    gamma_scale_v = sample_hyper("gamma_scale_v", 0.01)
+    gamma_scale_h = sample_hyper("gamma_scale_h", 0.01)
 
     for ang_deg in standard_angles_deg:
         ang_rad = jnp.radians(ang_deg)
         # Sample shared gamma for this angle
         # Naming convention: gamma_v_45
-        gv = numpyro.sample(f"gamma_v_{ang_deg}", dist.Normal(jnp.cos(ang_rad), gamma_scale))
-        gh = numpyro.sample(f"gamma_h_{ang_deg}", dist.Normal(jnp.sin(ang_rad), gamma_scale))
+        gv = numpyro.sample(f"gamma_v_{ang_deg}", dist.Normal(jnp.cos(ang_rad), gamma_scale_v))
+        gh = numpyro.sample(f"gamma_h_{ang_deg}", dist.Normal(jnp.sin(ang_rad), gamma_scale_h))
         gamma_v_list.append(gv)
         gamma_h_list.append(gh)
         
@@ -629,7 +656,8 @@ def posterior_predict(
     stdev_constant=0.0,
     direction="h",
     bias_slope=None,
-    gamma_scale=0.1,
+    gamma_scale_v=0.01,
+    gamma_scale_h=0.01,
 ):
     # Check if we should use empirical logic.
     if bias_slope is not None:
@@ -654,8 +682,8 @@ def posterior_predict(
              keys = random.split(rng_key, 2)
              # Sample SCALAR noise for the experiment/curve, not per-point noise
              # This ensures the prediction line is straight (constant slope)
-             gamma_v = mu_gamma_v + gamma_scale * random.normal(keys[0], shape=())
-             gamma_h = mu_gamma_h + gamma_scale * random.normal(keys[1], shape=())
+             gamma_v = mu_gamma_v + gamma_scale_v * random.normal(keys[0], shape=())
+             gamma_h = mu_gamma_h + gamma_scale_h * random.normal(keys[1], shape=())
         else:
              # If no RNG, just use mean (no variability in gamma? or fail?)
              # Usually we want variability.
