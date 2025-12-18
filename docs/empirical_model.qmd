@@ -32,16 +32,20 @@ $$ \beta_{h,i} = \mu_{emulator} \cdot \gamma_{h,\alpha_i} + b_i $$
 Where:
 
 *   **Global Slope** ($\mu_{emulator}$): The foundational stiffness/compliance parameter share across all experiments.
-    $$ \mu_{emulator} \sim \text{LogNormal}(\dots) $$
+    $$ \mu_{emulator} \sim \text{LogNormal}(\ln(0.01), 1) $$
+    *   **Prior**: LogNormal distribution with `log_mean` = $\ln(0.01) \approx -4.605$ and `log_scale` = 1.
+    *   **Interpretation**: Median slope of $0.01$ (corresponding to 100 GPa stiffness if area=1), with a wide multiplicative variance (1-sigma range approx $0.0037$ to $0.027$).
 
 *   **Geometric Factors** ($\gamma$): Probabilistic terms that typically track the trigonometric projection ($\cos \alpha, \sin \alpha$) but allow for deviation (e.g., misalignment).
     *   **Shared per Angle**: All experiments conducted at the same angle $\alpha$ share the same $\gamma$ parameters.
-    $$ \gamma_{v,\alpha} \sim \mathcal{N}(\cos(\alpha), \sigma_\gamma^2) $$
-    $$ \gamma_{h,\alpha} \sim \mathcal{N}(\sin(\alpha), \sigma_\gamma^2) $$
-    *   $\sigma_\gamma$ (`gamma_scale`) is a configurable hyperparameter.
+    $$ \gamma_{v,\alpha} \sim \mathcal{N}(\cos(\alpha), \sigma_{\gamma,v}^2) $$
+    $$ \gamma_{h,\alpha} \sim \mathcal{N}(\sin(\alpha), \sigma_{\gamma,h}^2) $$
+    *   $\sigma_{\gamma,v}$ (`gamma_scale_v`) and $\sigma_{\gamma,h}$ (`gamma_scale_h`) are **inferred hyperparameters** that control the variance of the geometric factors.
+        *   **Prior**: $\sigma_{\gamma} \sim \text{Exponential}(10)$, implying a mean standard deviation of $0.1$. This allows the model to learn the optimal flexibility from the data, starting from a baseline assumption of $\sim 10\%$ geometric variability.
 
 *   **Experiment Bias** ($b_i$): An additive offset to the slope for experiment $i$.
     $$ b_i \sim \mathcal{N}(0, \sigma_{b\_slope}^2) $$
+    *   $\sigma_{b\_slope} \sim \text{Exponential}(1000)$, implying a mean standard deviation of $0.001$ ($0.1\%$). This acts as a strong regularization, assuming that experiment-specific deviations from the shared slope are extremely small.
 
 *   **Test Angle** ($\alpha_i$): The angle (radians or degrees) at which experiment $i$ was conducted.
     *   Standard configuration: $45^\circ, 90^\circ, 135^\circ$ (Consistent with previous Certest models).
@@ -67,8 +71,12 @@ Update `configs/default_config.py` to control the model:
 ```python
 config = {
     "model_type": "model_empirical",
-    "empirical": {
-        "gamma_scale": 0.1,  # Standard deviation for gamma factors
+    # Prior configuration
+    "priors": {
+        "hyper": {
+             "gamma_scale_v": {"target_dist": dist.Exponential(10)},
+             "gamma_scale_h": {"target_dist": dist.Exponential(10)},
+        },
     },
     "bias": {
         "add_bias_slope": True,
