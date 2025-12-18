@@ -3,8 +3,8 @@ import numpy as np
 
 # Default Configuration
 config = {
-    # Model selection: 'model', 'model_n', 'model_n_hv'
-    "model_type": "model_n_hv",
+    # Model selection: 'model', 'model_n', 'model_n_hv', 'model_empirical'
+    "model_type": "model_empirical",
     "seed": 0,  # Random seed for reproducibility
     # Data settings
     "data": {
@@ -25,17 +25,21 @@ config = {
         "run_residual_analysis": True,  # Validation: Run residual analysis
         "plot_trace": True,  # Validation: Plot MCMC trace for diagnostics
     },
+    "empirical": {
+        "gamma_scale": 0.8, # SD for gamma_v/h ~ N(cos/sin(alpha), scale)
+    },
     # MCMC settings
     "mcmc": {
         "num_warmup": 2000,
         "num_samples": 2000,
-        "num_chains": 2,
+        "num_chains": 1,
         "thinning": 2,
     },
     # Bias flags
     "bias": {
         "add_bias_E1": False,
         "add_bias_alpha": False,
+        "add_bias_slope": True, # For model_empirical
     },
     # Priors
     # Note: These are defined as functions that return numpyro distributions or values
@@ -71,7 +75,7 @@ config = {
                 "lambda_G12": {"log_mean": 7.7, "log_scale": 0.5},
             },
             # Measurement noise - LogNormal reparameterization
-            "sigma_measure": {"log_mean": np.log(0.0001), "log_scale": 0.5},  # ln(0.0001) ≈ -9.21
+            "sigma_measure": {"log_mean": np.log(0.001), "log_scale": 0.5},  # ln(0.0001) ≈ -9.21
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)
@@ -81,6 +85,7 @@ config = {
         "bias_priors": {
             "sigma_b_E1": dist.Exponential(0.001),
             "sigma_b_alpha": dist.Exponential(1 / np.deg2rad(10)),
+            "sigma_b_slope": dist.Exponential(0.001), # For model_empirical
         },
     },
 }

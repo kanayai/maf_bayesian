@@ -440,12 +440,19 @@ def plot_spaghetti_verification(
     if input_xy_exp is not None and data_exp is not None:
         val_label = "val"
         for i in range(len(input_xy_exp)):
-            # Average exp data
-            mean_ext = np.mean(data_exp[i], axis=1)
-            lbl = "Exp Data (Avg)" if i == 0 else "_nolegend_"
-            ax.plot(mean_ext, input_xy_exp[i][:,0], 
-                    "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
-                    markersize=1.5, linewidth=0, alpha=0.7, label=lbl)
+            # Average sensors (Right, Center, Left -> axis 1)
+            # Update: Plot all raw points
+            if data_exp[i].ndim > 1 and data_exp[i].shape[1] > 1:
+                 for col in range(data_exp[i].shape[1]):
+                      ax.plot(data_exp[i][:, col], input_xy_exp[i][:,0], 
+                            "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                            markersize=1.5, linewidth=0, alpha=0.5, label=f'Exp {i+1}' if col==0 else "_nolegend_")
+            else:
+                 mean_ext = data_exp[i].flatten()
+                 lbl = "Exp Data (Avg)" if i == 0 else "_nolegend_"
+                 ax.plot(mean_ext, input_xy_exp[i][:,0], 
+                        "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                        markersize=1.5, linewidth=0, alpha=0.7, label=lbl)
 
     dir_label = "Shear" if direction == "h" else "Normal"
     ax.set_title(f"{plot_type} Spaghetti Verification - {angle}° {dir_label}")
@@ -539,16 +546,19 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
             if input_xy_exp is not None and data_exp is not None:
                 markers = ['o', '^', 's', 'D', 'v', '<', '>', 'p', '*', 'h']
                 for i in range(len(input_xy_exp)):
+                    marker = markers[i % len(markers)]
                     # Average sensors (Right, Center, Left -> axis 1)
                     if data_exp[i].ndim > 1 and data_exp[i].shape[1] > 1:
-                        mean_ext = np.mean(data_exp[i], axis=1)
+                        # Plot each column (sensor) separately
+                        for col in range(data_exp[i].shape[1]):
+                             ax.plot(data_exp[i][:, col], input_xy_exp[i][:,0], 
+                                    marker, color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                                    markersize=2, linewidth=0, alpha=0.6, label=f'Exp {i+1}' if col==0 else "_nolegend_")
                     else:
                         mean_ext = data_exp[i].flatten()
-                    
-                    marker = markers[i % len(markers)]
-                    ax.plot(mean_ext, input_xy_exp[i][:,0], 
-                            marker, color="black", markerfacecolor="white", markeredgewidth=0.5, 
-                            markersize=2, linewidth=0, alpha=0.8, label=f'Exp {i+1}')
+                        ax.plot(mean_ext, input_xy_exp[i][:,0], 
+                                marker, color="black", markerfacecolor="white", markeredgewidth=0.5, 
+                                markersize=2, linewidth=0, alpha=0.8, label=f'Exp {i+1}')
 
             # Labels and Limits
             if row_idx == 0:
