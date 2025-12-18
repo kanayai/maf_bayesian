@@ -1,4 +1,5 @@
 import jax.random as random
+import jax.numpy as jnp
 from numpyro.infer import MCMC, NUTS, init_to_median
 import arviz as az
 import datetime
@@ -60,10 +61,24 @@ def run_inference(model, rng_key, data_dict, config):
                  config)
     elif config["model_type"] == "model_empirical":
         # model_empirical(input_xy_exp, data_exp_h, data_exp_v, config)
+        # Pre-calculate angle indices map
+        # Map each experiment to the index of its angle in standard_angles list
+        standard_angles = [45, 90, 135]
+        exp_angle_indices = []
+        for i in range(len(data_dict["input_xy_exp"])):
+            ang_rad = data_dict["input_xy_exp"][i][0, 1]
+            ang_deg = int(round(jnp.degrees(ang_rad)))
+            try:
+                idx = standard_angles.index(ang_deg)
+                exp_angle_indices.append(idx)
+            except ValueError:
+                exp_angle_indices.append(-1) # Should not happen if data is consistent
+        
         mcmc.run(rng_key,
                  data_dict["input_xy_exp"],
                  data_dict["data_exp_h_raw"],
                  data_dict["data_exp_v_raw"],
+                 jnp.array(exp_angle_indices), # Pass angle indices
                  config)
     
     mcmc.print_summary()

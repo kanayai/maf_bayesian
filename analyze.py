@@ -168,10 +168,11 @@ Examples:
     samples_bias = {
         k: v
         for k, v in samples.items()
-        if k.startswith("b_") or k.startswith("sigma_b")
+        if (k.startswith("b_") or k.startswith("sigma_b")) and not k.endswith("_n")
     }
     # Separate _n parameters (normalized)
     samples_n = {k: v for k, v in samples.items() if k.endswith("_n")}
+    samples_gamma = {k: v for k, v in samples.items() if k.startswith("gamma_")}
 
     # Unpack data
     input_xy_exp = data_dict["input_xy_exp"]
@@ -183,6 +184,55 @@ Examples:
     data_exp_v = data_dict["data_exp_v"]
     data_sim_h = data_dict["data_sim_h"]
     data_sim_v = data_dict["data_sim_v"]
+
+    # --- Generate Prior Samples (Moved before plotting to allow prior plots) ---
+    print("Generating prior samples...")
+    num_pred_samples = config["data"].get("prediction_samples", 500)
+    rng_key = random.PRNGKey(0)
+    rng_key, rng_key_prior, rng_key_post = random.split(rng_key, 3)
+
+    # We need to run Predictive to get priors for all variables
+    # Sort out model arguments based on type
+    if model_type == "model_empirical":
+        # Pre-calculate angle indices map (Required by updated model_empirical)
+        standard_angles = [45, 90, 135]
+        exp_angle_indices = []
+        # data_dict["input_xy_exp"] is list of exp arrays
+        for i in range(len(data_dict["input_xy_exp"])):
+            ang_rad = data_dict["input_xy_exp"][i][0, 1]
+            ang_deg = int(round(jnp.degrees(ang_rad)))
+            try:
+                idx = standard_angles.index(ang_deg)
+                exp_angle_indices.append(idx)
+            except ValueError:
+                exp_angle_indices.append(-1)
+                
+        model_func = model_empirical
+        model_args = (
+            data_dict["input_xy_exp"],
+            data_dict["data_exp_h_raw"],
+            data_dict["data_exp_v_raw"],
+            jnp.array(exp_angle_indices), # Pass angle indices
+            config,
+        )
+    else:
+        model_func = model_n_hv
+        model_args = (
+            input_xy_exp,
+            input_xy_sim,
+            input_theta_sim,
+            data_exp_h,
+            data_exp_v,
+            data_sim_h,
+            data_sim_v,
+            config,
+        )
+
+    prior_predictive = Predictive(model_func, num_samples=num_pred_samples)
+    prior_samples_all = prior_predictive(
+        rng_key_prior,
+        *model_args
+    )
 
     # --- Analytical Priors ---
     # We construct functions that return the log_prob (or pdf) for plotting
@@ -341,6 +391,27 @@ Examples:
                 return lognorm.pdf(x_vals, s=s, scale=scale)
             return norm.pdf(x_vals, loc=0.0, scale=1.0)
 
+        # Gamma factors (Empirical Model)
+        if key.startswith("gamma_"):
+            try:
+                # key format: "gamma_v_45" or "gamma_h_135"
+                parts = key.split("_")
+                # parts[0]="gamma", parts[1]="v"/"h", parts[2]=angle_deg
+                direction = parts[1]
+                angle_deg = int(parts[2])
+                angle_rad = np.deg2rad(angle_deg)
+                
+                gamma_scale = config.get("empirical", {}).get("gamma_scale", 0.1)
+                
+                if direction == "v":
+                    mu = np.cos(angle_rad)
+                else:
+                    mu = np.sin(angle_rad)
+                    
+                return norm.pdf(x_vals, loc=mu, scale=gamma_scale)
+            except (ValueError, IndexError):
+                return None
+
         return None
 
     # Plot categories
@@ -392,6 +463,7 @@ Examples:
         plot_posterior_distributions(
             samples_bias,
             prior_pdf_fn=get_prior_pdf,
+            prior_samples=prior_samples_all,
             save_path=figures_dir / f"posterior_bias_{suffix}.png",
         )
         save_stats_csv(samples_bias, f"inference_bias_stats_{suffix}.csv")
@@ -403,6 +475,14 @@ Examples:
             save_path=figures_dir / f"posterior_n_{suffix}.png",
         )
         save_stats_csv(samples_n, f"inference_n_stats_{suffix}.csv")
+
+    if samples_gamma:
+        plot_posterior_distributions(
+            samples_gamma,
+            prior_pdf_fn=get_prior_pdf,
+            save_path=figures_dir / f"posterior_gamma_{suffix}.png",
+        )
+        save_stats_csv(samples_gamma, f"inference_gamma_stats_{suffix}.csv")
 
     # 5. Prediction Plots
     print("Generating prediction plots...")
@@ -430,39 +510,8 @@ Examples:
     samples_load = jnp.linspace(0, max_load, 100)
     # test_xy is angle dependent, moved inside loop
 
-    # --- Generate Prior Samples for Prediction (ONCE) ---
-    print("Generating prior samples for prediction...")
-    rng_key = random.PRNGKey(0)
-    rng_key, rng_key_prior, rng_key_post = random.split(rng_key, 3)
-
-    # We need to run Predictive to get priors for all variables
-    # Select model function and arguments
-    if model_type == "model_empirical":
-        model_func = model_empirical
-        model_args = (
-            data_dict["input_xy_exp"],
-            data_dict["data_exp_h_raw"],
-            data_dict["data_exp_v_raw"],
-            config,
-        )
-    else:
-        model_func = model_n_hv
-        model_args = (
-            input_xy_exp,
-            input_xy_sim,
-            input_theta_sim,
-            data_exp_h,
-            data_exp_v,
-            data_sim_h,
-            data_sim_v,
-            config,
-        )
-
-    prior_predictive = Predictive(model_func, num_samples=num_pred_samples)
-    prior_samples_all = prior_predictive(
-        rng_key_prior,
-        *model_args
-    )
+    # Prior samples are now generated earlier
+    # prior_samples_all exists
 
     # Extract only what we need for prediction (exclude lambdas if they are not needed by predict_batch,
     # but actualy predict_batch needs everything).

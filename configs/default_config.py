@@ -26,13 +26,13 @@ config = {
         "plot_trace": True,  # Validation: Plot MCMC trace for diagnostics
     },
     "empirical": {
-        "gamma_scale": 0.8, # SD for gamma_v/h ~ N(cos/sin(alpha), scale)
+        "gamma_scale": 0.2, # SD for gamma_v/h ~ N(cos/sin(alpha), scale)
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 2000,
-        "num_samples": 2000,
-        "num_chains": 1,
+        "num_warmup": 1000,
+        "num_samples": 1000,
+        "num_chains": 2,
         "thinning": 2,
     },
     # Bias flags
@@ -61,7 +61,7 @@ config = {
         # Hyperparameters
         "hyper": {
             # Emulator mean - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
-            "mu_emulator": {"log_mean": np.log(0.01), "log_scale": 0.2},  # log(0.01) ≈ -4.605
+            "mu_emulator": {"log_mean": np.log(0.01), "log_scale": 1},  # log(0.01) ≈ -4.605
             # Emulator standard deviation - LogNormal reparameterization
             "sigma_emulator": {"log_mean": np.log(0.03), "log_scale": 0.5},  # ln(0.02) ≈ -3.91
             # Length scales - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
@@ -85,7 +85,8 @@ config = {
         "bias_priors": {
             "sigma_b_E1": dist.Exponential(0.001),
             "sigma_b_alpha": dist.Exponential(1 / np.deg2rad(10)),
-            "sigma_b_slope": dist.Exponential(0.001), # For model_empirical
+            "sigma_b_slope": dist.Exponential(100), # For model_empirical
         },
     },
 }
+ 
