@@ -4,7 +4,7 @@ import numpy as np
 # Default Configuration
 config = {
     # Model selection: 'model', 'model_n', 'model_n_hv', 'model_empirical'
-    "model_type": "model_simple",
+    "model_type": "model_empirical",
     "seed": 0,  # Random seed for reproducibility
     # Data settings
     "data": {
@@ -30,10 +30,10 @@ config = {
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 2000,
-        "num_samples": 2000,
+        "num_warmup": 6000,
+        "num_samples": 6000,
         "num_chains": 2,
-        "thinning": 2,
+        "thinning": 3,
     },
     # Bias flags
     "bias": {
@@ -61,7 +61,8 @@ config = {
         # Hyperparameters
         "hyper": {
             # Emulator mean - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
-            "mu_emulator": {"log_mean": np.log(0.01), "log_scale": 1},  # log(0.01) ≈ -4.605
+            "mu_emulator_v": {"log_mean": np.log(0.01), "log_scale": 0.2},
+            "mu_emulator_h": {"log_mean": np.log(0.01), "log_scale": 0.2},
             # Emulator standard deviation - LogNormal reparameterization
             "sigma_emulator": {"log_mean": np.log(0.03), "log_scale": 0.5},  # ln(0.02) ≈ -3.91
             # Length scales - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))

@@ -1,0 +1,88 @@
+---
+title: "Direction-Specific Emulator Parameters"
+author: "MAF Bayesian Project"
+date: "2025-12-19"
+format: html
+---
+
+## Overview
+
+The hierarchical models (`model_n_hv` and `model_empirical`) now support **direction-specific emulator mean parameters**, allowing independent learning of systematic corrections for Normal (vertical) and Shear (horizontal) loading directions.
+
+## Motivation
+
+Previously, a single `mu_emulator` parameter was used for both loading directions. This assumed that any systematic bias in the emulator predictions was identical across directions. By splitting this into direction-specific parameters, the model can better capture:
+
+- Different systematic errors in vertical vs. horizontal predictions
+- Direction-dependent model form errors
+- Anisotropic behavior in the composite material response
+
+## Parameter Definitions
+
+### Split Parameters
+
+- **`μ_emulator,v`**: Emulator mean correction for Normal (vertical) direction
+- **`μ_emulator,h`**: Emulator mean correction for Shear (horizontal) direction
+
+Both parameters use identical, independent LogNormal priors:
+
+$$
+\mu_{\text{emulator},v} \sim \text{LogNormal}(\log(0.01), 0.2)
+$$
+
+$$
+\mu_{\text{emulator},h} \sim \text{LogNormal}(\log(0.01), 0.2)
+$$
+
+## Implementation
+
+### Configuration
+
+In `configs/default_config.py`:
+
+```python
+"priors": {
+    "hyper": {
+        "mu_emulator_v": {"log_mean": np.log(0.01), "log_scale": 0.2},
+        "mu_emulator_h": {"log_mean": np.log(0.01), "log_scale": 0.2},
+        # ... other hyperparameters
+    }
+}
+```
+
+### Model Usage
+
+#### Hierarchical GP Model (`model_n_hv`)
+
+The GP mean function uses direction-specific corrections:
+
+- **Horizontal (Shear)**: $\mu_h(P, \alpha, \theta) = \mu_{\text{emulator},h} \cdot P \sin(\alpha) + f_{GP,h}$
+- **Vertical (Normal)**: $\mu_v(P, \alpha, \theta) = \mu_{\text{emulator},v} \cdot P \cos(\alpha) + f_{GP,v}$
+
+#### Hierarchical Empirical Model (`model_empirical`)
+
+The empirical slopes incorporate direction-specific means:
+
+- **Horizontal**: $\beta_h = \mu_{\text{emulator},h} \cdot \gamma_h + b_i$
+- **Vertical**: $\beta_v = \mu_{\text{emulator},v} \cdot \gamma_v + b_i$
+
+where $\gamma_{v/h}$ are angle-specific scaling factors.
+
+## Backward Compatibility
+
+The code maintains backward compatibility with the original single-parameter specification. If `mu_emulator` (without `_v/_h` suffix) is found in the configuration, both directions will use the same value.
+
+## Verification
+
+Both hierarchical models have been verified with the split parameters:
+
+1. **`model_n_hv`**: Inference samples both `mu_emulator_v` and `mu_emulator_h` independently while still inferring physical parameters (E₁, E₂, etc.)
+2. **`model_empirical`**: Inference samples both split parameters while correctly avoiding physical parameter inference (empirical-only approach)
+
+Trace plots confirm healthy convergence for both parameters in both models.
+
+## Related Documentation
+
+- [Model Analysis](model_analysis.qmd) - Overview of hierarchical models
+- [Empirical Model](empirical_model.qmd) - Details on the empirical hierarchical model
+- [GP Hyperparameter Analysis](gp_hyperparameter_analysis.qmd) - Discussion of other hyperparameters

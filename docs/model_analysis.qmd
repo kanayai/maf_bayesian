@@ -13,7 +13,7 @@ The file contains three distinct model formulations. The key differences lie in 
 | **Type** | Reparameterized | Multi-Output Reparameterized |
 | **Parameterization** | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. | **Non-Centered**<br>Parameters sampled from $N(0,1)$ and scaled. |
 | **Outputs** | Single (Switchable S/N) | **Dual (Shear & Normal)** |
-| **Mean Function** | $P \sin(\alpha)$ OR $P \cos(\alpha)$ | $P \sin(\alpha)$ AND $P \cos(\alpha)$ |
+| **Mean Function** | $P \sin(\alpha)$ OR $P \cos(\alpha)$ | $P \sin(\alpha) \cdot \mu_h$ AND $P \cos(\alpha) \cdot \mu_v$ |
 | **Priors** | **Current** | **Current** |
 
 ### Detailed Prior Comparison
@@ -46,7 +46,8 @@ In addition to the physical parameters, the model also estimates hyperparameters
 
 | Hyperparameter | Description | Prior Distribution |
 | :--- | :--- | :--- |
-| **$\mu_{emulator}$** | GP Mean Offset | $\mathcal{N}(0, 0.01)$ |
+| **$\mu_{emulator, v}$** | GP Mean Offset (Normal/Vertical) | $\mathcal{N}(0, 0.01)$ |
+| **$\mu_{emulator, h}$** | GP Mean Offset (Shear/Horizontal) | $\mathcal{N}(0, 0.01)$ |
 | **$\sigma_{emulator}$** | GP Amplitude | $\text{Exponential}(20.0)$ |
 | **$\sigma_{measure}$** | Measurement Noise | $\text{Exponential}(100.0)$ |
 | **$\lambda_P$** | Length Scale (Load) | $\text{LogNormal}(1.5, 0.5)$ |
