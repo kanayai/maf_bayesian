@@ -145,7 +145,9 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None,
         rows = (num_vars + cols - 1) // cols
     
     fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 4*rows))
-    if num_vars > 1:
+    
+    # Ensure axes is always a flat array/list of Axes objects
+    if isinstance(axes, np.ndarray):
         axes = axes.flatten()
     else:
         axes = [axes]

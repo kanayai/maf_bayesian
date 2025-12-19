@@ -9,7 +9,7 @@ import argparse
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
-from src.core.models import model_n_hv, model_n, model_empirical
+from src.core.models import model_n_hv, model_n, model_empirical, model_simple
 
 def run_inference(model, rng_key, data_dict, config):
     """
@@ -78,8 +78,28 @@ def run_inference(model, rng_key, data_dict, config):
                  data_dict["input_xy_exp"],
                  data_dict["data_exp_h_raw"],
                  data_dict["data_exp_v_raw"],
+                 data_dict["data_exp_v_raw"],
                  jnp.array(exp_angle_indices), # Pass angle indices
                  config)
+    elif config["model_type"] == "model_simple":
+         # Check standard angles
+         standard_angles = [45, 90, 135]
+         exp_angle_indices = []
+         for i in range(len(data_dict["input_xy_exp"])):
+             ang_rad = data_dict["input_xy_exp"][i][0, 1]
+             ang_deg = int(round(jnp.degrees(ang_rad)))
+             try:
+                 idx = standard_angles.index(ang_deg)
+                 exp_angle_indices.append(idx)
+             except ValueError:
+                 exp_angle_indices.append(-1)
+         
+         mcmc.run(rng_key,
+                  data_dict["input_xy_exp"],
+                  data_dict["data_exp_h_raw"],
+                  data_dict["data_exp_v_raw"],
+                  jnp.array(exp_angle_indices),
+                  config)
     
     mcmc.print_summary()
     return mcmc
@@ -189,6 +209,8 @@ Examples:
         model = model_n
     elif config["model_type"] == "model_empirical":
         model = model_empirical
+    elif config["model_type"] == "model_simple":
+        model = model_simple
     else:
         raise NotImplementedError(f"Model {config['model_type']} not yet implemented in main.py")
 
