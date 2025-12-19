@@ -80,14 +80,14 @@ config = {
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)
             },  # For constant noise model
-            "gamma_scale_v": {"target_dist": dist.Exponential(10)}, # Mean=0.01
+            "gamma_scale_v": {"target_dist": dist.Exponential(5)}, # Mean=0.01
             "gamma_scale_h": {"target_dist": dist.Exponential(10)}, # Mean=0.01
         },
         # Bias Priors
         "bias_priors": {
             "sigma_b_E1": dist.Exponential(0.001),
             "sigma_b_alpha": dist.Exponential(1 / np.deg2rad(10)),
-            "sigma_b_slope": dist.Exponential(1000), # Mean = 1/1000 = 0.001. Strong regularization (bias ~ 0.1% of slope).
+            "sigma_b_slope": dist.Exponential(5000), # Mean = 1/1000 = 0.001. Strong regularization (bias ~ 0.1% of slope).
         },
     },
 }
