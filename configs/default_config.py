@@ -4,7 +4,7 @@ import numpy as np
 # Default Configuration
 config = {
     # Model selection: 'model', 'model_n', 'model_n_hv', 'model_empirical'
-    "model_type": "model_empirical",
+    "model_type": "model_simple",
     "seed": 0,  # Random seed for reproducibility
     # Data settings
     "data": {
@@ -19,7 +19,7 @@ config = {
         "prediction_angle": [45, 90, 135],  # Angle for prediction/plotting
         "direction": "v",  # 'h' or 'v' for single direction models/plots
         "prediction_interval": 0.95,  # Prediction interval coverage (e.g., 0.95 for 95%)
-        "prediction_samples": 1000,  # Number of samples for prediction
+        "prediction_samples": 2000,  # Number of samples for prediction
         # Uncertainty bands: "function" (epistemic only), "observation" (includes noise), or "both"
         "uncertainty_bands": "both",
         "run_residual_analysis": True,  # Validation: Run residual analysis
@@ -30,8 +30,8 @@ config = {
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 1000,
-        "num_samples": 1000,
+        "num_warmup": 2000,
+        "num_samples": 2000,
         "num_chains": 2,
         "thinning": 2,
     },
@@ -74,8 +74,9 @@ config = {
                 "lambda_v23": {"log_mean": -0.80, "log_scale": 0.5},
                 "lambda_G12": {"log_mean": 7.7, "log_scale": 0.5},
             },
-            # Measurement noise - LogNormal reparameterization
-            "sigma_measure": {"log_mean": np.log(0.001), "log_scale": 0.3},  # ln(0.0001) ≈ -9.21
+            # Measurement noise - Unified to LogNormal(log(0.001), 0.5)
+            # Standardized format
+            "sigma_measure": {"log_mean": np.log(0.01), "log_scale": 0.5},
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)
@@ -88,6 +89,20 @@ config = {
             "sigma_b_E1": dist.Exponential(0.001),
             "sigma_b_alpha": dist.Exponential(1 / np.deg2rad(10)),
             "sigma_b_slope": dist.Exponential(5000), # Mean = 1/1000 = 0.001. Strong regularization (bias ~ 0.1% of slope).
+        },
+        # Simple Model Priors
+        "simple": {
+            # Beta parameters: Combinations of Direction (v, h) and Angle (45, 90, 135)
+            # LogNormal(0.01, 0.1) - Standardized Format
+            "beta_v_45": {"log_mean": np.log(0.1), "log_scale": 1},
+            "beta_v_90": {"log_mean": np.log(0.1), "log_scale": 1},
+            "beta_v_135": {"log_mean": np.log(0.1), "log_scale": 1},
+            "beta_h_45": {"log_mean": np.log(0.1), "log_scale": 1},
+            "beta_h_90": {"log_mean": np.log(0.1), "log_scale": 1},
+            "beta_h_135": {"log_mean": np.log(0.1), "log_scale": 1},
+            
+            # sigma_measure moved to hyper
+            # "sigma_measure": { ... }
         },
     },
 }

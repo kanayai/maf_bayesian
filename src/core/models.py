@@ -624,6 +624,7 @@ def model_empirical(
                       dist.MultivariateNormal(loc=mean_h, covariance_matrix=cov_matrix),
                       obs=obs_data
                   )
+
                   
         # Sample V
         if data_exp_v is not None and len(data_exp_v) > i:
@@ -633,6 +634,91 @@ def model_empirical(
                       f"obs_v_{i}",
                       dist.MultivariateNormal(loc=mean_v, covariance_matrix=cov_matrix),
                       obs=obs_data
+                  )
+
+
+def model_simple(
+    input_xy_exp,
+    data_exp_h,
+    data_exp_v,
+    exp_angle_indices, # Added argument
+    config,
+):
+    """
+    Simple linear model: Y = P * beta + epsilon
+    Separated for v and h directions.
+    """
+    # Get priors from config
+    priors_simple = config["priors"]["simple"]
+    
+    # Helper to get distribution from config
+    def get_dist(cfg_entry):
+        if "target_dist" in cfg_entry:
+            return cfg_entry["target_dist"]
+        elif "log_mean" in cfg_entry:
+            return dist.LogNormal(cfg_entry["log_mean"], cfg_entry["log_scale"])
+        else:
+            raise ValueError(f"Unknown prior configuration: {cfg_entry}")
+    
+    # Sample Beta parameters for each direction and angle
+    beta_v_45 = numpyro.sample("beta_v_45", get_dist(priors_simple["beta_v_45"]))
+    beta_v_90 = numpyro.sample("beta_v_90", get_dist(priors_simple["beta_v_90"]))
+    beta_v_135 = numpyro.sample("beta_v_135", get_dist(priors_simple["beta_v_135"]))
+    
+    beta_h_45 = numpyro.sample("beta_h_45", get_dist(priors_simple["beta_h_45"]))
+    beta_h_90 = numpyro.sample("beta_h_90", get_dist(priors_simple["beta_h_90"]))
+    beta_h_135 = numpyro.sample("beta_h_135", get_dist(priors_simple["beta_h_135"]))
+
+    # Stack betas for indexing (Order: 45, 90, 135)
+    betas_v_stack = jnp.stack([beta_v_45, beta_v_90, beta_v_135])
+    betas_h_stack = jnp.stack([beta_h_45, beta_h_90, beta_h_135])
+
+    # Shared noise (Proportional)
+    # Use unified hyper definitions for sigma_measure
+    sigma_dist = get_dist(config["priors"]["hyper"]["sigma_measure"])
+    sigma_measure = numpyro.sample("sigma_measure", sigma_dist)
+
+    # Iterate over experiments and likelihoods
+    num_exp = len(input_xy_exp)
+
+    for i in range(num_exp):
+        xy = input_xy_exp[i]
+        load = xy[:, 0]
+        
+        
+        # Get index for this experiment
+        idx = exp_angle_indices[i]
+        
+        # Select Betas form stack
+        beta_v = betas_v_stack[idx]
+        beta_h = betas_h_stack[idx]
+        
+        # Mean (Trigonometric Form)
+        # y_v = P * cos(alpha) * beta_{v_alpha}
+        # y_h = P * sin(alpha) * beta_{h_alpha}
+        mu_v = load * jnp.cos(xy[:, 1]) * beta_v
+        mu_h = load * jnp.sin(xy[:, 1]) * beta_h
+
+        # Proportional Noise Standard Deviation
+        # sigma_vec = sigma_measure * sqrt(load)
+        sigma_vec = sigma_measure * jnp.sqrt(jnp.abs(load) + 1e-6)
+        
+        # Likelihood V
+        if data_exp_v is not None and len(data_exp_v) > i:
+             if data_exp_v[i].shape[0] > 0:
+                  numpyro.sample(
+                      f"obs_v_{i}",
+                      dist.Normal(mu_v[:, None], sigma_vec[:, None]), 
+                      obs=data_exp_v[i] # (N, 3)
+                  )
+
+        # Likelihood H
+        if data_exp_h is not None and len(data_exp_h) > i:
+             if data_exp_h[i].shape[0] > 0:
+                  numpyro.sample(
+                      f"obs_h_{i}",
+                      dist.Normal(mu_h[:, None], sigma_vec[:, None]), 
+                      obs=data_exp_h[i] # (N, 3)
                   )
 
 
@@ -658,8 +744,64 @@ def posterior_predict(
     bias_slope=None,
     gamma_scale_v=0.01,
     gamma_scale_h=0.01,
+    betas_simple=None, # Dict of {key: val} where key is f"beta_{d}_{ang}"
+    sigma_simple=None, # Scalar
 ):
-    # Check if we should use empirical logic.
+    # Check simple model first
+    if betas_simple is not None:
+         # Simple Model Logic
+         # test_xy contains [load, angle]
+         load = test_xy[:, 0]
+         angles = test_xy[:, 1]
+         
+         # Vectorized angle snapping
+         # We assume test_xy angles are consistent or we handle per-point
+         # Since betas are provided, we just need to compute P * beta
+         # But beta depends on angle.
+         
+         # Identify standard angles
+         standard_angles = jnp.array([45, 90, 135])
+         
+         # Helper to get beta for a single angle (scalar)
+         # But we might be vmapped? No, posterior_predict is vmapped over SAMPLES (outside).
+         # Here 'betas_simple' contains SCALAR parameters for THIS sample.
+         
+         # We need to map test_angle -> beta.
+         # For vectorized operation over N test points:
+         
+         deg_angles = jnp.degrees(angles)
+         
+         # For each point, find closest standard angle index
+         # abs diff: (N, 3)
+         diffs = jnp.abs(deg_angles[:, None] - standard_angles[None, :])
+         closest_indices = jnp.argmin(diffs, axis=1) # (N,) of 0,1,2
+         
+         # Construct arrays of betas for this sample
+         # betas_simple has keys "beta_v_45", etc.
+         # We need to select v or h based on `direction` arg
+         
+         b45 = betas_simple[f"beta_{direction}_45"]
+         b90 = betas_simple[f"beta_{direction}_90"]
+         b135 = betas_simple[f"beta_{direction}_135"]
+         
+         limit_arr = jnp.stack([b45, b90, b135]) # Shape (3,)
+         
+         # Map indices to betas
+         selected_betas = limit_arr[closest_indices] # (N,)
+         
+         # Mean (Trigonometric form)
+         if direction == "v":
+             mean = load * jnp.cos(angles) * selected_betas
+         else:
+             mean = load * jnp.sin(angles) * selected_betas
+         
+         # For a deterministic linear model given params, function uncertainty is 0 for this sample.
+         stds = jnp.zeros_like(mean)
+         
+         # Return mean as the function realization (no observation noise)
+         sample = mean
+             
+         return mean, stds, sample
     if bias_slope is not None:
         # Empirical Model Logic
         # Empirical Model Logic

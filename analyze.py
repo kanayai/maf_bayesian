@@ -14,7 +14,7 @@ import argparse
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
-from src.core.models import model_n_hv, model_empirical, posterior_predict
+from src.core.models import model_n_hv, model_empirical, model_simple, posterior_predict
 from src.io.output_manager import save_config_log
 from src.vis.plotting import (
     plot_experimental_data,
@@ -75,6 +75,7 @@ Examples:
     # Setup output directory
     model_type = config.get("model_type", "unknown")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    suffix = timestamp
 
     # Determine base figures directory based on mode
     if output_mode == "experimental":
@@ -196,19 +197,20 @@ Examples:
 
     # We need to run Predictive to get priors for all variables
     # Sort out model arguments based on type
+    # Pre-calculate angle indices map (Required by updated model_empirical and model_simple)
+    standard_angles = [45, 90, 135]
+    exp_angle_indices = []
+    # data_dict["input_xy_exp"] is list of exp arrays
+    for i in range(len(data_dict["input_xy_exp"])):
+        ang_rad = data_dict["input_xy_exp"][i][0, 1]
+        ang_deg = int(round(jnp.degrees(ang_rad)))
+        try:
+            idx = standard_angles.index(ang_deg)
+            exp_angle_indices.append(idx)
+        except ValueError:
+            exp_angle_indices.append(-1)
+            
     if model_type == "model_empirical":
-        # Pre-calculate angle indices map (Required by updated model_empirical)
-        standard_angles = [45, 90, 135]
-        exp_angle_indices = []
-        # data_dict["input_xy_exp"] is list of exp arrays
-        for i in range(len(data_dict["input_xy_exp"])):
-            ang_rad = data_dict["input_xy_exp"][i][0, 1]
-            ang_deg = int(round(jnp.degrees(ang_rad)))
-            try:
-                idx = standard_angles.index(ang_deg)
-                exp_angle_indices.append(idx)
-            except ValueError:
-                exp_angle_indices.append(-1)
                 
         model_func = model_empirical
         model_args = (
@@ -218,6 +220,15 @@ Examples:
             jnp.array(exp_angle_indices), # Pass angle indices
             config,
         )
+    elif model_type == "model_simple":
+         model_func = model_simple
+         model_args = (
+             data_dict["input_xy_exp"],
+             data_dict["data_exp_h_raw"], # pass raw or list? model_simple expects list of arrays matching input_xy_exp
+             data_dict["data_exp_v_raw"],
+             jnp.array(exp_angle_indices), # Pass angle indices
+             config
+         )
     else:
         model_func = model_n_hv
         model_args = (
@@ -242,7 +253,7 @@ Examples:
     # For reparameterized priors (model_n_hv), the physical params E_1 etc are:
     # val = mean + scale * N(0,1) -> val ~ N(mean, scale)
 
-    from scipy.stats import norm, expon, lognorm
+    from scipy.stats import norm, expon, lognorm, lognorm
 
     priors_config = config["priors"]
 
@@ -312,6 +323,8 @@ Examples:
             if isinstance(d, npdist.Exponential):
                 rate = float(d.rate)
                 return expon.pdf(x_vals, scale=1 / rate)
+            elif isinstance(d, npdist.LogNormal):
+                return lognorm.pdf(x_vals, s=d.scale, scale=np.exp(d.loc))
             elif dist_name == "TruncatedDistribution" or "Truncated" in dist_name:
                 # TruncatedNormal creates a TruncatedDistribution object
                 # Extract parameters from the base distribution
@@ -410,9 +423,16 @@ Examples:
             # Handle gamma_scale_v and gamma_scale_h which are now Exponential(100) -> Mean=0.01
             # They start with gamma_ but are hyperparameters, not angle-specific factors
             if key in ["gamma_scale_v", "gamma_scale_h"]:
-                 # Exponential PDF: rate * exp(-rate * x)
+                 # Extract from config["priors"]["hyper"][key]["target_dist"]
+                 if key in priors_config["hyper"]:
+                     d = priors_config["hyper"][key].get("target_dist")
+                     if hasattr(d, "rate"):
+                         rate = float(d.rate)
+                         return expon.pdf(x_vals, scale=1 / rate)
+                 
+                 # Fallback if not found or no rate
                  rate = 10.0
-                 return rate * np.exp(-rate * x_vals) * (x_vals >= 0)
+                 return expon.pdf(x_vals, scale=1 / rate)
 
             try:
                 # key format: "gamma_v_45" or "gamma_h_135"
@@ -463,6 +483,168 @@ Examples:
         df.to_csv(figures_dir / filename)
         print(f"Saved stats to {figures_dir / filename}")
 
+    if model_type == "model_simple":
+        # Simple model Analysis
+        print("--- Running Simple Model Analysis ---")
+        
+        # 1. Plot Posteriors for Beta and Sigma
+        # Define priors for plotting
+        import numpyro.distributions as npdist
+
+        def get_simple_prior(key, x_vals):
+            # Read from config["priors"]["simple"]
+            # We assume config is available (imported globally)
+            priors_simple = config["priors"].get("simple", {})
+            
+            if key.startswith("beta_"):
+                 if key in priors_simple:
+                     entry = priors_simple[key]
+                     # Check for standardized format first
+                     if "log_mean" in entry:
+                         return lognorm.pdf(x_vals, s=entry["log_scale"], scale=np.exp(entry["log_mean"]))
+                     elif "target_dist" in entry:
+                         d = entry["target_dist"]
+                         if isinstance(d, npdist.Normal):
+                             return norm.pdf(x_vals, loc=d.loc, scale=d.scale)
+                         elif isinstance(d, npdist.LogNormal):
+                             # Numpyro LogNormal(loc, scale) -> log(X) ~ N(loc, scale)
+                             # Scipy lognorm(s=scale, scale=exp(loc))
+                             return lognorm.pdf(x_vals, s=d.scale, scale=np.exp(d.loc))
+                 # Fallback
+                 return norm.pdf(x_vals, loc=0, scale=10)
+                 
+            if "sigma" in key:
+                 # Unified sigma_measure is now in hyper
+                 if "sigma_measure" in config["priors"]["hyper"]:
+                      entry = config["priors"]["hyper"]["sigma_measure"]
+                      if "log_mean" in entry:
+                          return lognorm.pdf(x_vals, s=entry["log_scale"], scale=np.exp(entry["log_mean"]))
+                      elif "target_dist" in entry:
+                          d = entry["target_dist"]
+                          if isinstance(d, npdist.Exponential):
+                              return expon.pdf(x_vals, scale=1/d.rate)
+                          elif isinstance(d, npdist.LogNormal):
+                              return lognorm.pdf(x_vals, s=d.scale, scale=np.exp(d.loc))
+                 # Fallback
+                 return expon.pdf(x_vals, scale=0.1)
+            return None
+
+        # 1. Plot Posteriors for Beta (Grid Layout: Row 0=H, Row 1=V)
+        # Order: h_45, h_90, h_135, v_45, v_90, v_135
+        beta_params = [
+            "beta_h_45", "beta_h_90", "beta_h_135",
+            "beta_v_45", "beta_v_90", "beta_v_135"
+        ]
+        samples_betas = {k: samples[k] for k in beta_params if k in samples}
+        
+        # Plot Betas in 2x3 grid
+        plot_posterior_distributions(
+            samples_betas,
+            prior_pdf_fn=get_simple_prior,
+            save_path=figures_dir / f"posterior_simple_betas_{suffix}.png",
+            layout_rows=2
+        )
+        save_stats_csv(samples_betas, f"inference_simple_beta_stats_{suffix}.csv")
+
+
+
+        # 2. Plot Sigma separately
+        if "sigma_measure" in samples:
+             samples_sigma = {"sigma_measure": samples["sigma_measure"]}
+             plot_posterior_distributions(
+                 samples_sigma,
+                 prior_pdf_fn=get_simple_prior,
+                 save_path=figures_dir / f"posterior_simple_sigma_{suffix}.png"
+             )
+             save_stats_csv(samples_sigma, f"inference_simple_sigma_stats_{suffix}.csv")
+
+        # 2. Plot Spaghetti (Linear Fits)
+        # We want to plot the lines Y = P * beta vs Data
+        # For each direction and angle (though angle doesn't affect beta here, just data splitting)
+        
+        print("Generating simple linear plots...")
+        # Get samples reference for indexing
+        # Any beta will do
+        ref_beta = samples["beta_v_45"]
+        
+        # Subset for plotting (e.g. 100 samples)
+        n_plot = min(100, len(ref_beta))
+        idxs = np.random.choice(len(ref_beta), n_plot, replace=False)
+        
+        # Iterate over angles/directions to just show data vs fits
+        # Since beta is global, the fit is the same for all angles, but we split plots by angle for clarity
+        
+        angles = [45, 90, 135]
+        max_load = config["data"].get("max_load", 10.0)
+        load_grid = np.linspace(0, max_load, 100)
+        
+        for angle in angles:
+             fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+             
+             # Filter Data for this angle
+             # We need to find which experiments correspond to this angle
+             # data_dict["input_xy_exp"] has info
+             
+             # Directions
+             for i, direction in enumerate(["v", "h"]):
+                 ax = axes[i]
+                 
+                 # Get specific beta for this direction and angle
+                 beta_key = f"beta_{direction}_{angle}"
+                 if beta_key not in samples:
+                      print(f"Warning: {beta_key} not found in samples")
+                      continue
+                      
+                 beta_full = samples[beta_key]
+                 beta_samps = beta_full[idxs]
+                 
+                 # Plot Data
+                 # Find experiments with this angle
+                 ang_rad = np.deg2rad(angle)
+                 # Tolerance for float comparison
+                 
+                 # We iterate through all experiments
+                 for e_idx, xy in enumerate(data_dict["input_xy_exp"]):
+                      # xy is (N, 2), check angle
+                      if np.isclose(xy[0, 1], ang_rad, atol=0.1):
+                           # Plot this experiment
+                           # raw data
+                           raw_data = data_dict["data_exp_v_raw"][e_idx] if direction == "v" else data_dict["data_exp_h_raw"][e_idx]
+                           # raw_data is (N, 3)
+                           load_exp = xy[:, 0]
+                           ax.plot(load_exp, raw_data, "k.", alpha=0.1) # Plot all 3 reps
+                           
+                 # Plot Estimates
+                 # Lines: Y = P * trig * beta
+                 
+                 ang_rad = np.deg2rad(angle)
+                 if direction == "v":
+                     trig_factor = np.cos(ang_rad)
+                 else:
+                     trig_factor = np.sin(ang_rad)
+                     
+                 for b in beta_samps:
+                      ax.plot(load_grid, load_grid * trig_factor * b, "r-", alpha=0.1)
+                      
+                 # Mean estimate
+                 b_mean = np.mean(beta_full)
+                 ax.plot(load_grid, load_grid * trig_factor * b_mean, "r-", linewidth=2, label="Mean Fit")
+                 
+                 ax.set_title(f"Angle {angle}° - Direction {direction.upper()}")
+                 ax.set_xlabel("Load [kN]")
+                 if i == 0: ax.set_ylabel("Extension [mm]")
+                 
+             plt.tight_layout()
+             plt.savefig(figures_dir / f"simple_fit_{angle}_{suffix}.png")
+             plt.close()
+             
+        print("Simple analysis complete.")
+        # Removed return so standard prediction plots are generated
+        # return
+
+
+    # (Function moved up)
+
     # Filename suffix
     suffix = timestamp
 
@@ -483,12 +665,19 @@ Examples:
         save_stats_csv(samples_physical_ordered, f"inference_theta_stats_{suffix}.csv")
 
     if samples_hyper:
-        plot_posterior_distributions(
-            samples_hyper,
-            prior_pdf_fn=get_prior_pdf,
-            save_path=figures_dir / f"posterior_hyper_{suffix}.png",
-        )
-        save_stats_csv(samples_hyper, f"inference_hyper_stats_{suffix}.csv")
+        # Exclude sigma_measure if already plotted in simple analysis
+        if config["model_type"] == "model_simple" and "sigma_measure" in samples_hyper:
+            samples_hyper_plot = {k: v for k, v in samples_hyper.items() if k != "sigma_measure"}
+        else:
+            samples_hyper_plot = samples_hyper
+
+        if samples_hyper_plot:
+            plot_posterior_distributions(
+                samples_hyper_plot,
+                prior_pdf_fn=get_prior_pdf,
+                save_path=figures_dir / f"posterior_hyper_{suffix}.png",
+            )
+            save_stats_csv(samples_hyper_plot, f"inference_hyper_stats_{suffix}.csv")
 
     if samples_bias:
         plot_posterior_distributions(
@@ -652,6 +841,23 @@ Examples:
              
              for i in range(n_exp):
                  bias_slope.append(get_batch(f"b_{i+1}_slope"))
+
+        # Simple Model 
+        betas_simple = None
+        sigma_simple = None
+        
+        # Check if we are in model_simple mode (by checking keys or config?)
+        # config is global.
+        if config["model_type"] == "model_simple":
+             # Extract 6 betas
+             betas_simple = {}
+             for d in ["v", "h"]:
+                 for ang in [45, 90, 135]:
+                     k = f"beta_{d}_{ang}"
+                     betas_simple[k] = get_batch(k)
+             
+             # Extract sigma
+             sigma_simple = get_batch("sigma_measure")
         
         # If empty (prior or not empirical), might return empty list or None
         # But we need consistent tuple size? 
@@ -670,6 +876,8 @@ Examples:
             bias_slope, # List of arrays (N,)
             get_batch("gamma_scale_v") if "gamma_scale_v" in samples_dict else jnp.full(len(idxs), 0.01),
             get_batch("gamma_scale_h") if "gamma_scale_h" in samples_dict else jnp.full(len(idxs), 0.01),
+            betas_simple,
+            sigma_simple,
         )
 
     # Extract Prior Params
@@ -680,6 +888,8 @@ Examples:
     # Check what key works
     if "E_1" in samples:
          total_samples = samples["E_1"].shape[0]
+    elif "beta_v_45" in samples:
+         total_samples = samples["beta_v_45"].shape[0]
     else:
          total_samples = samples["mu_emulator"].shape[0]
 
@@ -713,6 +923,8 @@ Examples:
             bias_slope_list,
             gamma_scale_v_list,
             gamma_scale_h_list,
+            betas_simple_dict,
+            sigma_simple_list,
         ) = params_tuple
 
         def predict_point(
@@ -734,6 +946,8 @@ Examples:
             is_prior,
             g_scale_v,
             g_scale_h,
+            betas_simp,
+            sigma_simp,
         ):
             model_type = config.get("model_type", "unknown")
             
@@ -778,6 +992,8 @@ Examples:
                 bias_slope=bias_slope_item,
                 gamma_scale_v=g_scale_v,
                 gamma_scale_h=g_scale_h,
+                betas_simple=betas_simp,
+                sigma_simple=sigma_simp,
             )
             return mean, std_em, sample
 
@@ -787,7 +1003,7 @@ Examples:
         # Yes, pass bias_slope_list as is. vmap will map over 0-axis of each array in the list.
         
         vmap_predict = vmap(
-            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None, 0, 0)
+            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None, 0, 0, 0, 0)
         )
 
         num_samples = test_theta.shape[0]
@@ -809,6 +1025,8 @@ Examples:
             use_prior,
             gamma_scale_v_list,
             gamma_scale_h_list,
+            betas_simple_dict,
+            sigma_simple_list,
         )
 
         # Compute total_std for reporting
@@ -816,7 +1034,12 @@ Examples:
         noise_model = config["data"].get("noise_model", "proportional")
         n_samples, n_points = f_samples.shape
 
-        if noise_model == "additive":
+        if sigma_simple_list is not None:
+             # Simple Model Proportional Noise
+             # noise_std = sigma_measure * sqrt(load)
+             noise_std = sigma_simple_list[:, None] * jnp.sqrt(jnp.abs(loads[None, :]) + 1e-6)
+             noise_var = noise_std**2
+        elif noise_model == "additive":
             noise_var = (
                 sig_meas[:, None] ** 2 * loads[None, :] + sig_meas_base[:, None] ** 2
             )
@@ -830,8 +1053,14 @@ Examples:
         # Compute observation samples (y_samples = f_samples + noise)
         # Uses learned posterior noise values for observation uncertainty bands
         rng_noise = random.PRNGKey(123)  # Separate key for noise sampling
-        noise_std = jnp.sqrt(noise_var)
-        noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
+        
+        if sigma_simple_list is not None:
+             noise_std = sigma_simple_list[:, None] * jnp.sqrt(jnp.abs(loads[None, :]) + 1e-6)
+             noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
+        else:
+             noise_std = jnp.sqrt(noise_var)
+             noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
+             
         y_samples = f_samples + noise_samples
 
         return means, total_std, f_samples, y_samples
@@ -957,7 +1186,7 @@ Examples:
         title_prefix="Posterior"
     )
     # 9. Residual Analysis (Optional)
-    if config["data"].get("run_residual_analysis", False) and config.get("model_type") != "model_empirical":
+    if config["data"].get("run_residual_analysis", False) and config.get("model_type") not in ["model_empirical", "model_simple"]:
         run_residual_analysis(idata, data_dict, figures_dir)
 
     # 10. Traceplots (Optional)
@@ -1018,6 +1247,23 @@ def run_residual_analysis(idata, data_dict, figures_dir):
         sigma_constant = get_batch("sigma_constant")
     except KeyError:
         sigma_constant = jnp.zeros_like(mu_emulator)
+
+    # Simple Model 
+    betas_simple = None
+    sigma_simple = None
+    
+    # Check if we are in model_simple mode (by checking keys or config?)
+    # config is global.
+    if config["model_type"] == "model_simple":
+         # Extract 6 betas
+         betas_simple = {}
+         for d in ["v", "h"]:
+             for ang in [45, 90, 135]:
+                 k = f"beta_{d}_{ang}"
+                 betas_simple[k] = get_batch(k)
+         
+         # Extract sigma
+         sigma_simple = get_batch("sigma_epsilon")
 
     # Lengths
     l_P = get_batch("lambda_P")

@@ -56,6 +56,8 @@ In addition to the physical parameters, the model also estimates hyperparameters
 | **$\lambda_{\nu12}$** | Length Scale ($\nu_{12}$) | $\text{LogNormal}(-0.80, 0.5)$ |
 | **$\lambda_{\nu23}$** | Length Scale ($\nu_{23}$) | $\text{LogNormal}(-0.80, 0.5)$ |
 | **$\lambda_{G12}$** | Length Scale ($G_{12}$) | $\text{LogNormal}(7.7, 0.5)$ |
+| **$\gamma_{scale, v}$** | Gamma Scale (Normal) | $\text{Exponential}(5.0)$ |
+| **$\gamma_{scale, h}$** | Gamma Scale (Shear) | $\text{Exponential}(10.0)$ |
 
 *Note: The length scales $\lambda$ determine how quickly the model discrepancy changes with respect to changes in inputs or parameters. A small length scale implies a "wiggly" function, while a large one implies a smooth function.*
 
@@ -73,6 +75,7 @@ The code also supports adding bias terms to account for systematic discrepancies
 | :--- | :--- | :--- | :--- |
 | **$E_1$ Bias** ($b_{E1}$) | $\text{Exponential}(0.001)$ | $1,000 \text{ MPa}$ | Accounts for variability in stiffness between experiments. |
 | **$\alpha$ Bias** ($b_{\alpha}$) | $\text{Exponential}(1 / \text{rad}(10^\circ))$ | $0.1745 \text{ rad} \approx 10^\circ$ | Accounts for misalignment of the specimen fibers. |
+| **Slope Bias** ($b_{slope}$) | $\text{Exponential}(5000)$ | $0.0002$ | Accounts for experiment-specific deviations in the linear slope (empirical model). |
 
 *Note: The rate parameter for $\alpha$ bias is $1 / (10 \cdot \frac{\pi}{180}) \approx 5.73$.*
 
