@@ -78,7 +78,6 @@ def run_inference(model, rng_key, data_dict, config):
                  data_dict["input_xy_exp"],
                  data_dict["data_exp_h_raw"],
                  data_dict["data_exp_v_raw"],
-                 data_dict["data_exp_v_raw"],
                  jnp.array(exp_angle_indices), # Pass angle indices
                  config)
     elif config["model_type"] == "model_simple":

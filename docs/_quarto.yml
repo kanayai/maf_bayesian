@@ -22,6 +22,7 @@ book:
         - prior_prediction_issue.qmd
         - gp_hyperparameter_analysis.qmd
         - empirical_model.qmd
+        - direction_specific_emulator.qmd
     - part: "Validation"
       chapters:
         - residual_analysis.qmd

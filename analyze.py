@@ -144,7 +144,8 @@ Examples:
     # Define categories
     physical_params = ["E_1", "E_2", "v_12", "v_23", "G_12"]
     hyper_params = [
-        "mu_emulator",
+        "mu_emulator_v",
+        "mu_emulator_h",
         "sigma_emulator",
         "sigma_measure",
         "sigma_measure_base",
@@ -295,8 +296,12 @@ Examples:
 
         # Emulator Mean/Scale
         # mu_emulator: Normal(mean, scale) or LogNormal(log_mean, log_scale)
-        if key == "mu_emulator":
-            p = priors_config["hyper"]["mu_emulator"]
+        if key in ["mu_emulator_v", "mu_emulator_h"]:
+            if key in priors_config["hyper"]:
+                 p = priors_config["hyper"][key]
+                 if "log_mean" in p:
+                     return lognorm.pdf(x_vals, s=p["log_scale"], scale=np.exp(p["log_mean"]))
+                 return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
             if "log_mean" in p:
                 # LogNormal: val = exp(log_mean + log_scale * N(0,1))
                 # scipy lognorm: s=log_scale, scale=exp(log_mean)
@@ -773,7 +778,17 @@ Examples:
         test_theta = jnp.stack([E_1, E_2, v_12, v_23, G_12], axis=1)  # (N, 5)
 
         # Hyper
-        mu_emulator = get_batch("mu_emulator")
+        # Hyper
+        # mu_emulator = get_batch("mu_emulator")
+        try:
+            mu_emulator_v = get_batch("mu_emulator_v")
+        except KeyError:
+            mu_emulator_v = jnp.zeros_like(E_1) # Should not happen with new results
+
+        try:
+            mu_emulator_h = get_batch("mu_emulator_h")
+        except KeyError:
+            mu_emulator_h = jnp.zeros_like(E_1)
         sigma_emulator = get_batch("sigma_emulator")
 
         # Check noise model parameters (backward compatibility)
@@ -866,7 +881,8 @@ Examples:
         
         return (
             test_theta,
-            mu_emulator,
+            mu_emulator_v,
+            mu_emulator_h,
             sigma_emulator,
             length_xy,
             length_theta,
@@ -890,8 +906,12 @@ Examples:
          total_samples = samples["E_1"].shape[0]
     elif "beta_v_45" in samples:
          total_samples = samples["beta_v_45"].shape[0]
-    else:
+    elif "mu_emulator_v" in samples:
+         total_samples = samples["mu_emulator_v"].shape[0]
+    elif "mu_emulator" in samples:
          total_samples = samples["mu_emulator"].shape[0]
+    else:
+         total_samples = samples["gamma_v_45"].shape[0]  # Fallback for empirical model
 
     num_samples = min(num_pred_samples, total_samples)
     indices = np.random.choice(total_samples, num_samples, replace=False)
@@ -913,7 +933,8 @@ Examples:
         """
         (
             test_theta,
-            mu_em,
+            mu_em_v,
+            mu_em_h,
             sig_em,
             len_xy,
             len_th,
@@ -1011,7 +1032,7 @@ Examples:
 
         means, stds_em, f_samples = vmap_predict(
             rng_keys,
-            mu_em,
+            mu_em_h if direction == "h" else mu_em_v,
             sig_em,
             len_xy,
             len_th,
@@ -1230,23 +1251,32 @@ def run_residual_analysis(idata, data_dict, figures_dir):
     test_theta = jnp.stack([E_1, E_2, v_12, v_23, G_12], axis=1)
 
     # Hyper
-    mu_emulator = get_batch("mu_emulator")
+    # mu_emulator = get_batch("mu_emulator")
+    try: 
+        mu_emulator_v = get_batch("mu_emulator_v")
+    except KeyError:
+        mu_emulator_v = jnp.zeros_like(E_1)
+
+    try:
+        mu_emulator_h = get_batch("mu_emulator_h")
+    except KeyError:
+        mu_emulator_h = jnp.zeros_like(E_1)
     sigma_emulator = get_batch("sigma_emulator")
 
     try:
         sigma_measure = get_batch("sigma_measure")
     except KeyError:
-        sigma_measure = jnp.zeros_like(mu_emulator)
+        sigma_measure = jnp.zeros_like(mu_emulator_v)
 
     try:
         sigma_measure_base = get_batch("sigma_measure_base")
     except KeyError:
-        sigma_measure_base = jnp.zeros_like(mu_emulator)
+        sigma_measure_base = jnp.zeros_like(mu_emulator_v)
 
     try:
         sigma_constant = get_batch("sigma_constant")
     except KeyError:
-        sigma_constant = jnp.zeros_like(mu_emulator)
+        sigma_constant = jnp.zeros_like(mu_emulator_v)
 
     # Simple Model 
     betas_simple = None
@@ -1314,12 +1344,26 @@ def run_residual_analysis(idata, data_dict, figures_dir):
         )
         return mean, std_em
 
-    vmap_predict = vmap(predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, None, None))
+    v_predict = vmap(
+        predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, None, None)
+    )
 
     rows = []
     bands_data = []
 
-    for i, xy_exp in enumerate(input_xy_exp):
+    for i in range(len(input_xy_exp)):
+        xy_exp = input_xy_exp[i]
+        
+        # Determine direction
+        # Legacy/Simple logic: usually just one direction per experiment?
+        # Ideally we check data_exp_h[i] or v[i].
+        # For residuals, let's just do both and see which has data?
+        # Start with 'v' if data_v[i] has points
+        
+        directions_to_check = []
+        if data_exp_v[i].shape[0] > 0: directions_to_check.append("v")
+        if data_exp_h[i].shape[0] > 0: directions_to_check.append("h")
+        
         angle_rad = xy_exp[0, 1]
         angle_deg = int(round(np.rad2deg(angle_rad)))
         print(f"  Residuals: Angle {angle_deg}...")
@@ -1327,10 +1371,14 @@ def run_residual_analysis(idata, data_dict, figures_dir):
         loads = xy_exp[:, 0]
         max_load = jnp.max(loads)
 
-        for direction, label in [("h", "Shear"), ("v", "Normal")]:
+        for direction in directions_to_check:
+            label = "Normal" if direction == "v" else "Shear"
+            
+            mu_em = mu_emulator_h if direction == "h" else mu_emulator_v
+             
             # Predict at observed
-            means, stds_em = vmap_predict(
-                mu_emulator,
+            means, stds_em = v_predict(
+                mu_em,
                 sigma_emulator,
                 length_xy,
                 length_theta,
@@ -1369,23 +1417,35 @@ def run_residual_analysis(idata, data_dict, figures_dir):
             # data_exp_h/v were passed as arguments to this function 'generate_prediction_plots'.
             # Inspecting main(), we passed data_dict["data_exp_h_raw"]. So 'data_exp_h' arg IS the raw list.
             
-            raw_data = (data_exp_h[i] if direction == "h" else data_exp_v[i]) # Shape (N, 3)
+            # Retrieve raw data (N, 3) or (N,)
+            # Try to find raw keys in data_dict if possible, but here we only have local vars data_exp_h/v.
+            # We should have extracted raw data earlier if we wanted it.
+            # Let's assume data_exp_h/v passed to this function might be raw if we changed extraction?
+            # No, we extracted data_dict["data_exp_h"] at the top of this function.
+            # Let's check keys in data_dict again? data_dict is passed in.
             
-            # Scatter Plot Data Preparation
-            # We want to plot all 3 points for each load.
-            # loads is (N,)
-            # means (mu_post) is (N,)
-            # raw_data is (N, 3)
+            raw_data = None
+            raw_key = f"data_exp_{direction}_raw"
+            if raw_key in data_dict:
+                 raw_data = data_dict[raw_key][i]
             
-            # Flatten raw_data to (3N,)
-            y_obs_flat = raw_data.flatten() # defaults to row-major (C-style)? (N,3) -> n1,n2,n3
-            # Checked numpy default: 'C'. So it goes row by row. 
-            # Row 0 (Load 0): [L, C, R].
+            if raw_data is None:
+                 # Fallback to the extracted data (likely averaged)
+                 raw_data = (data_exp_h[i] if direction == "h" else data_exp_v[i])
             
-            # Repeat loads and means to match
-            # We need to repeat each element 3 times to match the row-major flattening
-            loads_flat = np.repeat(loads, 3)
-            mu_post_flat = np.repeat(mu_post, 3)
+            y_obs_flat = raw_data.flatten()
+            
+            # Adjust predicted means to match data shape
+            if raw_data.ndim > 1 and raw_data.shape[1] == 3:
+                # Data is (N, 3) -> repeat means 3 times
+                loads_flat = np.repeat(loads, 3)
+                mu_post_flat = np.repeat(mu_post, 3)
+                total_std_flat = np.repeat(total_std, 3)
+            else:
+                # Data is (N,) or (N,1) -> 1-to-1
+                loads_flat = loads
+                mu_post_flat = mu_post
+                total_std_flat = total_std
             
             # Residuals
             resid_flat = y_obs_flat - mu_post_flat
@@ -1410,8 +1470,8 @@ def run_residual_analysis(idata, data_dict, figures_dir):
             dense_angles = jnp.ones_like(dense_loads) * angle_rad
             dense_xy = jnp.stack([dense_loads, dense_angles], axis=1)
 
-            d_means, d_stds_em = vmap_predict(
-                mu_emulator,
+            d_means, d_stds_em = v_predict(
+                mu_em,
                 sigma_emulator,
                 length_xy,
                 length_theta,
