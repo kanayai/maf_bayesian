@@ -24,17 +24,20 @@ $$ y_h = P \cdot \beta_h + \epsilon $$
 
 ### Hierarchical Structure
 
-The effective slopes $\beta$ are constructed from a global emulator slope, probabilistic geometric factors ($\gamma$), and an experiment-specific bias ($b_i$):
+The effective slopes $\beta$ are constructed from direction-specific global emulator slopes, probabilistic geometric factors ($\gamma$), and an experiment-specific bias ($b_i$):
 
-$$ \beta_{v,i} = \mu_{emulator} \cdot \gamma_{v,\alpha_i} + b_i $$
-$$ \beta_{h,i} = \mu_{emulator} \cdot \gamma_{h,\alpha_i} + b_i $$
+$$ \beta_{v,i} = \mu_{emulator,v} \cdot \gamma_{v,\alpha_i} + b_i $$
+$$ \beta_{h,i} = \mu_{emulator,h} \cdot \gamma_{h,\alpha_i} + b_i $$
 
 Where:
 
-*   **Global Slope** ($\mu_{emulator}$): The foundational stiffness/compliance parameter share across all experiments.
-    $$ \mu_{emulator} \sim \text{LogNormal}(\ln(0.01), 1) $$
-    *   **Prior**: LogNormal distribution with `log_mean` = $\ln(0.01) \approx -4.605$ and `log_scale` = 1.
-    *   **Interpretation**: Median slope of $0.01$ (corresponding to 100 GPa stiffness if area=1), with a wide multiplicative variance (1-sigma range approx $0.0037$ to $0.027$).
+*   **Direction-Specific Global Slopes**: The foundational stiffness/compliance parameters for each loading direction.
+    *   **Normal Direction** ($\mu_{emulator,v}$): 
+        $$ \mu_{emulator,v} \sim \text{LogNormal}(\ln(0.01), 0.2) $$
+    *   **Shear Direction** ($\mu_{emulator,h}$): 
+        $$ \mu_{emulator,h} \sim \text{LogNormal}(\ln(0.01), 0.2) $$
+    *   **Prior**: Independent LogNormal distributions with `log_mean` = $\ln(0.01) \approx -4.605$ and `log_scale` = 0.2.
+    *   **Interpretation**: Median slope of $0.01$ for both directions, allowing independent learning of systematic corrections for Normal and Shear responses.
 
 *   **Geometric Factors** ($\gamma$): Probabilistic terms that typically track the trigonometric projection ($\cos \alpha, \sin \alpha$) but allow for deviation (e.g., misalignment).
     *   **Shared per Angle**: All experiments conducted at the same angle $\alpha$ share the same $\gamma$ parameters.
