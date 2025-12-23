@@ -25,6 +25,8 @@ from src.vis.plotting import (
     plot_grid_prediction,
     plot_spaghetti_verification,
     plot_grid_spaghetti,
+    plot_distributions_grid_2x3,
+    plot_bias_column_layout,
 )
 
 
@@ -177,7 +179,11 @@ Examples:
     }
     # Separate _n parameters (normalized)
     samples_n = {k: v for k, v in samples.items() if k.endswith("_n")}
-    samples_gamma = {k: v for k, v in samples.items() if k.startswith("gamma_")}
+    # Gamma factors (Empirical Model) - Exclude hyper parameters like "gamma_scale"
+    samples_gamma = {
+        k: v for k, v in samples.items() 
+        if k.startswith("gamma_") and not k.startswith("gamma_scale")
+    }
 
     # Unpack data
     input_xy_exp = data_dict["input_xy_exp"]
@@ -685,13 +691,167 @@ Examples:
             save_stats_csv(samples_hyper_plot, f"inference_hyper_stats_{suffix}.csv")
 
     if samples_bias:
-        plot_posterior_distributions(
-            samples_bias,
+        print(f"DEBUG: samples_bias len: {len(samples_bias)}")
+        print(f"DEBUG: samples_bias keys: {list(samples_bias.keys())[:5]}")
+        # Check if we have "b_slope" array and remove it if individual keys exist
+        if "b_slope" in samples_bias and len(samples_bias) > 1:
+            if any(k.startswith("b_") and k != "b_slope" for k in samples_bias):
+                samples_bias.pop("b_slope", None)
+        
+        # Rename keys: b_{i}_slope -> b_{angle}_{count}
+        # First, map experiment index to angle
+        exp_angles = []
+        for i in range(len(data_dict["input_xy_exp"])):
+            ang_rad = data_dict["input_xy_exp"][i][0, 1]
+            ang_deg = int(round(np.rad2deg(ang_rad)))
+            exp_angles.append(ang_deg)
+            
+        # Count occurrences to decide on numbering
+        from collections import Counter
+        angle_counts_total = Counter(exp_angles)
+        angle_counters = {a: 0 for a in exp_angles}
+        
+        samples_bias_renamed = {}
+        
+        for k, v in samples_bias.items():
+            # semantic check: is this an indexed bias param?
+            # distinct from sigma_b_slope
+            if k.startswith("b_") and "_slope" in k and "sigma" not in k:
+                # Try to parse index
+                # Format: b_{i}_slope
+                try:
+                    # Extract i (1-based index)
+                    prefix = k.split("_slope")[0] # "b_1"
+                    idx_str = prefix.split("_")[1] # "1"
+                    if idx_str.isdigit():
+                        idx = int(idx_str) - 1 # 0-based
+                        
+                        if 0 <= idx < len(exp_angles):
+                            ang = exp_angles[idx]
+                            angle_counters[ang] += 1
+                            count = angle_counters[ang]
+                            
+                            # Naming convention
+                            if angle_counts_total[ang] > 1:
+                                new_key = f"b_{ang}_{count}"
+                            else:
+                                new_key = f"b_{ang}"
+                            
+                            samples_bias_renamed[new_key] = v
+                        else:
+                            # Index out of range? Keep original
+                            samples_bias_renamed[k] = v
+                    else:
+                        samples_bias_renamed[k] = v
+                except Exception:
+                     samples_bias_renamed[k] = v
+            else:
+                # Keep other params (like sigma_b_slope)
+                samples_bias_renamed[k] = v
+
+        # User requested specific column layout: 45 | 90 | 135
+        
+        # Group samples by angle for this plotter
+        bias_data_by_angle = {45: [], 90: [], 135: []}
+        
+        for k, v in samples_bias_renamed.items():
+             # Parse b_{ang}_{count}
+             try:
+                 parts = k.split("_")
+                 # parts[1] is angle
+                 ang = int(parts[1])
+                 if ang in bias_data_by_angle:
+                     # Label: just the key is fine
+                     bias_data_by_angle[ang].append((k, v, k))
+             except:
+                 continue
+                 
+        print(f"DEBUG: bias_data_by_angle counts: { {k: len(v) for k,v in bias_data_by_angle.items()} }")
+
+        plot_bias_column_layout(
+            bias_data_by_angle,
+            save_path=figures_dir / f"posterior_bias_columns_{suffix}.png",
             prior_pdf_fn=get_prior_pdf,
-            prior_samples=prior_samples_all,
-            save_path=figures_dir / f"posterior_bias_{suffix}.png",
+            prior_samples=prior_samples_all
         )
-        save_stats_csv(samples_bias, f"inference_bias_stats_{suffix}.csv")
+        save_stats_csv(samples_bias_renamed, f"inference_bias_stats_{suffix}.csv")
+
+    # Handle normalized parameters
+    # 1. Move sigma_measure_n to hyper
+    if "sigma_measure_n" in samples_n:
+        samples_hyper["sigma_measure_n"] = samples_n.pop("sigma_measure_n")
+        
+    # 2. Extract and format b_i_slope_n for column layout
+    samples_bias_n = {}
+    keys_to_remove = []
+    
+    for k, v in samples_n.items():
+        if k.startswith("b_") and "_slope_n" in k:
+            samples_bias_n[k] = v
+            keys_to_remove.append(k)
+            
+    for k in keys_to_remove:
+        del samples_n[k]
+
+    # Rename bias_n samples: b_{i}_slope_n -> b_{angle}_{count}_n
+    samples_bias_n_renamed = {}
+    
+    # Re-use angle counters
+    angle_counters_n = {a: 0 for a in exp_angles} # Reset counters
+    
+    # Sort keys to ensure deterministic ordering (b_1, b_2...)
+    # Assuming standard sorting works for b_1, b_2... (needs natsort ideally but simple sort is okay if i<10)
+    # Actually, we should parse i again to be safe.
+    
+    # Collect index-key pairs
+    bias_n_items = []
+    for k, v in samples_bias_n.items():
+        try:
+            # b_1_slope_n
+            prefix = k.split("_slope_n")[0]
+            idx_str = prefix.split("_")[1]
+            idx = int(idx_str) - 1
+            bias_n_items.append((idx, k, v))
+        except:
+            samples_bias_n_renamed[k] = v
+            
+    bias_n_items.sort(key=lambda x: x[0])
+    
+    for idx, k, v in bias_n_items:
+        if 0 <= idx < len(exp_angles):
+            ang = exp_angles[idx]
+            angle_counters_n[ang] += 1
+            count = angle_counters_n[ang]
+            
+            if angle_counts_total[ang] > 1:
+                new_key = f"b_{ang}_{count}_n"
+            else:
+                new_key = f"b_{ang}_n"
+            samples_bias_n_renamed[new_key] = v
+        else:
+            samples_bias_n_renamed[k] = v
+
+    if samples_bias_n_renamed:
+        # User requested specific column layout for these too
+        bias_n_data_by_angle = {45: [], 90: [], 135: []}
+        
+        for k, v in samples_bias_n_renamed.items():
+             try:
+                 parts = k.split("_")
+                 # b_45_1_n -> parts[1] is angle
+                 ang = int(parts[1])
+                 if ang in bias_n_data_by_angle:
+                     bias_n_data_by_angle[ang].append((k, v, k))
+             except:
+                 continue
+                 
+        plot_bias_column_layout(
+            bias_n_data_by_angle,
+            save_path=figures_dir / f"posterior_bias_n_columns_{suffix}.png",
+            prior_pdf_fn=get_prior_pdf,
+            prior_samples=prior_samples_all
+        )
+        save_stats_csv(samples_bias_n_renamed, f"inference_bias_n_stats_{suffix}.csv")
 
     if samples_n:
         plot_posterior_distributions(
@@ -702,10 +862,34 @@ Examples:
         save_stats_csv(samples_n, f"inference_n_stats_{suffix}.csv")
 
     if samples_gamma:
-        plot_posterior_distributions(
-            samples_gamma,
+        # Group gamma samples
+        # Keys are like "gamma_v_45", "gamma_h_90"
+        gamma_groups = {"h": {}, "v": {}}
+        
+        for key, val in samples_gamma.items():
+            try:
+                # generic parser
+                parts = key.split("_")
+                # Expected: gamma, direction, angle
+                if len(parts) >= 3:
+                     direction = parts[1]
+                     angle = int(parts[2])
+                     
+                     if angle in standard_angles and direction in ["v", "h"]:
+                         if angle not in gamma_groups[direction]: gamma_groups[direction][angle] = []
+                         # Label: usually just one gamma per direction/angle in this model?
+                         # Pass key `key` (e.g. "gamma_v_45") as the 3rd element for prior lookup
+                         gamma_groups[direction][angle].append(("Posterior", val, key))
+            except (IndexError, ValueError):
+                continue
+                
+        plot_distributions_grid_2x3(
+            gamma_groups,
+            standard_angles,
+            save_path=figures_dir / f"posterior_gamma_grid_{suffix}.png",
             prior_pdf_fn=get_prior_pdf,
-            save_path=figures_dir / f"posterior_gamma_{suffix}.png",
+            prior_samples=prior_samples_all,
+            title_prefix="Gamma"
         )
         save_stats_csv(samples_gamma, f"inference_gamma_stats_{suffix}.csv")
 
