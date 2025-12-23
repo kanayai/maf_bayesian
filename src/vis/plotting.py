@@ -164,16 +164,25 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None,
 
         # Custom axis limits based on Posterior to avoid "single line" plots
         # We calculate range from posterior samples ONLY.
-        p_min = np.min(samples[key])
-        p_max = np.max(samples[key])
-        p_range = p_max - p_min
-        if p_range == 0:
-            scale = abs(p_min) * 0.1 if p_min != 0 else 1.0
-            custom_xlim = (p_min - 5*scale, p_max + 5*scale)
-        else:
-            # Add padding (e.g., 30% on each side)
-            padding = 0.3 * p_range
-            custom_xlim = (p_min - padding, p_max + padding)
+        # User requested 1% and 99% quantiles
+        try:
+            # Ensure safe conversion to numpy/float
+            vals = np.asarray(samples[key])
+            p_min, p_max = np.percentile(vals, [1, 99])
+            p_min, p_max = float(p_min), float(p_max)
+            
+            p_range = p_max - p_min
+            
+            if p_range <= 1e-12: # Effectively zero
+                scale = abs(p_min) * 0.1 if abs(p_min) > 1e-12 else 1.0
+                custom_xlim = (p_min - 5*scale, p_max + 5*scale)
+            else:
+                 # Add padding (e.g., 5% on each side)
+                padding = 0.05 * p_range
+                custom_xlim = (p_min - padding, p_max + padding)
+        except Exception as e:
+            print(f"Warning: could not calculate percentiles for {key}: {e}")
+            custom_xlim = None
 
         # Prior: Analytical PDF
         if prior_pdf_fn is not None:
@@ -235,7 +244,7 @@ def plot_prediction(samples_load, mean_pred, percentiles, input_xy_exp_plt, data
                 "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
                 markersize=sz, linewidth=0, alpha=0.7, label=lbl)
 
-    ax.set(xlabel="Extension [mm]", ylabel="Load [kN]", title=f"{title} (${angle}^\circ$)")
+    ax.set(xlabel="Extension [mm]", ylabel="Load [kN]", title=rf"{title} (${angle}^\circ$)")
     ax.legend(fontsize=10, bbox_to_anchor=(1.05, 1), loc='upper left')
     
     # Limits
@@ -286,7 +295,7 @@ def plot_combined_prediction(samples_load, mean_prior, pct_prior, mean_post, pct
                 "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
                 markersize=sz, linewidth=0, alpha=0.7, label=lbl)
         
-    ax.set(xlabel="Extension [mm]", ylabel="Load [kN]", title=f"{title} (${angle}^\circ$)")
+    ax.set(xlabel="Extension [mm]", ylabel="Load [kN]", title=rf"{title} (${angle}^\circ$)")
     ax.legend(fontsize=10, bbox_to_anchor=(1.05, 1), loc='upper left')
     
     # Limits
@@ -616,6 +625,198 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Saved {title_prefix} spaghetti grid plot to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_fn=None, prior_samples=None, title_prefix="Distributions"):
+    """
+    Plots distributions in a 2x3 grid (Rows: Shear/Normal, Cols: Angles).
+    
+    Args:
+        grouped_data: dict[direction][angle] -> list of (label, samples_array, key) tuples
+        angles: List of angles [45, 90, 135]
+        prior_pdf_fn: Function to get analytical prior PDF (optional)
+        prior_samples: Dict of prior samples for keys (optional)
+        title_prefix: Title prefix for subplots
+    """
+    directions = ["h", "v"]
+    rows = 2
+    cols = len(angles)
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 3.5*rows), constrained_layout=True)
+    
+    # Ensure axes is 2D array
+    if rows == 1 and cols == 1: axes = np.array([[axes]])
+    elif rows == 1: axes = axes[None, :]
+    elif cols == 1: axes = axes[:, None]
+    
+    for r, direction in enumerate(directions):
+        dir_label = "Shear" if direction == "h" else "Normal"
+        
+        for c, angle in enumerate(angles):
+            ax = axes[r, c]
+            
+            # Check if we have data for this cell
+            # grouped_data keys might be integers or strings, convert to int for safe lookup if needed
+            cell_data = grouped_data.get(direction, {}).get(angle, [])
+            
+            if cell_data:
+                # Determine x-limits for grid from data
+                all_samps = np.concatenate([s for item in cell_data for s in [item[1]]])
+                # User requested tighter bounds: 1% to 99% quantiles
+                p_min, p_max = np.percentile(all_samps, [1, 99])
+                
+                # Add small padding (e.g. 5% of range) to avoid cutting exactly at quantiles
+                p_range = p_max - p_min
+                padding = p_range * 0.05
+                xlim = (p_min - padding, p_max + padding)
+                
+                x_grid = np.linspace(xlim[0], xlim[1], 200)
+
+                # --- Prior Plotting ---
+                prior_plotted = False
+                
+                # 1. Try Analytic PDF first
+                if prior_pdf_fn:
+                    # Try to find a valid key for prior lookup from the data items
+                    prior_key = None
+                    for item in cell_data:
+                        if len(item) >= 3:
+                            prior_key = item[2]
+                            break
+                    
+                    # Fallback: if no key provided, try using the label of the first item
+                    if prior_key is None and cell_data:
+                         prior_key = cell_data[0][0]
+
+                    # Fetch PDF
+                    pdf_vals = prior_pdf_fn(prior_key, x_grid)
+                    
+                    if pdf_vals is not None:
+                         ax.plot(x_grid, pdf_vals, color='green', linewidth=2, label="Prior (Analytic)", alpha=0.8)
+                         prior_plotted = True
+                
+                # 2. If no analytic PDF, try Prior Samples (KDE)
+                if not prior_plotted and prior_samples:
+                    # Collect prior samples for all keys in this cell
+                    cell_prior_samps = []
+                    for item in cell_data:
+                        # item is (label, samples, key) or (label, samples)
+                        key = item[2] if len(item) >= 3 else item[0]
+                        if key in prior_samples:
+                            # Flatten
+                            ps = np.array(prior_samples[key]).flatten()
+                            cell_prior_samps.append(ps)
+                    
+                    if cell_prior_samps:
+                        combined_prior = np.concatenate(cell_prior_samps)
+                        # Plot KDE as green line
+                        sns.kdeplot(combined_prior, ax=ax, color='green', linewidth=2, label="Prior (Sim)", alpha=0.8)
+                        prior_plotted = True
+
+                # --- Posterior Plotting ---
+                # If multiple items, use different colors/labels
+                for item in cell_data:
+                    label = item[0]
+                    samples = item[1]
+                    # Match style of plot_posterior_distributions: kde=False, stat="density", alpha=0.4
+                    sns.histplot(samples, ax=ax, label=label, kde=False, stat="density", alpha=0.4)
+                    
+                ax.set_title(f"{title_prefix} - {angle}° {dir_label}")
+                ax.legend(fontsize=8)
+                ax.grid(True, alpha=0.3)
+                # Format axes to use scientific notation for small/large values
+                ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='both')
+            else:
+                ax.axis('off')
+                
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Saved {title_prefix} grid plot to {save_path}")
+    else:
+        plt.show()
+    plt.close()
+
+def plot_bias_column_layout(bias_data_by_angle, save_path=None, prior_pdf_fn=None, prior_samples=None):
+    """
+    Plots bias parameters in 3 columns (45°, 90°, 135°).
+    Rows depend on the number of parameters per angle.
+    """
+    angles = [45, 90, 135]
+    
+    # Determine max rows
+    max_rows = 0
+    for ang in angles:
+        max_rows = max(max_rows, len(bias_data_by_angle.get(ang, [])))
+    
+    if max_rows == 0:
+        print("No bias data to plot.")
+        return
+
+    cols = 3
+    rows = max_rows
+    
+    # Dynamic height
+    fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 3*rows), constrained_layout=True)
+    
+    # Ensure axes is 2D
+    if rows == 1: axes = axes[None, :]
+    if cols == 1: axes = axes[:, None]
+    
+    for c, angle in enumerate(angles):
+        items = bias_data_by_angle.get(angle, [])
+        
+        for r in range(rows):
+            ax = axes[r, c]
+            
+            if r < len(items):
+                label, samples, key = items[r]
+                
+                # --- Prior ---
+                prior_plotted = False
+                xlim = None
+                
+                # Determine limits first
+                # User requested fixed range (-5, 5) for bias plots
+                xlim = (-5, 5)
+                x_grid = np.linspace(xlim[0], xlim[1], 200)
+
+                if prior_pdf_fn:
+                     pdf_vals = prior_pdf_fn(key, x_grid)
+                     if pdf_vals is not None:
+                         ax.plot(x_grid, pdf_vals, color='green', linewidth=2, label="Prior", alpha=0.8)
+                         prior_plotted = True
+                
+                if not prior_plotted and prior_samples:
+                    if key in prior_samples:
+                        ps = np.array(prior_samples[key]).flatten()
+                        try:
+                           sns.kdeplot(ps, ax=ax, color='green', linewidth=2, label="Prior (Sim)", alpha=0.8, clip=xlim)
+                        except Exception:
+                           pass # KDE might fail if no samples in range?
+                        prior_plotted = True
+                
+                # --- Posterior ---
+                # Use binrange or just set xlim after?
+                # set xlim after.
+                sns.histplot(samples, ax=ax, label=label, kde=False, stat="density", alpha=0.4, binrange=xlim)
+                
+                ax.set_title(f"{label}") # e.g. b_45_1
+                ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='y') # Only Y needs sci likely if X is -5..5
+                ax.set_xlim(xlim)
+                ax.grid(True, alpha=0.3)
+            else:
+                ax.axis('off')
+    
+    # Add Column Headers
+    # We can add sub-titles or just rely on individual titles? 
+    # User asked for "Left 45...", maybe a super title?
+    # Or just let individual titles speak? "b_45_1" is descriptive.
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Saved Bias column plot to {save_path}")
     else:
         plt.show()
     plt.close()
