@@ -746,6 +746,7 @@ def plot_bias_column_layout(bias_data_by_angle, save_path=None, prior_pdf_fn=Non
     """
     Plots bias parameters in 3 columns (45°, 90°, 135°).
     Rows depend on the number of parameters per angle.
+    X-axis is symmetric around zero for easy visual comparison.
     """
     angles = [45, 90, 135]
     
@@ -761,8 +762,21 @@ def plot_bias_column_layout(bias_data_by_angle, save_path=None, prior_pdf_fn=Non
     cols = 3
     rows = max_rows
     
+    # Compute global symmetric xlim centered on zero
+    # Find the maximum absolute value across ALL samples to use as symmetric bound
+    all_abs_max = 0
+    for ang in angles:
+        for item in bias_data_by_angle.get(ang, []):
+            samples_np = np.asarray(item[1]).flatten()
+            p_min, p_max = np.percentile(samples_np, [1, 99])
+            abs_max = max(abs(p_min), abs(p_max))
+            all_abs_max = max(all_abs_max, abs_max)
+    
+    # Add 10% padding and make symmetric
+    xlim_bound = all_abs_max * 1.1
+    xlim = (-xlim_bound, xlim_bound)
+    
     # Dynamic height
-    # Disable constrained_layout to avoid potential solver hangs with empty subplots
     fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 3*rows))
     
     # Ensure axes is 2D
@@ -781,16 +795,6 @@ def plot_bias_column_layout(bias_data_by_angle, save_path=None, prior_pdf_fn=Non
                 
                 # Convert samples to numpy first
                 samples_np = np.asarray(samples).flatten()
-                
-                # Compute xlim from data (using 1% to 99% quantiles with padding)
-                p_min, p_max = np.percentile(samples_np, [1, 99])
-                p_range = p_max - p_min
-                if p_range < 1e-12:  # Effectively zero range
-                    scale = abs(p_min) * 0.5 if abs(p_min) > 1e-12 else 1.0
-                    xlim = (p_min - scale, p_max + scale)
-                else:
-                    padding = 0.1 * p_range
-                    xlim = (p_min - padding, p_max + padding)
                 
                 x_grid = np.linspace(xlim[0], xlim[1], 200)
                 
@@ -815,6 +819,9 @@ def plot_bias_column_layout(bias_data_by_angle, save_path=None, prior_pdf_fn=Non
                 
                 # --- Posterior ---
                 sns.histplot(samples_np, ax=ax, label=label, kde=False, stat="density", alpha=0.4, binrange=xlim)
+                
+                # Add vertical line at zero for reference
+                ax.axvline(x=0, color='red', linestyle='--', linewidth=1, alpha=0.7)
                 
                 ax.set_title(f"{label}") 
                 ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='both')
