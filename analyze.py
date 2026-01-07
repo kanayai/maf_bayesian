@@ -803,9 +803,10 @@ Examples:
                 if k not in samples_hyper_ordered:
                     samples_hyper_ordered[k] = v
             
-            # Unified range for mu_emulator_v and mu_emulator_h
+            # Unified range for parameters that should be compared
             shared_xlim_groups = {
-                "mu_emulator": ["mu_emulator_v", "mu_emulator_h"]
+                "mu_emulator": ["mu_emulator_v", "mu_emulator_h"],
+                "gamma_scale": ["gamma_scale_v", "gamma_scale_h"]
             }
             
             plot_posterior_distributions(
