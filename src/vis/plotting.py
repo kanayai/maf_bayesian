@@ -666,7 +666,7 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
         prior_samples: Dict of prior samples for keys (optional)
         title_prefix: Title prefix for subplots
     """
-    directions = ["h", "v"]
+    directions = ["v", "h"]  # Row 1: Normal (v), Row 2: Shear (h)
     rows = 2
     cols = len(angles)
     
