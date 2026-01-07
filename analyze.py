@@ -787,12 +787,31 @@ Examples:
             samples_hyper_plot = samples_hyper
 
         if samples_hyper_plot:
+            # Organize hyperparameters in a specific 3x2 grid layout:
+            # Row 1: gamma_scale_v, gamma_scale_h
+            # Row 2: mu_emulator_v, mu_emulator_h
+            # Row 3: sigma_b_slope, sigma_measure
+            hyper_order = [
+                "gamma_scale_v", "gamma_scale_h",
+                "mu_emulator_v", "mu_emulator_h", 
+                "sigma_b_slope", "sigma_measure"
+            ]
+            # Filter to only include params that exist in samples
+            samples_hyper_ordered = {
+                k: samples_hyper_plot[k] for k in hyper_order if k in samples_hyper_plot
+            }
+            # Add any remaining hyper params not in the order (in case some are added later)
+            for k, v in samples_hyper_plot.items():
+                if k not in samples_hyper_ordered:
+                    samples_hyper_ordered[k] = v
+            
             plot_posterior_distributions(
-                samples_hyper_plot,
+                samples_hyper_ordered,
                 prior_pdf_fn=get_prior_pdf,
                 save_path=figures_dir / f"posterior_hyper_{suffix}.png",
+                layout_rows=3,  # Force 3 rows for the organized layout
             )
-            save_stats_csv(samples_hyper_plot, f"inference_hyper_stats_{suffix}.csv")
+            save_stats_csv(samples_hyper_ordered, f"inference_hyper_stats_{suffix}.csv")
 
     if samples_bias:
         print(f"DEBUG: samples_bias len: {len(samples_bias)}")
