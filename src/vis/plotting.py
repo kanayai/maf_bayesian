@@ -521,7 +521,7 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
     
     prediction_data: dict[angle][direction] -> {samples_load, post_y_samples, pct_post, ...}
     """
-    directions = ["h", "v"]
+    directions = ["v", "h"]  # Row 1: Normal (v), Row 2: Shear (h)
     num_cols = len(angles)
     
     # Dynamic figsize: ~5 inch width per col, 10 inch height total (2 rows)
@@ -693,22 +693,29 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
         shared_xlim[("v", 45)] = xlim_45
         shared_xlim[("h", 45)] = xlim_45
     
-    # 135°: Union of h range with negated v range
-    # Then h uses this union, v uses the negation of this union
+    # 135°: For Normal, plot absolute value; for Shear, actual value
+    # Use union of absolute value ranges for both
     range_v_135 = get_range("v", 135)
     range_h_135 = get_range("h", 135)
+    transform_135_v = False  # Flag to transform Normal data to absolute values
     if range_v_135 and range_h_135:
-        # Negate v range: (a, b) -> (-b, -a)
-        neg_v_135 = (-range_v_135[1], -range_v_135[0])
-        # Union of h with negated v
-        union_min = min(range_h_135[0], neg_v_135[0])
-        union_max = max(range_h_135[1], neg_v_135[1])
+        # Get absolute value ranges
+        abs_v_min, abs_v_max = abs(range_v_135[0]), abs(range_v_135[1])
+        abs_v_range = (min(abs_v_min, abs_v_max), max(abs_v_min, abs_v_max))
+        # For h, we need the actual range since v values are negative
+        # Absolute value of h range
+        abs_h_min, abs_h_max = abs(range_h_135[0]), abs(range_h_135[1])
+        abs_h_range = (min(abs_h_min, abs_h_max), max(abs_h_min, abs_h_max))
+        
+        # Union of absolute value ranges
+        union_min = min(abs_v_range[0], abs_h_range[0], 0)  # Include 0
+        union_max = max(abs_v_range[1], abs_h_range[1])
         padding = (union_max - union_min) * 0.05
-        xlim_h_135 = (union_min - padding, union_max + padding)
-        # For v, negate this range: (a, b) -> (-b, -a)
-        xlim_v_135 = (-xlim_h_135[1], -xlim_h_135[0])
-        shared_xlim[("h", 135)] = xlim_h_135
-        shared_xlim[("v", 135)] = xlim_v_135
+        xlim_135 = (union_min - padding, union_max + padding)
+        
+        shared_xlim[("h", 135)] = xlim_135
+        shared_xlim[("v", 135)] = xlim_135
+        transform_135_v = True  # Mark that we need to transform v data
     
     fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 3.5*rows), constrained_layout=True)
     
@@ -786,9 +793,14 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
                 for item in cell_data:
                     label = item[0]
                     samples = item[1]
-                    # Match style of plot_posterior_distributions: kde=False, stat="density", alpha=0.4
                     # Convert to numpy to avoid matplotlib hanging with JAX arrays
                     samples_np = np.asarray(samples)
+                    
+                    # Special case: 135° Normal - plot absolute values
+                    if angle == 135 and direction == "v" and transform_135_v:
+                        samples_np = np.abs(samples_np)
+                        label = f"|{label}|"  # Indicate absolute value
+                    
                     sns.histplot(samples_np, ax=ax, label=label, kde=False, stat="density", alpha=0.4)
                     
                 ax.set_title(f"{title_prefix} - {angle}° {dir_label}")
@@ -798,12 +810,11 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
                 ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='both')
                 
                 # Add vertical reference line for theoretical gamma values
-                # Row h (Shear): 45° → sqrt(2)/2, 90° → 0, 135° → sqrt(2)/2
-                # Row v (Normal): 45° → sqrt(2)/2, 90° → 0, 135° → -sqrt(2)/2
+                # For 135° Normal with absolute value, use positive value
                 sqrt2_2 = np.sqrt(2) / 2
                 ref_values = {
                     "h": {45: sqrt2_2, 90: 1, 135: sqrt2_2},
-                    "v": {45: sqrt2_2, 90: 0, 135: -sqrt2_2}
+                    "v": {45: sqrt2_2, 90: 0, 135: sqrt2_2 if transform_135_v else -sqrt2_2}
                 }
                 if direction in ref_values and angle in ref_values[direction]:
                     ref_val = ref_values[direction][angle]
