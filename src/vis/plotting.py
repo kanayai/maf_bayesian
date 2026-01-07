@@ -670,6 +670,46 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
     rows = 2
     cols = len(angles)
     
+    # Pre-compute shared x-limits for specific angles
+    # Helper to get range from grouped_data
+    def get_range(direction, angle):
+        cell_data = grouped_data.get(direction, {}).get(angle, [])
+        if not cell_data:
+            return None
+        all_samps = np.concatenate([np.asarray(item[1]) for item in cell_data])
+        p_min, p_max = np.percentile(all_samps, [1, 99])
+        return (float(p_min), float(p_max))
+    
+    shared_xlim = {}  # (direction, angle) -> xlim
+    
+    # 45°: Union of v and h ranges
+    range_v_45 = get_range("v", 45)
+    range_h_45 = get_range("h", 45)
+    if range_v_45 and range_h_45:
+        union_min = min(range_v_45[0], range_h_45[0])
+        union_max = max(range_v_45[1], range_h_45[1])
+        padding = (union_max - union_min) * 0.05
+        xlim_45 = (union_min - padding, union_max + padding)
+        shared_xlim[("v", 45)] = xlim_45
+        shared_xlim[("h", 45)] = xlim_45
+    
+    # 135°: Union of h range with negated v range
+    # Then h uses this union, v uses the negation of this union
+    range_v_135 = get_range("v", 135)
+    range_h_135 = get_range("h", 135)
+    if range_v_135 and range_h_135:
+        # Negate v range: (a, b) -> (-b, -a)
+        neg_v_135 = (-range_v_135[1], -range_v_135[0])
+        # Union of h with negated v
+        union_min = min(range_h_135[0], neg_v_135[0])
+        union_max = max(range_h_135[1], neg_v_135[1])
+        padding = (union_max - union_min) * 0.05
+        xlim_h_135 = (union_min - padding, union_max + padding)
+        # For v, negate this range: (a, b) -> (-b, -a)
+        xlim_v_135 = (-xlim_h_135[1], -xlim_h_135[0])
+        shared_xlim[("h", 135)] = xlim_h_135
+        shared_xlim[("v", 135)] = xlim_v_135
+    
     fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 3.5*rows), constrained_layout=True)
     
     # Ensure axes is 2D array
@@ -684,19 +724,19 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
             ax = axes[r, c]
             
             # Check if we have data for this cell
-            # grouped_data keys might be integers or strings, convert to int for safe lookup if needed
             cell_data = grouped_data.get(direction, {}).get(angle, [])
             
             if cell_data:
-                # Determine x-limits for grid from data
-                all_samps = np.concatenate([s for item in cell_data for s in [item[1]]])
-                # User requested tighter bounds: 1% to 99% quantiles
-                p_min, p_max = np.percentile(all_samps, [1, 99])
-                
-                # Add small padding (e.g. 5% of range) to avoid cutting exactly at quantiles
-                p_range = p_max - p_min
-                padding = p_range * 0.05
-                xlim = (p_min - padding, p_max + padding)
+                # Use shared xlim if available, otherwise compute from data
+                if (direction, angle) in shared_xlim:
+                    xlim = shared_xlim[(direction, angle)]
+                else:
+                    # Determine x-limits from data
+                    all_samps = np.concatenate([np.asarray(item[1]) for item in cell_data])
+                    p_min, p_max = np.percentile(all_samps, [1, 99])
+                    p_range = p_max - p_min
+                    padding = p_range * 0.05
+                    xlim = (p_min - padding, p_max + padding)
                 
                 x_grid = np.linspace(xlim[0], xlim[1], 200)
 
