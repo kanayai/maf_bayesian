@@ -19,7 +19,7 @@ config = {
         "prediction_angle": [45, 90, 135],  # Angle for prediction/plotting
         "direction": "v",  # 'h' or 'v' for single direction models/plots
         "prediction_interval": 0.95,  # Prediction interval coverage (e.g., 0.95 for 95%)
-        "prediction_samples": 2000,  # Number of samples for prediction
+        "prediction_samples": 200,  # Number of samples for prediction
         # Uncertainty bands: "function" (epistemic only), "observation" (includes noise), or "both"
         "uncertainty_bands": "both",
         "run_residual_analysis": True,  # Validation: Run residual analysis
@@ -30,10 +30,10 @@ config = {
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 3000,
-        "num_samples": 3000,
-        "num_chains": 2,
-        "thinning": 3,
+        "num_warmup": 1000,
+        "num_samples": 1000,
+        "num_chains": 1,
+        "thinning": 1,
     },
     # Bias flags
     "bias": {
