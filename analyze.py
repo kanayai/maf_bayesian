@@ -806,7 +806,8 @@ Examples:
             # Unified range for parameters that should be compared
             shared_xlim_groups = {
                 "mu_emulator": ["mu_emulator_v", "mu_emulator_h"],
-                "gamma_scale": ["gamma_scale_v", "gamma_scale_h"]
+                "gamma_scale": ["gamma_scale_v", "gamma_scale_h"],
+                "sigma": ["sigma_measure", "sigma_b_slope"]
             }
             
             plot_posterior_distributions(
