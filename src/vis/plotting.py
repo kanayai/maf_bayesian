@@ -738,7 +738,7 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
                 # Row v (Normal): 45° → sqrt(2)/2, 90° → 0, 135° → -sqrt(2)/2
                 sqrt2_2 = np.sqrt(2) / 2
                 ref_values = {
-                    "h": {45: sqrt2_2, 90: 0, 135: sqrt2_2},
+                    "h": {45: sqrt2_2, 90: 1, 135: sqrt2_2},
                     "v": {45: sqrt2_2, 90: 0, 135: -sqrt2_2}
                 }
                 if direction in ref_values and angle in ref_values[direction]:
