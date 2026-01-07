@@ -787,14 +787,12 @@ Examples:
             samples_hyper_plot = samples_hyper
 
         if samples_hyper_plot:
-            # Organize hyperparameters in a specific 3x2 grid layout:
-            # Row 1: gamma_scale_v, gamma_scale_h
-            # Row 2: mu_emulator_v, mu_emulator_h
-            # Row 3: sigma_b_slope, sigma_measure
+            # Organize hyperparameters in a 2x3 grid layout (transposed):
+            # Row 1: gamma_scale_v, mu_emulator_v, sigma_b_slope
+            # Row 2: gamma_scale_h, mu_emulator_h, sigma_measure
             hyper_order = [
-                "gamma_scale_v", "gamma_scale_h",
-                "mu_emulator_v", "mu_emulator_h", 
-                "sigma_b_slope", "sigma_measure"
+                "gamma_scale_v", "mu_emulator_v", "sigma_b_slope",
+                "gamma_scale_h", "mu_emulator_h", "sigma_measure"
             ]
             # Filter to only include params that exist in samples
             samples_hyper_ordered = {
@@ -805,11 +803,17 @@ Examples:
                 if k not in samples_hyper_ordered:
                     samples_hyper_ordered[k] = v
             
+            # Unified range for mu_emulator_v and mu_emulator_h
+            shared_xlim_groups = {
+                "mu_emulator": ["mu_emulator_v", "mu_emulator_h"]
+            }
+            
             plot_posterior_distributions(
                 samples_hyper_ordered,
                 prior_pdf_fn=get_prior_pdf,
                 save_path=figures_dir / f"posterior_hyper_{suffix}.png",
-                layout_rows=3,  # Force 3 rows for the organized layout
+                layout_rows=2,  # Transposed: 2 rows x 3 cols
+                shared_xlim_groups=shared_xlim_groups,
             )
             save_stats_csv(samples_hyper_ordered, f"inference_hyper_stats_{suffix}.csv")
 
