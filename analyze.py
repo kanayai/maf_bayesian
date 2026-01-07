@@ -1,7 +1,11 @@
+print("DEBUG: Pre-Import")
+import matplotlib
+matplotlib.use("Agg")
 import arviz as az
 import jax.numpy as jnp
 import jax.random as random
 from jax import vmap
+import jax
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
@@ -29,8 +33,107 @@ from src.vis.plotting import (
     plot_bias_column_layout,
 )
 
+def predict_sample_wrapper(
+    rng,
+    m_em,
+    s_em,
+    l_xy,
+    l_th,
+    s_meas,
+    s_meas_base,
+    s_const,
+    bias_slope_item,
+    t_theta,
+    t_xy,
+    exp_xy,
+    input_xy_sim,
+    input_theta_sim,
+    exp_data, # (N, 3) or (N,)
+    sim_data,
+    direction,
+    is_prior,
+    g_scale_v,
+    g_scale_h,
+    betas_simp,
+    sigma_simp,
+    noise_model
+):
+    """
+    Module-level wrapper for single sample prediction.
+    Designed to be JIT-compiled via vmap.
+    """
+    # Construct exp_theta if posterior
+    if is_prior:
+         exp_theta = jnp.empty((0, 5))
+    else:
+         exp_theta = jnp.tile(t_theta, (exp_xy.shape[0], 1))
+
+    # Call posterior_predict
+    mean, std_em, sample = posterior_predict(
+        rng,
+        exp_xy,
+        input_xy_sim,
+        exp_theta,
+        input_theta_sim,
+        exp_data,
+        sim_data,
+        t_xy,
+        t_theta,
+        m_em,
+        s_em,
+        l_xy,
+        l_th,
+        s_meas,
+        s_meas_base,
+        s_const,
+        direction=direction,
+        bias_slope=bias_slope_item,
+        gamma_scale_v=g_scale_v,
+        gamma_scale_h=g_scale_h,
+        betas_simple=betas_simp,
+        sigma_simple=sigma_simp,
+    )
+    return mean, std_em, sample
+
+# Global JIT-compiled prediction function
+# Global JIT-compiled prediction function
+# Global JIT-compiled prediction function
+# Global JIT-compiled prediction function
+predict_fn = jax.jit(
+    vmap(
+        predict_sample_wrapper, 
+        in_axes=(
+            0, # rng (1)
+            0, # m_em
+            0, # s_em
+            0, # l_xy
+            0, # l_th
+            0, # s_meas
+            0, # s_meas_base
+            0, # s_const
+            0, # bias_slope_item
+            0, # t_theta (10)
+            None, # t_xy (11)
+            None, # exp_xy
+            None, # input_xy_sim
+            None, # input_theta_sim
+            None, # exp_data
+            None, # sim_data
+            None, # direction
+            None, # is_prior (18)
+            0, # g_scale_v
+            0, # g_scale_h
+            0, # betas_simp
+            0, # sigma_simp
+            None # noise_model (23)
+        )
+    ), 
+    static_argnames=("direction", "is_prior", "noise_model")
+)
+
 
 def main():
+    print("DEBUG: Script Start")
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description="Analyze MCMC results and generate plots",
@@ -72,6 +175,7 @@ Examples:
 
     # 1. Load Data
     data_dict = load_all_data(config)
+    print(f"DEBUG: Loaded data_dict keys: {list(data_dict.keys())}")
 
     # 2. Plot Experimental Data
     # Setup output directory
@@ -712,6 +816,7 @@ Examples:
         angle_counters = {a: 0 for a in exp_angles}
         
         samples_bias_renamed = {}
+        bias_key_map = {}
         
         for k, v in samples_bias.items():
             # semantic check: is this an indexed bias param?
@@ -738,16 +843,21 @@ Examples:
                                 new_key = f"b_{ang}"
                             
                             samples_bias_renamed[new_key] = v
+                            bias_key_map[new_key] = k
                         else:
                             # Index out of range? Keep original
                             samples_bias_renamed[k] = v
+                            bias_key_map[k] = k
                     else:
                         samples_bias_renamed[k] = v
+                        bias_key_map[k] = k
                 except Exception:
                      samples_bias_renamed[k] = v
+                     bias_key_map[k] = k
             else:
                 # Keep other params (like sigma_b_slope)
                 samples_bias_renamed[k] = v
+                bias_key_map[k] = k
 
         # User requested specific column layout: 45 | 90 | 135
         
@@ -761,8 +871,10 @@ Examples:
                  # parts[1] is angle
                  ang = int(parts[1])
                  if ang in bias_data_by_angle:
-                     # Label: just the key is fine
-                     bias_data_by_angle[ang].append((k, v, k))
+                     # Label: key is fine
+                     # Pass original key for prior lookup
+                     original_key = bias_key_map.get(k, k)
+                     bias_data_by_angle[ang].append((k, v, original_key))
              except:
                  continue
                  
@@ -771,8 +883,7 @@ Examples:
         plot_bias_column_layout(
             bias_data_by_angle,
             save_path=figures_dir / f"posterior_bias_columns_{suffix}.png",
-            prior_pdf_fn=get_prior_pdf,
-            prior_samples=prior_samples_all
+            # No prior plotted: b_i ~ N(0, sigma_b) has hierarchical prior (sigma_b is inferred)
         )
         save_stats_csv(samples_bias_renamed, f"inference_bias_stats_{suffix}.csv")
 
@@ -848,8 +959,7 @@ Examples:
         plot_bias_column_layout(
             bias_n_data_by_angle,
             save_path=figures_dir / f"posterior_bias_n_columns_{suffix}.png",
-            prior_pdf_fn=get_prior_pdf,
-            prior_samples=prior_samples_all
+            # No prior plotted: same rationale as b_i (hierarchical structure)
         )
         save_stats_csv(samples_bias_n_renamed, f"inference_bias_n_stats_{suffix}.csv")
 
@@ -1102,119 +1212,53 @@ Examples:
 
     post_params_tuple = extract_params(samples, indices)
 
+
     print("Running predictions per angle...")
+    
+    # Pre-calculate conditioning data ONCE
+    # Full data for posterior
+    full_exp_xy = jnp.concatenate(input_xy_exp, axis=0) if len(input_xy_exp) > 0 else jnp.empty((0, 2))
+    
+    # Concatenate data arrays for posterior
+    data_exp_v_concat = jnp.concatenate(data_exp_v, axis=0) if len(data_exp_v) > 0 else jnp.empty((0, 3))
+    data_exp_h_concat = jnp.concatenate(data_exp_h, axis=0) if len(data_exp_h) > 0 else jnp.empty((0, 3))
+    
+    conditioning_data = {
+        "exp_xy_full": full_exp_xy,
+        "input_xy_sim": input_xy_sim,
+        "input_theta_sim": input_theta_sim,
+        "data_exp_v_full": data_exp_v_concat,
+        "data_exp_h_full": data_exp_h_concat,
+        "data_sim_v": data_sim_v,
+        "data_sim_h": data_sim_h
+    }
 
     def predict_batch(params_tuple, direction, current_test_xy, use_prior=False):
         """
-        Compute GP predictions using posterior_predict.
-
-        Args:
-            params_tuple: Tuple of parameter samples
-            direction: 'h' or 'v' for horizontal/vertical
-            current_test_xy: Test points to predict at
-            use_prior: If True, condition only on simulation data (prior predictions).
-                      If False, condition on both simulation and experimental data (posterior).
+        Compute GP predictions using pre-compiled JIT function.
         """
         (
-            test_theta,
-            mu_em_v,
-            mu_em_h,
-            sig_em,
-            len_xy,
-            len_th,
-            sig_meas,
-            sig_meas_base,
-            sig_const,
-            bias_slope_list,
-            gamma_scale_v_list,
-            gamma_scale_h_list,
-            betas_simple_dict,
-            sigma_simple_list,
+            test_theta, mu_em_v, mu_em_h, sig_em, len_xy, len_th, 
+            sig_meas, sig_meas_base, sig_const, bias_slope_list, 
+            gamma_scale_v_list, gamma_scale_h_list, 
+            betas_simple_dict, sigma_simple_list
         ) = params_tuple
-
-        def predict_point(
-            rng,
-            m_em,
-            s_em,
-            l_xy,
-            l_th,
-            s_meas,
-            s_meas_base,
-            s_const,
-            bias_slope_item, # Tuple/List of scalars for this sample? No, JAX vmap needs arrays.
-                             # bias_slope_list is a LIST of arrays (N_samples,).
-                             # When vmapped, we get a list of scalars?
-                             # Dealing with list in vmap can be tricky if structure matches.
-            t_theta,
-            t_xy,
-            direction,
-            is_prior,
-            g_scale_v,
-            g_scale_h,
-            betas_simp,
-            sigma_simp,
-        ):
-            model_type = config.get("model_type", "unknown")
-            
-            # Model specific logic handled inside posterior_predict
-            # if model_type == "model_empirical": logic removed in favor of unified call below
-
-
-            if is_prior:
-                # Prior: condition only on simulation data
-                exp_xy = jnp.empty((0, 2))
-                exp_theta = jnp.empty((0, 5))
-                exp_data = jnp.empty(0)
-            else:
-                # Posterior: condition on both simulation and experimental data
-                exp_xy = jnp.concatenate(input_xy_exp, axis=0)
-                exp_theta = jnp.tile(t_theta, (exp_xy.shape[0], 1))
-                exp_data = jnp.concatenate(
-                    data_exp_v if direction == "v" else data_exp_h, axis=0
-                )
-
-            sim_data = data_sim_v if direction == "v" else data_sim_h
-
-            # Get GP realization via Cholesky sampling from posterior_predict
-            mean, std_em, sample = posterior_predict(
-                rng,
-                exp_xy,
-                input_xy_sim,
-                exp_theta,
-                input_theta_sim,
-                exp_data,
-                sim_data,
-                t_xy,
-                t_theta,
-                m_em,
-                s_em,
-                l_xy,
-                l_th,
-                s_meas,
-                s_meas_base,
-                s_const,
-                direction=direction,
-                bias_slope=bias_slope_item,
-                gamma_scale_v=g_scale_v,
-                gamma_scale_h=g_scale_h,
-                betas_simple=betas_simp,
-                sigma_simple=sigma_simp,
-            )
-            return mean, std_em, sample
-
-        # Prepare vmap inputs
-        # bias_slope_list is [array(N), array(N)...]
-        # We need to stack it? Or pass as list? vmap handles lists/tuples if tree structure matches.
-        # Yes, pass bias_slope_list as is. vmap will map over 0-axis of each array in the list.
-        
-        vmap_predict = vmap(
-            predict_point, in_axes=(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, None, None, None, 0, 0, 0, 0)
-        )
 
         num_samples = test_theta.shape[0]
         rng_keys = random.split(random.PRNGKey(42), num_samples)
-
-        means, stds_em, f_samples = vmap_predict(
+        
+        # Prepare Conditioning Data
+        if use_prior:
+            exp_xy = jnp.empty((0, 2))
+            exp_data = jnp.empty((0, 3)) 
+        else:
+            exp_xy = conditioning_data["exp_xy_full"]
+            exp_data = conditioning_data["data_exp_v_full"] if direction == "v" else conditioning_data["data_exp_h_full"]
+            
+        sim_data = conditioning_data["data_sim_v"] if direction == "v" else conditioning_data["data_sim_h"]
+        
+        # Call JIT function
+        means, stds_em, f_samples = predict_fn(
             rng_keys,
             mu_em_h if direction == "h" else mu_em_v,
             sig_em,
@@ -1223,49 +1267,47 @@ Examples:
             sig_meas,
             sig_meas_base,
             sig_const,
-            bias_slope_list, # Passed to bias_slope_item
+            bias_slope_list,
             test_theta,
             current_test_xy,
+            exp_xy,
+            conditioning_data["input_xy_sim"],
+            conditioning_data["input_theta_sim"],
+            exp_data,
+            sim_data,
             direction,
             use_prior,
             gamma_scale_v_list,
             gamma_scale_h_list,
             betas_simple_dict,
             sigma_simple_list,
+            config["data"].get("noise_model", "proportional")
         )
 
-        # Compute total_std for reporting
         loads = current_test_xy[:, 0]
-        noise_model = config["data"].get("noise_model", "proportional")
         n_samples, n_points = f_samples.shape
+        noise_model = config["data"].get("noise_model", "proportional")
 
         if sigma_simple_list is not None:
-             # Simple Model Proportional Noise
-             # noise_std = sigma_measure * sqrt(load)
              noise_std = sigma_simple_list[:, None] * jnp.sqrt(jnp.abs(loads[None, :]) + 1e-6)
              noise_var = noise_std**2
         elif noise_model == "additive":
-            noise_var = (
-                sig_meas[:, None] ** 2 * loads[None, :] + sig_meas_base[:, None] ** 2
-            )
+            noise_var = (sig_meas[:, None] ** 2 * loads[None, :] + sig_meas_base[:, None] ** 2)
         elif noise_model == "constant":
             noise_var = sig_const[:, None] ** 2 * jnp.ones((n_samples, n_points))
-        else:
+        else: # proportional
             noise_var = sig_meas[:, None] ** 2 * loads[None, :]
 
         total_std = jnp.sqrt(stds_em**2 + noise_var)
 
-        # Compute observation samples (y_samples = f_samples + noise)
-        # Uses learned posterior noise values for observation uncertainty bands
-        rng_noise = random.PRNGKey(123)  # Separate key for noise sampling
-        
+        # Observation Samples
+        rng_noise = random.PRNGKey(123)
         if sigma_simple_list is not None:
              noise_std = sigma_simple_list[:, None] * jnp.sqrt(jnp.abs(loads[None, :]) + 1e-6)
-             noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
         else:
              noise_std = jnp.sqrt(noise_var)
-             noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
-             
+        
+        noise_samples = noise_std * random.normal(rng_noise, (n_samples, n_points))
         y_samples = f_samples + noise_samples
 
         return means, total_std, f_samples, y_samples
@@ -1283,13 +1325,25 @@ Examples:
             ]
         )
 
-        # Re-load data for this specific angle to get the points for plotting
-        # Create a temp config with only this angle
-        import copy
+        # Filter pre-loaded data for this angle (Avoid re-loading from disk)
+        def filter_by_angle(data_list_xy, data_list_val, target_angle):
+            filtered_xy = []
+            filtered_val = []
+            for xy, val in zip(data_list_xy, data_list_val):
+                angle_deg = np.rad2deg(xy[0, 1])
+                if np.isclose(angle_deg, target_angle, atol=1.0):
+                     filtered_xy.append(xy)
+                     filtered_val.append(val)
+            return filtered_xy, filtered_val
 
-        temp_config = copy.deepcopy(config)
-        temp_config["data"]["angles"] = [angle_value]
-        data_current_angle = load_all_data(temp_config)
+        filt_xy, filt_h = filter_by_angle(data_dict["input_xy_exp_full"], data_dict["data_exp_h_full_raw"], angle_value)
+        _, filt_v = filter_by_angle(data_dict["input_xy_exp_full"], data_dict["data_exp_v_full_raw"], angle_value)
+        
+        data_current_angle = {
+             "input_xy_exp": filt_xy,
+             "data_exp_h_raw": filt_h,
+             "data_exp_v_raw": filt_v
+        }
 
         for direction in ["v", "h"]:
             dir_label = "Normal" if direction == "v" else "Shear"
@@ -1311,11 +1365,14 @@ Examples:
             input_xy_exp_plt = data_current_angle["input_xy_exp"]
 
             # 1. Prior Prediction
-            print("    Running prior prediction...")
+            import time
+            t0 = time.time()
+            print(f"    Running prior prediction... (Start)")
             # We already have prior samples. Just propagate.
             _, _, prior_f_samples, prior_y_samples = predict_batch(
                 prior_params_tuple, direction, test_xy, use_prior=True
             )
+            print(f"    Prior prediction done in {time.time()-t0:.2f}s")
 
             mean_prior = jnp.mean(prior_f_samples, axis=0)  # (100,)
             # Function uncertainty (epistemic only)
@@ -1332,10 +1389,12 @@ Examples:
 
 
             # 2. Posterior Prediction
-            print("    Running posterior prediction...")
+            t0 = time.time()
+            print(f"    Running posterior prediction... (Start)")
             _, _, post_f_samples, post_y_samples = predict_batch(
                 post_params_tuple, direction, test_xy, use_prior=False
             )
+            print(f"    Posterior prediction done in {time.time()-t0:.2f}s")
 
             mean_post = jnp.mean(post_f_samples, axis=0)
             # Function uncertainty (epistemic only)
