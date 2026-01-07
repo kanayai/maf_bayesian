@@ -127,12 +127,13 @@ def plot_averaged_experimental_data(data_dict, save_path=None):
         plt.show()
     plt.close()
 
-def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None, save_path=None, layout_rows=None):
+def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None, save_path=None, layout_rows=None, shared_xlim_groups=None):
     """
     Plots histograms of posterior samples for all parameters.
     If prior_pdf_fn is provided, plots analytical prior density as a green line.
     prior_pdf_fn(key, x_vals) -> pdf_vals
     If prior_samples is provided (dict), plots prior histogram for matching keys.
+    If shared_xlim_groups is provided (dict), parameters in the same group share x-axis range.
     """
     keys = list(samples.keys())
     num_vars = len(keys)
@@ -152,6 +153,27 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None,
     else:
         axes = [axes]
     
+    # Pre-compute shared xlim ranges if groups are specified
+    shared_xlim_cache = {}
+    if shared_xlim_groups:
+        for group_name, group_keys in shared_xlim_groups.items():
+            # Compute union of ranges for all keys in the group
+            group_min, group_max = float('inf'), float('-inf')
+            for gk in group_keys:
+                if gk in samples:
+                    vals = np.asarray(samples[gk])
+                    p_min, p_max = np.percentile(vals, [1, 99])
+                    group_min = min(group_min, float(p_min))
+                    group_max = max(group_max, float(p_max))
+            
+            if group_min < float('inf'):
+                p_range = group_max - group_min
+                padding = 0.05 * p_range if p_range > 1e-12 else 0.1
+                group_xlim = (group_min - padding, group_max + padding)
+                # Cache for each key in the group
+                for gk in group_keys:
+                    shared_xlim_cache[gk] = group_xlim
+    
     for i, key in enumerate(keys):
         # Posterior: Histogram only (stat="density" to match KDE scale)
         # Convert to numpy to avoid matplotlib hanging with JAX arrays
@@ -165,30 +187,32 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None,
             sns.histplot(p_s, ax=axes[i], kde=False, stat="density", color='green', alpha=0.2, label="Prior (Sampled)")
 
         # Custom axis limits based on Posterior to avoid "single line" plots
-        # We calculate range from posterior samples ONLY.
-        # User requested 1% and 99% quantiles
-        try:
-            # Ensure safe conversion to numpy/float
-            vals = np.asarray(samples[key])
-            p_min, p_max = np.percentile(vals, [1, 99])
-            p_min, p_max = float(p_min), float(p_max)
-            
-            p_range = p_max - p_min
-            
-            if p_range <= 1e-12: # Effectively zero
-                scale = abs(p_min) * 0.1 if abs(p_min) > 1e-12 else 1.0
-                custom_xlim = (p_min - 5*scale, p_max + 5*scale)
-            else:
-                 # Add padding (e.g., 5% on each side)
-                padding = 0.05 * p_range
-                custom_xlim = (p_min - padding, p_max + padding)
-        except Exception as e:
-            print(f"Warning: could not calculate percentiles for {key}: {e}")
-            custom_xlim = None
+        # Check if this key has a shared xlim from a group
+        if key in shared_xlim_cache:
+            custom_xlim = shared_xlim_cache[key]
+        else:
+            # Calculate range from posterior samples ONLY
+            try:
+                vals = np.asarray(samples[key])
+                p_min, p_max = np.percentile(vals, [1, 99])
+                p_min, p_max = float(p_min), float(p_max)
+                
+                p_range = p_max - p_min
+                
+                if p_range <= 1e-12: # Effectively zero
+                    scale = abs(p_min) * 0.1 if abs(p_min) > 1e-12 else 1.0
+                    custom_xlim = (p_min - 5*scale, p_max + 5*scale)
+                else:
+                    # Add padding (e.g., 5% on each side)
+                    padding = 0.05 * p_range
+                    custom_xlim = (p_min - padding, p_max + padding)
+            except Exception as e:
+                print(f"Warning: could not calculate percentiles for {key}: {e}")
+                custom_xlim = None
 
         # Prior: Analytical PDF
-        if prior_pdf_fn is not None:
-             # Use the zoomed-in grid for evaluating PDF to ensure resolution
+        if prior_pdf_fn is not None and custom_xlim is not None:
+            # Use the zoomed-in grid for evaluating PDF to ensure resolution
             x_grid = np.linspace(custom_xlim[0], custom_xlim[1], 200)
             
             # Get PDF values
