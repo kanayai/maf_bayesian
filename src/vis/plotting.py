@@ -154,12 +154,14 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None,
     
     for i, key in enumerate(keys):
         # Posterior: Histogram only (stat="density" to match KDE scale)
-        sns.histplot(samples[key], ax=axes[i], kde=False, stat="density", label="Posterior", alpha=0.4)
+        # Convert to numpy to avoid matplotlib hanging with JAX arrays
+        samples_np = np.asarray(samples[key])
+        sns.histplot(samples_np, ax=axes[i], kde=False, stat="density", label="Posterior", alpha=0.4)
         
         # Prior: Samples (Histogram)
         if prior_samples is not None and key in prior_samples:
             # Flatten if necessary (e.g. if chains dim exists)
-            p_s = np.array(prior_samples[key]).flatten()
+            p_s = np.asarray(prior_samples[key]).flatten()
             sns.histplot(p_s, ax=axes[i], kde=False, stat="density", color='green', alpha=0.2, label="Prior (Sampled)")
 
         # Custom axis limits based on Posterior to avoid "single line" plots
@@ -721,7 +723,9 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
                     label = item[0]
                     samples = item[1]
                     # Match style of plot_posterior_distributions: kde=False, stat="density", alpha=0.4
-                    sns.histplot(samples, ax=ax, label=label, kde=False, stat="density", alpha=0.4)
+                    # Convert to numpy to avoid matplotlib hanging with JAX arrays
+                    samples_np = np.asarray(samples)
+                    sns.histplot(samples_np, ax=ax, label=label, kde=False, stat="density", alpha=0.4)
                     
                 ax.set_title(f"{title_prefix} - {angle}° {dir_label}")
                 ax.legend(fontsize=8)
@@ -758,11 +762,13 @@ def plot_bias_column_layout(bias_data_by_angle, save_path=None, prior_pdf_fn=Non
     rows = max_rows
     
     # Dynamic height
-    fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 3*rows), constrained_layout=True)
+    # Disable constrained_layout to avoid potential solver hangs with empty subplots
+    fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 3*rows))
     
     # Ensure axes is 2D
-    if rows == 1: axes = axes[None, :]
-    if cols == 1: axes = axes[:, None]
+    if rows == 1 and cols == 1: axes = np.array([[axes]])
+    elif rows == 1: axes = axes[None, :]
+    elif cols == 1: axes = axes[:, None]
     
     for c, angle in enumerate(angles):
         items = bias_data_by_angle.get(angle, [])
@@ -773,14 +779,23 @@ def plot_bias_column_layout(bias_data_by_angle, save_path=None, prior_pdf_fn=Non
             if r < len(items):
                 label, samples, key = items[r]
                 
+                # Convert samples to numpy first
+                samples_np = np.asarray(samples).flatten()
+                
+                # Compute xlim from data (using 1% to 99% quantiles with padding)
+                p_min, p_max = np.percentile(samples_np, [1, 99])
+                p_range = p_max - p_min
+                if p_range < 1e-12:  # Effectively zero range
+                    scale = abs(p_min) * 0.5 if abs(p_min) > 1e-12 else 1.0
+                    xlim = (p_min - scale, p_max + scale)
+                else:
+                    padding = 0.1 * p_range
+                    xlim = (p_min - padding, p_max + padding)
+                
+                x_grid = np.linspace(xlim[0], xlim[1], 200)
+                
                 # --- Prior ---
                 prior_plotted = False
-                xlim = None
-                
-                # Determine limits first
-                # User requested fixed range (-5, 5) for bias plots
-                xlim = (-5, 5)
-                x_grid = np.linspace(xlim[0], xlim[1], 200)
 
                 if prior_pdf_fn:
                      pdf_vals = prior_pdf_fn(key, x_grid)
@@ -790,24 +805,26 @@ def plot_bias_column_layout(bias_data_by_angle, save_path=None, prior_pdf_fn=Non
                 
                 if not prior_plotted and prior_samples:
                     if key in prior_samples:
-                        ps = np.array(prior_samples[key]).flatten()
+                        ps = np.asarray(prior_samples[key]).flatten()
+                        # Use histplot instead of KDE for robustness
                         try:
-                           sns.kdeplot(ps, ax=ax, color='green', linewidth=2, label="Prior (Sim)", alpha=0.8, clip=xlim)
-                        except Exception:
-                           pass # KDE might fail if no samples in range?
-                        prior_plotted = True
+                           sns.histplot(ps, ax=ax, color='green', stat="density", element="step", fill=False, label="Prior (Sim)", alpha=0.5, binrange=xlim)
+                           prior_plotted = True
+                        except Exception as e:
+                           print(f"Warning: Prior plot failed for {key}: {e}")
                 
                 # --- Posterior ---
-                # Use binrange or just set xlim after?
-                # set xlim after.
-                sns.histplot(samples, ax=ax, label=label, kde=False, stat="density", alpha=0.4, binrange=xlim)
+                sns.histplot(samples_np, ax=ax, label=label, kde=False, stat="density", alpha=0.4, binrange=xlim)
                 
-                ax.set_title(f"{label}") # e.g. b_45_1
-                ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='y') # Only Y needs sci likely if X is -5..5
+                ax.set_title(f"{label}") 
+                ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='both')
                 ax.set_xlim(xlim)
                 ax.grid(True, alpha=0.3)
             else:
                 ax.axis('off')
+    
+    plt.tight_layout() # Use strict layout instead of constrained
+
     
     # Add Column Headers
     # We can add sub-titles or just rely on individual titles? 
