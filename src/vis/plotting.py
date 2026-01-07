@@ -732,6 +732,18 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
                 ax.grid(True, alpha=0.3)
                 # Format axes to use scientific notation for small/large values
                 ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='both')
+                
+                # Add vertical reference line for theoretical gamma values
+                # Row h (Shear): 45° → sqrt(2)/2, 90° → 0, 135° → sqrt(2)/2
+                # Row v (Normal): 45° → sqrt(2)/2, 90° → 0, 135° → -sqrt(2)/2
+                sqrt2_2 = np.sqrt(2) / 2
+                ref_values = {
+                    "h": {45: sqrt2_2, 90: 0, 135: sqrt2_2},
+                    "v": {45: sqrt2_2, 90: 0, 135: -sqrt2_2}
+                }
+                if direction in ref_values and angle in ref_values[direction]:
+                    ref_val = ref_values[direction][angle]
+                    ax.axvline(x=ref_val, color='red', linestyle='--', linewidth=1.5, alpha=0.8, label=f"Theory ({ref_val:.3f})")
             else:
                 ax.axis('off')
                 
