@@ -655,7 +655,7 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
         plt.show()
     plt.close()
 
-def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_fn=None, prior_samples=None, title_prefix="Distributions"):
+def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_fn=None, prior_samples=None, title_prefix="Distributions", use_gamma_logic=True):
     """
     Plots distributions in a 2x3 grid (Rows: Shear/Normal, Cols: Angles).
     
@@ -663,8 +663,9 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
         grouped_data: dict[direction][angle] -> list of (label, samples_array, key) tuples
         angles: List of angles [45, 90, 135]
         prior_pdf_fn: Function to get analytical prior PDF (optional)
-        prior_samples: Dict of prior samples for keys (optional)
+    prior_samples: Dict of prior samples for keys (optional)
         title_prefix: Title prefix for subplots
+        use_gamma_logic: If True, applies specific range unification and abs transformation for Gamma plots.
     """
     directions = ["v", "h"]  # Row 1: Normal (v), Row 2: Shear (h)
     rows = 2
@@ -681,41 +682,43 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
         return (float(p_min), float(p_max))
     
     shared_xlim = {}  # (direction, angle) -> xlim
-    
-    # 45°: Union of v and h ranges
-    range_v_45 = get_range("v", 45)
-    range_h_45 = get_range("h", 45)
-    if range_v_45 and range_h_45:
-        union_min = min(range_v_45[0], range_h_45[0])
-        union_max = max(range_v_45[1], range_h_45[1])
-        padding = (union_max - union_min) * 0.05
-        xlim_45 = (union_min - padding, union_max + padding)
-        shared_xlim[("v", 45)] = xlim_45
-        shared_xlim[("h", 45)] = xlim_45
-    
-    # 135°: For Normal, plot absolute value; for Shear, actual value
-    # Use union of absolute value ranges for both
-    range_v_135 = get_range("v", 135)
-    range_h_135 = get_range("h", 135)
-    transform_135_v = False  # Flag to transform Normal data to absolute values
-    if range_v_135 and range_h_135:
-        # Get absolute value ranges
-        abs_v_min, abs_v_max = abs(range_v_135[0]), abs(range_v_135[1])
-        abs_v_range = (min(abs_v_min, abs_v_max), max(abs_v_min, abs_v_max))
-        # For h, we need the actual range since v values are negative
-        # Absolute value of h range
-        abs_h_min, abs_h_max = abs(range_h_135[0]), abs(range_h_135[1])
-        abs_h_range = (min(abs_h_min, abs_h_max), max(abs_h_min, abs_h_max))
+    transform_135_v = False
+
+    if use_gamma_logic:
+        # 45°: Union of v and h ranges
+        range_v_45 = get_range("v", 45)
+        range_h_45 = get_range("h", 45)
+        if range_v_45 and range_h_45:
+            union_min = min(range_v_45[0], range_h_45[0])
+            union_max = max(range_v_45[1], range_h_45[1])
+            padding = (union_max - union_min) * 0.05
+            xlim_45 = (union_min - padding, union_max + padding)
+            shared_xlim[("v", 45)] = xlim_45
+            shared_xlim[("h", 45)] = xlim_45
         
-        # Union of absolute value ranges
-        union_min = min(abs_v_range[0], abs_h_range[0], 0)  # Include 0
-        union_max = max(abs_v_range[1], abs_h_range[1])
-        padding = (union_max - union_min) * 0.05
-        xlim_135 = (union_min - padding, union_max + padding)
+        # 135°: For Normal, plot absolute value; for Shear, actual value
+        # Use union of absolute value ranges for both
+        range_v_135 = get_range("v", 135)
+        range_h_135 = get_range("h", 135)
         
-        shared_xlim[("h", 135)] = xlim_135
-        shared_xlim[("v", 135)] = xlim_135
-        transform_135_v = True  # Mark that we need to transform v data
+        if range_v_135 and range_h_135:
+            # Get absolute value ranges
+            abs_v_min, abs_v_max = abs(range_v_135[0]), abs(range_v_135[1])
+            abs_v_range = (min(abs_v_min, abs_v_max), max(abs_v_min, abs_v_max))
+            # For h, we need the actual range since v values are negative
+            # Absolute value of h range
+            abs_h_min, abs_h_max = abs(range_h_135[0]), abs(range_h_135[1])
+            abs_h_range = (min(abs_h_min, abs_h_max), max(abs_h_min, abs_h_max))
+            
+            # Union of absolute value ranges
+            union_min = min(abs_v_range[0], abs_h_range[0], 0)  # Include 0
+            union_max = max(abs_v_range[1], abs_h_range[1])
+            padding = (union_max - union_min) * 0.05
+            xlim_135 = (union_min - padding, union_max + padding)
+            
+            shared_xlim[("h", 135)] = xlim_135
+            shared_xlim[("v", 135)] = xlim_135
+            transform_135_v = True  # Mark that we need to transform v data
     
     fig, axes = plt.subplots(rows, cols, figsize=(5*cols, 3.5*rows), constrained_layout=True)
     
@@ -806,19 +809,22 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
                 ax.set_title(f"{title_prefix} - {angle}° {dir_label}")
                 ax.legend(fontsize=8)
                 ax.grid(True, alpha=0.3)
+                # Set X-Limits Explicitly based on data or shared logic
+                ax.set_xlim(xlim)
+                
                 # Format axes to use scientific notation for small/large values
                 ax.ticklabel_format(style='sci', scilimits=(-2, 3), axis='both')
                 
-                # Add vertical reference line for theoretical gamma values
-                # For 135° Normal with absolute value, use positive value
-                sqrt2_2 = np.sqrt(2) / 2
-                ref_values = {
-                    "h": {45: sqrt2_2, 90: 1, 135: sqrt2_2},
-                    "v": {45: sqrt2_2, 90: 0, 135: sqrt2_2 if transform_135_v else -sqrt2_2}
-                }
-                if direction in ref_values and angle in ref_values[direction]:
-                    ref_val = ref_values[direction][angle]
-                    ax.axvline(x=ref_val, color='red', linestyle='--', linewidth=1.5, alpha=0.8, label=f"Theory ({ref_val:.3f})")
+                # Add vertical reference line for theoretical gamma values ONLY if using gamma logic
+                if use_gamma_logic:
+                    sqrt2_2 = np.sqrt(2) / 2
+                    ref_values = {
+                        "h": {45: sqrt2_2, 90: 1, 135: sqrt2_2},
+                        "v": {45: sqrt2_2, 90: 0, 135: sqrt2_2 if transform_135_v else -sqrt2_2}
+                    }
+                    if direction in ref_values and angle in ref_values[direction]:
+                        ref_val = ref_values[direction][angle]
+                        ax.axvline(x=ref_val, color='red', linestyle='--', linewidth=1.5, alpha=0.8, label=f"Theory ({ref_val:.3f})")
             else:
                 ax.axis('off')
                 

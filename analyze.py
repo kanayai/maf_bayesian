@@ -1028,6 +1028,56 @@ Examples:
         )
         save_stats_csv(samples_gamma, f"inference_gamma_stats_{suffix}.csv")
 
+        # --- Derived Slope Parameters (Gamma * Mu_Emulator) ---
+        print("Calculating derived slope parameters...")
+        samples_slope = {}
+        for key, val in samples_gamma.items():
+             try:
+                 parts = key.split("_")
+                 # Expected: "gamma", direction, angle  (e.g., gamma_h_45)
+                 if len(parts) >= 3:
+                     direction = parts[1]
+                     angle_str = parts[2]
+                     
+                     # Find corresponding mu_emulator
+                     mu_key = f"mu_emulator_{direction}"
+                     if mu_key in samples_hyper:
+                         mu_val = samples_hyper[mu_key]
+                         
+                         # Ensure shapes match (mu is per-chain, gamma is per-chain)
+                         # Both are usually (N_samples,)
+                         slope_val = val * mu_val
+                         
+                         new_key = f"slope_{direction}_{angle_str}"
+                         samples_slope[new_key] = slope_val
+             except Exception as e:
+                 print(f"Warning: Could not calculate slope for {key}: {e}")
+
+        if samples_slope:
+            # Group slope samples for plotting
+            slope_groups = {"h": {}, "v": {}}
+            for key, val in samples_slope.items():
+                try:
+                    parts = key.split("_")
+                    if len(parts) >= 3:
+                        direction = parts[1]
+                        angle = int(parts[2])
+                        if angle in standard_angles and direction in ["v", "h"]:
+                            if angle not in slope_groups[direction]: 
+                                slope_groups[direction][angle] = []
+                            slope_groups[direction][angle].append(("Posterior", val, key))
+                except:
+                    continue
+            
+            plot_distributions_grid_2x3(
+                slope_groups,
+                standard_angles,
+                save_path=figures_dir / f"posterior_derived_slope_grid_{suffix}.png",
+                title_prefix="Derived Slope (Gamma * Mu)",
+                use_gamma_logic=False
+            )
+            save_stats_csv(samples_slope, f"inference_derived_slope_stats_{suffix}.csv")
+
     # 5. Prediction Plots
     print("Generating prediction plots...")
 
