@@ -116,6 +116,7 @@ The analysis script generates comprehensive visualizations and statistics, saved
     *   **Hyperparameters**: Emulator mean/scale, length scales, measurement noise.
     *   **Normalized Parameters**: `_n` suffixed parameters (standard normal scale).
     *   **Bias Parameters**: If bias is enabled.
+    *   **Derived Slope Parameters**: $\text{slope} = \gamma \times \mu_{\text{emulator}}$ (distributions for each angle/direction).
     *   *Note*: Plots include the **analytical prior density** (green line) and posterior histogram (density scale).
 *   **Prediction Plots**:
     *   **Prior Prediction**: Green dashed intervals (condition on simulation data only).
