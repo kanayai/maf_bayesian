@@ -12,6 +12,8 @@ wheels/
 # System files
 .DS_Store
 **/.DS_Store
+**/.ipynb_checkpoints/
+**/__pycache__/
 
 # Results - Large binary files (always ignore)
 results_mcmc/*.h5
@@ -19,6 +21,9 @@ results_mcmc/*.nc
 model_structure*
 *.h5
 *.nc
+
+# Legacy archive material should stay local-only if recreated
+archive/
 
 # Temporary/intermediate results (ignore)
 results/tmp/
