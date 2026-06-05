@@ -29,10 +29,12 @@ for FE-vs-experiment bias correction. Full detail: `README.md`.
 
 - `uv` for deps, Python 3.13. `uv sync`, then `uv run python …`.
 
-## Known hygiene debt (cleanup deferred, not yet done)
+## Known hygiene debt
 
 - `.git` is ~312 MB: historical `.h5`/`.nc`/figure blobs committed before
-  `.gitignore` caught them. Ignored going forward; still in history.
-- `archive/` (~884 files) is old MCMC outputs, mostly supersedable.
+  `.gitignore` caught them. Ignored going forward; still in history. History
+  rewrite to shrink this is the only outstanding debt — deferred, needs sign-off.
+- `archive/` (old MCMC outputs) was pruned from the working tree on 2026-06-04
+  and is now git-ignored.
 - `.nc`/`.h5` results and most figures are git-ignored and stay local-only.
-- Do not start a history rewrite or mass deletion without explicit sign-off.
+- Do not start a history rewrite without explicit sign-off.
