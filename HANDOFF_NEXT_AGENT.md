@@ -20,22 +20,30 @@ Organise the project for sustained AI-assisted work that finishes the academic p
   `docs/manuscript_evidence_map.qmd` and `docs/manuscript_gaps.qmd`. Confirmed
   that retained no-bias analyses are numerically different from the manuscript
   results and must not be treated as their source.
+- Recovered the historical manuscript evidence in the read-only OneDrive
+  `MAF_Bayesian-main-old` tree. Exact table values, principal HDF5 links,
+  complete bias and leave-one-out families, RMSE/probability-area notebooks,
+  and several byte-identical embedded figures now map to the manuscript. See
+  `docs/historical_provenance_inventory.qmd`.
 
 ## Resume point
-The paper directory and working manuscript are established, and the initial
-evidence map is complete. Recover historical result provenance before changing
-manuscript claims or figures.
+The paper directory and working manuscript are established, and most historical
+result provenance is recovered. Preserve and canonicalise that evidence before
+changing manuscript claims or figures.
 
 ## Next action
-Search collaborator/OneDrive backups for the three exact `.nc` filenames listed
-in `docs/manuscript_gaps.qmd`, then locate bias, leave-one-out, sensitivity, and
-RMSE/probability-area generating artefacts.
+Create a controlled checksum inventory of the matching non-suffixed legacy
+evidence, then decide whether the paper will retain that historical baseline or
+adopt a regenerated current-code baseline. Continue searching for the Figure 5
+sensitivity source without modifying the legacy tree.
 
 ## Last safe commit
-Archive preservation commit `371ccef`; working-manuscript pointer and updated
-handoff are ready to commit. The local `stiffness_paper/` directory is ignored.
+Evidence-audit commit `fc70b22`. The local `stiffness_paper/` directory remains
+ignored and the OneDrive legacy tree remains untouched.
 
 ## Blockers
-- Exact `.nc` result files corresponding to the three retained analysis folders
-  have not yet been located.
-- Exact provenance for manuscript Tables 1--11 and Figures 5--17 is unknown.
+- Exact `.nc` result files corresponding to three newer retained analysis
+  folders have not been located.
+- Figure 5 sensitivity provenance and the exact historical generating code
+  commit remain unknown.
+- Some final aggregate prediction-figure variants still need exact mapping.

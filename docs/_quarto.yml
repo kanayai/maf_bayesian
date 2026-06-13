@@ -29,6 +29,7 @@ book:
     - part: "Manuscript Audit"
       chapters:
         - manuscript_evidence_map.qmd
+        - historical_provenance_inventory.qmd
         - manuscript_gaps.qmd
     - part: "Appendices"
       chapters:

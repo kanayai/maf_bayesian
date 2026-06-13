@@ -18,14 +18,13 @@ manuscript is submission ready.
 | Priority | Gap | Evidence | Required resolution |
 |---:|---|---|---|
 | 1 | Abstract is marked as deleted | Tracked change dated 2025-09-03 in active manuscript | Decide whether to restore, replace, or rewrite the abstract |
-| 1 | Exact result provenance for manuscript Tables 1--11 and Figures 5--17 is unknown | No matching result bundles; embedded media do not exactly match retained figures | Locate historical results/configs or deliberately regenerate analyses |
+| 1 | Exact historical generating code commit is unavailable | Manuscript values and result artefacts were recovered from a loose legacy tree without usable Git history | Preserve the historical baseline and decide whether to regenerate with current code |
 | 1 | Three retained analysis folders lack their named `.nc` files | Exact filenames recorded in each `config_log.md`; none exists in repository | Locate or rerun from the recorded commit/configuration |
 | 1 | Retained no-bias analyses do not reproduce manuscript Table 1 | Materially different posterior values and prior means | Do not use retained values as manuscript evidence without revision |
-| 2 | No complete leave-one-out result set is retained | Only a probable 45/90 training run is present | Locate/rerun all three withheld-angle analyses |
-| 2 | No retained latent-bias result bundles | Bias code exists, but no linked `.nc`, config logs, figures, or CSV summaries | Locate/rerun `E_1`-bias and angle-bias analyses |
+| 2 | Historical evidence tree is not yet preserved as a controlled baseline | Matching HDF5, CSV, figure, and notebook artefacts exist only in the OneDrive legacy snapshot | Inventory/checksum it before cleanup or canonicalisation |
 | 2 | No source located for Elementary Effects sensitivity analysis | Figure 5 embedded only | Locate sensitivity script/data/output or recreate it |
-| 2 | RMSE and probability-area calculations are not traceable | Values appear in Tables 3, 6, 9--11; no generating artefact found | Add deterministic calculation/export code |
-| 3 | Historical manuscript figures exist only as embedded Word media | No exact standalone matches | Export/version figures from a reproducible pipeline |
+| 2 | Some exact aggregate prediction-figure variants are not mapped | Historical source families exist, but several aggregate embedded figures differ from same-named legacy files | Identify the final variants or regenerate them deterministically |
+| 3 | Historical result variants are duplicated | Main, `_HEXCEL`, and `_IFAVG` families coexist | Confirm canonical main family and document why variants differ |
 
 ## Manuscript-state issues
 
@@ -85,19 +84,24 @@ found:
 Available `.nc` files under `results/` are earlier no-bias runs dated
 8--9 December 2025 and do not match those identifiers.
 
-### Historical/current divergence
+### Recovered historical baseline and current divergence
 
-The active manuscript describes priors and result values that differ from the
-current configuration and retained December 2025 analyses. Current code can be
-used to create a new reproducible evidence baseline, but it must not be assumed
-to recreate the historical manuscript results.
+The historical manuscript result baseline has been recovered in the OneDrive
+`MAF_Bayesian-main-old` tree. Exact summary values, HDF5 result links, complete
+leave-one-out families, and RMSE/probability-area calculation notebooks are now
+mapped in [`historical_provenance_inventory.qmd`](historical_provenance_inventory.qmd).
+
+The active manuscript still describes priors and result values that differ from
+the current configuration and retained December 2025 analyses. Current code can
+be used to create a new reproducible evidence baseline, but it must not be
+assumed to recreate the historical manuscript results.
 
 ## Recommended resolution order
 
-1. Preserve the manuscript unchanged while completing provenance discovery.
-2. Locate historical `.nc`, sensitivity-analysis, bias, and leave-one-out
-   artefacts in collaborator storage or older backups.
-3. Decide whether the paper will retain historical analyses or adopt a fully
+1. Preserve the manuscript and recovered legacy evidence unchanged.
+2. Complete a controlled inventory/checksum record of the matching historical
+   evidence and resolve the sensitivity-analysis source if possible.
+3. Decide whether the paper will retain the historical analyses or adopt a fully
    regenerated current-code evidence baseline.
 4. Only after that decision, reconcile manuscript figures, tables, numerical
    claims, comments, and tracked changes.

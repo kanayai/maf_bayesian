@@ -1,0 +1,85 @@
+---
+title: "Historical Manuscript Provenance Inventory"
+date: 2026-06-13
+format:
+  html:
+    toc: true
+    toc-depth: 3
+---
+
+## Scope
+
+This inventory records historical manuscript evidence recovered from the
+read-only University of Bath OneDrive legacy tree:
+
+`Mech Eng/OHT data (Tobi Laux)/MAF_Bayesian-main-old/`
+
+Nothing in that tree was moved, renamed, or modified. The non-suffixed folders
+below match the manuscript; `_HEXCEL` and `_IFAVG` folders are separate
+variants.
+
+## Recovered evidence set
+
+- 38 HDF5 MCMC result files
+- 722 CSV files
+- 1,232 figure files
+- posterior notebooks linking principal results to HDF5 files
+- prediction-replot notebooks containing RMSE and probability-area calculations
+- complete no-bias, latent-`E_1`-bias, latent-angle-bias, and leave-one-out
+  result families
+
+## Canonical principal analyses
+
+| Analysis | Notebook | Linked HDF5 result |
+|---|---|---|
+| No bias | `posterior_no_bias.ipynb` | `results_mcmc/no_bias_hv_2024_11_12_10_40_24_MAF_linear.h5` |
+| Latent `E_1` bias | `posterior_bias_E1.ipynb` | `results_mcmc/bias_E1_hv_2024_11_12_12_16_12_MAF_linear.h5` |
+| Latent loading-angle bias | `posterior_bias_alpha.ipynb` | `results_mcmc/bias_alpha_hv_2024_11_12_16_01_31_MAF_linear.h5` |
+
+## Table provenance
+
+| Manuscript table | Historical source | Verification |
+|---:|---|---|
+| 1 | `figures_no_bias/inference_theta_linear_stats.csv` | Exact reported values, including `E_1 = 152434.039` and standard deviation `2087.528` |
+| 2 | `figures_no_bias/inference_hyper_linear_stats.csv` | Exact reported hyper-parameter values |
+| 3 | `figures_no_bias/figure_replot_prediction.ipynb` | Printed RMSE/area values and calculation code match rounded manuscript values |
+| 4 | `figures_bias_E1/inference_theta_linear_bias_E1_stats.csv` | Exact reported physical-parameter values |
+| 5 | `figures_bias_E1/inference_b_linear_bias_E1_stats.csv` | Exact eight latent-bias values |
+| 6 | `figures_bias_E1/figure_replot_prediction.ipynb` | Printed RMSE/area values match rounded manuscript values |
+| 7 | `figures_bias_alpha/inference_theta_linear_bias_alpha_stats.csv` | Exact reported physical-parameter values |
+| 8 | `figures_bias_alpha/inference_b_linear_bias_E1_stats.csv` | Historical alpha-bias summary; filename is incorrectly labelled `bias_E1` |
+| 9 | `figures_bias_alpha/figure_replot_prediction.ipynb` | Printed RMSE/area values match rounded manuscript values |
+| 10 | `figures_no_bias_leave_out/figure_replot_prediction.ipynb` | Complete three-withheld-angle calculations recovered |
+| 11 | `figures_bias_E1_leave_out/figure_replot_prediction.ipynb` | Complete three-withheld-angle calculations recovered |
+
+The prediction notebooks calculate RMSE with the square root of the summed
+squared prediction error and probability area with Simpson integration of the
+upper-minus-lower prediction interval.
+
+## Exact embedded-figure matches
+
+Checksum comparison established byte-identical matches between manuscript
+embedded EMFs and these standalone historical figures:
+
+| Manuscript result figure | Historical standalone figure |
+|---:|---|
+| 7 | `figures_no_bias/inference_theta_linear.emf` |
+| 8 | `figures_no_bias/inference_hyper_linear.emf` |
+| 10 | `figures_bias_E1/inference_theta_linear_bias_E1.emf` |
+| 13 | `figures_bias_alpha/inference_theta_linear_bias_alpha.emf` |
+| 17 | `figures_bias_E1_leave_out/leave_out_prediction_linear_90_135.emf` and other embedded leave-out panels |
+
+The source families for Figures 6, 9, 11--12, and 14--16 are present, but some
+exact final aggregate figure variants still need mapping.
+
+## Remaining provenance risks
+
+- The legacy tree is a loose historical snapshot and has no usable Git history,
+  so the exact generating code commit is not traceable.
+- Figure 5's Elementary Effects sensitivity-analysis source has not been found.
+- Duplicate `_HEXCEL` and `_IFAVG` variants require deliberate canonicalisation.
+- Three newer December 2025 `.nc` files named in retained analysis logs remain
+  missing. They are a current-workflow reproducibility gap, not the source of
+  the historical manuscript values.
+- The recovered evidence does not make the manuscript submission ready; claims,
+  comments, tracked changes, and scientific interpretation still require review.

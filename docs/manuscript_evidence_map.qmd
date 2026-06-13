@@ -31,6 +31,33 @@ are recorded in [`../PAPER_WORKING.md`](../PAPER_WORKING.md).
 
 ## Current evidence baseline
 
+### Recovered historical manuscript evidence
+
+The manuscript's principal historical result provenance was recovered from the
+read-only OneDrive legacy tree:
+
+`OneDrive/Mech Eng/OHT data (Tobi Laux)/MAF_Bayesian-main-old/`
+
+The main, non-suffixed result folders match the manuscript. The parallel
+`_HEXCEL` and `_IFAVG` folders are variants and must not be substituted without
+separate verification. The legacy tree contains 38 HDF5 result files, 722 CSV
+files, 1,232 figures, posterior notebooks, prediction-replot notebooks, and
+complete no-bias, latent-`E_1`-bias, latent-angle-bias, and leave-one-out result
+families.
+
+Canonical posterior notebooks link the principal analyses to:
+
+| Analysis | Historical posterior notebook | Linked result |
+|---|---|---|
+| No bias | `posterior_no_bias.ipynb` | `results_mcmc/no_bias_hv_2024_11_12_10_40_24_MAF_linear.h5` |
+| Latent `E_1` bias | `posterior_bias_E1.ipynb` | `results_mcmc/bias_E1_hv_2024_11_12_12_16_12_MAF_linear.h5` |
+| Latent loading-angle bias | `posterior_bias_alpha.ipynb` | `results_mcmc/bias_alpha_hv_2024_11_12_16_01_31_MAF_linear.h5` |
+
+Exact table-value and embedded-figure comparisons are recorded in
+[`historical_provenance_inventory.qmd`](historical_provenance_inventory.qmd).
+This recovery establishes historical provenance, but not a reproducible code
+commit: the legacy tree is a loose snapshot without usable Git history.
+
 ### Confirmed current workflow
 
 | Manuscript concept | Current implementation/evidence | Confidence | Important limitation |
@@ -40,7 +67,7 @@ are recorded in [`../PAPER_WORKING.md`](../PAPER_WORKING.md).
 | GP prior/posterior prediction | `src/core/models.py::posterior_predict`; `analyze.py`; [`prediction_methodology.qmd`](prediction_methodology.qmd) | Confirmed | Current prediction implementation includes later developments. |
 | Proportional residual-noise model | `configs/default_config.py`; `src/core/models.py`; [`model_analysis.qmd`](model_analysis.qmd) | Confirmed | Current code also supports additive and constant noise. |
 | Residual diagnostics | `analyze.py::run_residual_analysis`; [`residual_analysis.qmd`](residual_analysis.qmd) | Confirmed | Residual plots are absent from the manuscript. |
-| Latent `E_1` and loading-angle biases | `src/core/models.py`; bias-related Git history | Confirmed implementation | No retained bias result bundle has been linked to the manuscript. |
+| Latent `E_1` and loading-angle biases | `src/core/models.py`; bias-related Git history; recovered historical bundles | Confirmed implementation and historical evidence | Exact historical generating code commit is unavailable. |
 
 ### Retained analysis bundles
 
@@ -74,16 +101,17 @@ Their filenames do not match any retained analysis-folder config log.
 | 1. Introduction | Literature and virtual-testing motivation | References embedded in manuscript; no separate reference audit yet | Probable |
 | 2. MAF experiment and FE model | Specimen geometry, DIC method, FE model, experimental curves | Embedded Figures 1--4; repository experimental/simulation data; `data_provenance.md` | Probable |
 | 3. Bayesian analysis | Statistical model, GP covariance, priors, biases, prediction construction | `src/core/models.py`, `src/core/covariance.py`, config, model-theory docs | Confirmed for current code; historical match unknown |
-| 4. Basic no-bias results | Posterior/prior distributions and predictions | Retained no-bias bundles are related but numerically different | Unknown manuscript provenance |
-| 4. Latent-bias results | `E_1`-bias and angle-bias posteriors/predictions | Bias implementation and Git history exist; result artefacts not located | Unknown |
-| 4. Leave-one-out results | Withheld-angle inference and predictions | One retained 45/90 training bundle is probable partial evidence | Probable partial link |
-| Conclusions | Claims derived from basic, bias, and leave-one-out analyses | Manuscript text only; several claims depend on unknown result provenance | Unknown |
+| 4. Basic no-bias results | Posterior/prior distributions and predictions | Historical HDF5 result, notebooks, CSV summaries, and figures recovered | Confirmed historical provenance |
+| 4. Latent-bias results | `E_1`-bias and angle-bias posteriors/predictions | Historical HDF5 results, notebooks, CSV summaries, and figures recovered | Confirmed historical provenance |
+| 4. Leave-one-out results | Withheld-angle inference and predictions | Complete historical no-bias, `E_1`-bias, and angle-bias leave-one-out families recovered | Confirmed historical provenance |
+| Conclusions | Claims derived from basic, bias, and leave-one-out analyses | Historical quantitative sources recovered; claims still require scientific review | Probable |
 
 ## Figure map
 
 The manuscript contains 41 embedded media items, including tracked
-replacements/deletions. None is byte-identical to a standalone figure currently
-retained in `stiffness_paper/` or `figures/`.
+replacements/deletions. Several embedded EMF items are byte-identical to
+standalone figures in the recovered legacy tree. Other figure families are
+clearly present but their exact final aggregate variant still needs mapping.
 
 | Figure | Manuscript content | Best available link | Confidence |
 |---:|---|---|---|
@@ -92,25 +120,25 @@ retained in `stiffness_paper/` or `figures/`.
 | 3 | Experimental load-extension data | Embedded `media/image3.png`; `data/experimental/`; retained `experimental_data*.png` plots are related but not exact matches | Probable |
 | 4 | FE model and mesh | Embedded `media/image4.png`; reference 23; `data/simulation/` contains derived simulation data, not FE model source | Probable |
 | 5 | Elementary Effects sensitivity analysis | Embedded `media/image5.jpeg`; no sensitivity-analysis script/output located | Unknown |
-| 6 | Prior predictions without latent bias | Embedded `media/image7.jpeg`; current `analyze.py` prior-prediction code and retained `prediction_prior_grid_*.png` are related but not exact matches | Probable method; unknown source |
-| 7 | Physical-parameter priors/posteriors, no bias | Embedded `media/image9.png`; retained `posterior_physical_*.png` differ numerically | Unknown source |
-| 8 | Hyper-parameter priors/posteriors, no bias | Embedded `media/image11.png`; retained `posterior_hyper_*.png` differ numerically | Unknown source |
-| 9 | Prior/posterior predictions, no bias | Embedded manuscript media; retained `prediction_posterior_grid_*.png` differ numerically | Unknown source |
-| 10--12 | `E_1` latent-bias physical parameters, biases, and predictions | Bias implementation exists; no matching result bundle | Unknown |
-| 13--15 | Loading-angle-bias physical parameters, biases, and predictions | Bias implementation exists; no matching result bundle | Unknown |
-| 16 | No-bias leave-one-out predictions | Retained `analysis_model_n_hv_20251215_164959` is a probable partial link for withholding 135 degrees only | Probable partial link |
-| 17 | `E_1`-bias leave-one-out predictions | No matching result bundle | Unknown |
+| 6 | Prior predictions without latent bias | Historical no-bias prior-prediction files recovered | Confirmed family; exact final aggregate variant not mapped |
+| 7 | Physical-parameter priors/posteriors, no bias | Embedded EMF exactly matches `figures_no_bias/inference_theta_linear.emf` | Confirmed |
+| 8 | Hyper-parameter priors/posteriors, no bias | Embedded EMF exactly matches `figures_no_bias/inference_hyper_linear.emf` | Confirmed |
+| 9 | Prior/posterior predictions, no bias | Historical prediction curves, figure family, and calculation notebook recovered | Confirmed family; exact final aggregate variant not mapped |
+| 10--12 | `E_1` latent-bias physical parameters, biases, and predictions | Complete historical family recovered; Figure 10 exact EMF match | Confirmed family |
+| 13--15 | Loading-angle-bias physical parameters, biases, and predictions | Complete historical family recovered; Figure 13 exact EMF match | Confirmed family |
+| 16 | No-bias leave-one-out predictions | Complete three-withheld-angle historical family recovered | Confirmed family |
+| 17 | `E_1`-bias leave-one-out predictions | Complete historical family recovered; embedded leave-out EMFs exactly matched | Confirmed |
 
 ## Table and quantitative-claim map
 
 | Tables/claims | Manuscript statement | Available evidence | Confidence |
 |---|---|---|---|
-| Tables 1--2 | Basic no-bias physical and hyper-parameter summaries | Retained no-bias CSVs provide the same parameter classes but different values and priors | Unknown manuscript provenance |
-| Table 3 | No-bias RMSE reduced 69% on average; probability area reduced 97% | No retained RMSE/area table or generating script located | Unknown |
-| Tables 4--6 | `E_1`-bias summaries; RMSE reduced 70%; area reduced 92% | No retained bias result bundle | Unknown |
-| Tables 7--9 | Loading-angle-bias summaries and prediction comparison | No retained bias result bundle | Unknown |
-| Tables 10--11 | Leave-one-out summaries | One probable partial no-bias run; no complete three-withheld-angle set or bias set | Unknown/partial |
-| Prior prediction method | 100 FE runs, 5,000 prior samples, 95% interval | Current configs use 1,000 prediction samples; historical generating configuration not located | Unknown historical provenance |
+| Tables 1--2 | Basic no-bias physical and hyper-parameter summaries | Exact values in `figures_no_bias/inference_theta_linear_stats.csv` and `inference_hyper_linear_stats.csv` | Confirmed |
+| Table 3 | No-bias RMSE reduced 69% on average; probability area reduced 97% | Values and calculation code in `figures_no_bias/figure_replot_prediction.ipynb` | Confirmed historical calculation |
+| Tables 4--6 | `E_1`-bias summaries; RMSE reduced 70%; area reduced 92% | Exact summary CSVs and prediction-calculation notebook recovered | Confirmed |
+| Tables 7--9 | Loading-angle-bias summaries and prediction comparison | Exact physical-summary CSV and prediction-calculation notebook recovered; bias-summary CSV is misnamed | Confirmed, with filename defect |
+| Tables 10--11 | Leave-one-out summaries | Complete historical result families and calculation notebooks recovered | Confirmed historical calculation |
+| Prior prediction method | 100 FE runs, 5,000 prior samples, 95% interval | Historical notebooks and prediction artefacts recovered; exact code commit unavailable | Probable historical configuration |
 | MCMC method | NUTS through NumPyro | `main.py`; NumPyro dependency | Confirmed current method |
 
 ## Code and documentation links
@@ -129,8 +157,10 @@ retained in `stiffness_paper/` or `figures/`.
 
 ## Audit conclusion
 
-The repository contains a strong current implementation and useful retained
-no-bias analyses, but the exact result provenance for the manuscript is mostly
-unresolved. The manuscript's embedded figures and tables should be treated as
-historical outputs until their generating results, configurations, and code
-commits are identified or the analyses are deliberately rerun.
+The historical result provenance for most manuscript tables and result figures
+has been recovered. These artefacts support the manuscript's reported
+historical values, but they remain a legacy evidence baseline rather than a
+fully reproducible one because the exact generating code commit is unavailable.
+Figure 5, several exact aggregate prediction-figure variants, and the scientific
+review of manuscript claims remain unresolved. The paper is not submission
+ready.
