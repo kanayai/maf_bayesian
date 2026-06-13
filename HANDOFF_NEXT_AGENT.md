@@ -13,18 +13,21 @@ Organise the project for sustained AI-assisted work that finishes the academic p
 - Preserved the untracked `stiffness_paper/` directory in University of Bath
   OneDrive and verified all 87 files by SHA-256 checksum. See
   `PAPER_ARCHIVE.md` and `paper_archive_manifest.csv`.
+- Identified `MAF_manuscript_21_NOV_KAI.docx` as the active draft and promoted
+  an unchanged copy to the undated OneDrive working file documented in
+  `PAPER_WORKING.md`.
 
 ## Resume point
-The paper directory is protected and inventoried. Begin building the manuscript
-evidence map linking claims and figures to code, configurations, and retained
-analysis outputs.
+The paper directory is protected and the active working manuscript is
+established. Begin building the manuscript evidence map linking claims and
+figures to code, configurations, and retained analysis outputs.
 
 ## Next action
-Inspect the latest manuscript (`MAF_manuscript_21_NOV_KAI.docx`) and create the
-first version of the manuscript evidence map.
+Create the first version of the manuscript evidence map from the undated
+working manuscript. Flag the abstract, which is currently marked as deleted.
 
 ## Last safe commit
-Checkpoint commit `5f3849f`; archive protection, manifest, pointer, and updated
+Archive preservation commit `371ccef`; working-manuscript pointer and updated
 handoff are ready to commit. The local `stiffness_paper/` directory is ignored.
 
 ## Blockers
