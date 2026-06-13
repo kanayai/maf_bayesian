@@ -1,0 +1,103 @@
+---
+title: "Manuscript Gaps Register"
+date: 2026-06-13
+format:
+  html:
+    toc: true
+    toc-depth: 3
+---
+
+## Purpose
+
+This register records unresolved manuscript and provenance issues found during
+the initial evidence-map audit. It does not imply that any part of the
+manuscript is submission ready.
+
+## Priority gaps
+
+| Priority | Gap | Evidence | Required resolution |
+|---:|---|---|---|
+| 1 | Abstract is marked as deleted | Tracked change dated 2025-09-03 in active manuscript | Decide whether to restore, replace, or rewrite the abstract |
+| 1 | Exact result provenance for manuscript Tables 1--11 and Figures 5--17 is unknown | No matching result bundles; embedded media do not exactly match retained figures | Locate historical results/configs or deliberately regenerate analyses |
+| 1 | Three retained analysis folders lack their named `.nc` files | Exact filenames recorded in each `config_log.md`; none exists in repository | Locate or rerun from the recorded commit/configuration |
+| 1 | Retained no-bias analyses do not reproduce manuscript Table 1 | Materially different posterior values and prior means | Do not use retained values as manuscript evidence without revision |
+| 2 | No complete leave-one-out result set is retained | Only a probable 45/90 training run is present | Locate/rerun all three withheld-angle analyses |
+| 2 | No retained latent-bias result bundles | Bias code exists, but no linked `.nc`, config logs, figures, or CSV summaries | Locate/rerun `E_1`-bias and angle-bias analyses |
+| 2 | No source located for Elementary Effects sensitivity analysis | Figure 5 embedded only | Locate sensitivity script/data/output or recreate it |
+| 2 | RMSE and probability-area calculations are not traceable | Values appear in Tables 3, 6, 9--11; no generating artefact found | Add deterministic calculation/export code |
+| 3 | Historical manuscript figures exist only as embedded Word media | No exact standalone matches | Export/version figures from a reproducible pipeline |
+
+## Manuscript-state issues
+
+- The active file contains 30 unresolved Word comments and extensive tracked
+  changes.
+- The abstract is deleted in tracked changes with an empty insertion.
+- The manuscript ends with explicit questions about Tables 3, 6, and 9,
+  including why their priors differ and what latent bias contributes.
+- Section numbering and formatting contain visible corruption in the extracted
+  text, especially around the conclusions and leave-one-out subsections.
+- The manuscript uses "confidence area" and "probability area" inconsistently.
+- Several numerical and interpretive claims conflict internally, including the
+  direction of the `E_1` posterior shift.
+
+## Unresolved review comments by theme
+
+### Experimental and materials evidence
+
+- Confirm specimen/panel manufacturing details and the interpretation of
+  material heterogeneity.
+- Locate or add micrographs and fibre-volume-fraction evidence.
+- Confirm laminate thickness and coefficient of variation.
+- Check coordinate/displacement nomenclature and DIC description.
+
+### Figures and presentation
+
+- Clarify Figure 1/Figure 4 references.
+- Improve FE mesh visibility.
+- Rename chart titles to normal and shear extension.
+
+### Statistical interpretation
+
+- Recheck claims about learning, predictive improvement, and the role of
+  Bayesian statistics.
+- Explain why latent bias increases uncertainty without clearly improving mean
+  predictions.
+- Explain why the priors differ across Tables 3, 6, and 9.
+- Reassess claims that are no longer supported by newer plots.
+
+### Structure and finalisation
+
+- Decide whether results and discussion should be separated.
+- Finalise conclusions and testing-pyramid claims.
+- Address Tobi's outstanding questions and collaborator checks.
+
+## Reproducibility gaps
+
+### Missing named results
+
+The following filenames are required by retained analysis logs but were not
+found:
+
+- `no_bias_hv_2025_12_13_17_50_40_MAF_linear.nc`
+- `no_bias_hv_2025_12_15_16_30_52_MAF_linear.nc`
+- `no_bias_hv_45_90_2025_12_15_16_49_49_MAF_linear.nc`
+
+Available `.nc` files under `results/` are earlier no-bias runs dated
+8--9 December 2025 and do not match those identifiers.
+
+### Historical/current divergence
+
+The active manuscript describes priors and result values that differ from the
+current configuration and retained December 2025 analyses. Current code can be
+used to create a new reproducible evidence baseline, but it must not be assumed
+to recreate the historical manuscript results.
+
+## Recommended resolution order
+
+1. Preserve the manuscript unchanged while completing provenance discovery.
+2. Locate historical `.nc`, sensitivity-analysis, bias, and leave-one-out
+   artefacts in collaborator storage or older backups.
+3. Decide whether the paper will retain historical analyses or adopt a fully
+   regenerated current-code evidence baseline.
+4. Only after that decision, reconcile manuscript figures, tables, numerical
+   claims, comments, and tracked changes.

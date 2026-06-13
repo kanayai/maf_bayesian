@@ -16,15 +16,20 @@ Organise the project for sustained AI-assisted work that finishes the academic p
 - Identified `MAF_manuscript_21_NOV_KAI.docx` as the active draft and promoted
   an unchanged copy to the undated OneDrive working file documented in
   `PAPER_WORKING.md`.
+- Built the initial manuscript traceability audit in
+  `docs/manuscript_evidence_map.qmd` and `docs/manuscript_gaps.qmd`. Confirmed
+  that retained no-bias analyses are numerically different from the manuscript
+  results and must not be treated as their source.
 
 ## Resume point
-The paper directory is protected and the active working manuscript is
-established. Begin building the manuscript evidence map linking claims and
-figures to code, configurations, and retained analysis outputs.
+The paper directory and working manuscript are established, and the initial
+evidence map is complete. Recover historical result provenance before changing
+manuscript claims or figures.
 
 ## Next action
-Create the first version of the manuscript evidence map from the undated
-working manuscript. Flag the abstract, which is currently marked as deleted.
+Search collaborator/OneDrive backups for the three exact `.nc` filenames listed
+in `docs/manuscript_gaps.qmd`, then locate bias, leave-one-out, sensitivity, and
+RMSE/probability-area generating artefacts.
 
 ## Last safe commit
 Archive preservation commit `371ccef`; working-manuscript pointer and updated
@@ -33,3 +38,4 @@ handoff are ready to commit. The local `stiffness_paper/` directory is ignored.
 ## Blockers
 - Exact `.nc` result files corresponding to the three retained analysis folders
   have not yet been located.
+- Exact provenance for manuscript Tables 1--11 and Figures 5--17 is unknown.

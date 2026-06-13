@@ -26,6 +26,10 @@ book:
     - part: "Validation"
       chapters:
         - residual_analysis.qmd
+    - part: "Manuscript Audit"
+      chapters:
+        - manuscript_evidence_map.qmd
+        - manuscript_gaps.qmd
     - part: "Appendices"
       chapters:
         - legacy_notes.qmd
