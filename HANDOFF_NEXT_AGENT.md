@@ -10,16 +10,23 @@ Organise the project for sustained AI-assisted work that finishes the academic p
 - Agreed `docs/` should remain in the repo and support the manuscript through an evidence map.
 - Aligned the proposed workflow with Karim AI OS: project work stays here; Karim_AI holds thin pointers and reusable knowledge.
 - Identified missing exact `.nc` files for three retained analysis folders and branch divergence requiring later review.
+- Preserved the untracked `stiffness_paper/` directory in University of Bath
+  OneDrive and verified all 87 files by SHA-256 checksum. See
+  `PAPER_ARCHIVE.md` and `paper_archive_manifest.csv`.
 
 ## Resume point
-Before reorganising anything, protect and inventory the untracked 247 MB `stiffness_paper/` directory.
+The paper directory is protected and inventoried. Begin building the manuscript
+evidence map linking claims and figures to code, configurations, and retained
+analysis outputs.
 
 ## Next action
-Design and execute a no-loss preservation step for `stiffness_paper/`, including its OneDrive binary archive location and a tracked manifest/pointer.
+Inspect the latest manuscript (`MAF_manuscript_21_NOV_KAI.docx`) and create the
+first version of the manuscript evidence map.
 
 ## Last safe commit
-Research-code baseline `94bebd9`; the later checkpoint commit contains only this handoff. Tree dirty only because `stiffness_paper/` remains untracked.
+Checkpoint commit `5f3849f`; archive protection, manifest, pointer, and updated
+handoff are ready to commit. The local `stiffness_paper/` directory is ignored.
 
 ## Blockers
-- Do not run `syncwork`: it uses `git add .` and would commit the entire untracked `stiffness_paper/` directory.
-- OneDrive target location must be established before moving binary paper artefacts.
+- Exact `.nc` result files corresponding to the three retained analysis folders
+  have not yet been located.

@@ -25,6 +25,9 @@ model_structure*
 # Legacy archive material should stay local-only if recreated
 archive/
 
+# Paper working files are archived outside Git; see PAPER_ARCHIVE.md
+stiffness_paper/
+
 # Temporary/intermediate results (ignore)
 results/tmp/
 results/cache/
