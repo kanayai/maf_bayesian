@@ -129,6 +129,17 @@ artefacts tied to the verified source run:
 - `experimental_observations.csv`: flattened observed experimental points used in prediction plots
 - `residual_observations.csv` and `residual_bands.csv`: residual plot-data when residual analysis is enabled
 
+The repository now also tracks a minimal paper evidence registry at
+`registry/paper_evidence_registry.json`. Each entry is intended to link one
+paper-facing figure, table, or claim to:
+
+- a stable `evidence_id`
+- a specific manuscript location
+- a source run ID
+- a source artefact path
+- a source artefact checksum
+- a validation status of `candidate` or `accepted`
+
 *   **Categorized Posterior Plots**:
     *   **Physical Parameters**: `E_1`, `E_2`, `v_12`, `v_23`, `G_12` (ordered).
     *   **Hyperparameters**: Emulator mean/scale, length scales, measurement noise.
@@ -161,6 +172,17 @@ To ensure the reproducibility of results, the analysis pipeline automatically ge
     4.  **Configuration Dump**: A full JSON dump of the settings used.
 
  This allows every figure and statistic to be traced back to the exact code version and dataset that produced it.
+
+### 5. Paper Evidence Registry
+
+Validate the tracked registry with:
+
+```bash
+uv run python src/io/evidence_registry.py --registry registry/paper_evidence_registry.json --repo-root .
+```
+
+The validator rejects missing run IDs, missing artefacts, checksum mismatches,
+unknown statuses, duplicate evidence IDs, and ambiguous manuscript locations.
 
 ## Documentation
 

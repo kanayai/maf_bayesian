@@ -31,7 +31,7 @@ The safeguards are being introduced one phase at a time.
 | Explicit result selection in `analyze.py` | Implemented |
 | Immutable run bundle and manifest | Implemented |
 | Structured metrics and plot-data exports | Implemented |
-| Paper evidence registry and validator | Planned |
+| Paper evidence registry and validator | Implemented |
 
 Current analysis requires:
 
@@ -107,6 +107,24 @@ The Git-tracked paper evidence registry will record:
 - `candidate` or `accepted` status.
 
 Only accepted entries should be inserted into the working manuscript.
+
+The tracked registry now lives at:
+
+`registry/paper_evidence_registry.json`
+
+Validate it with:
+
+```bash
+uv run python src/io/evidence_registry.py --registry registry/paper_evidence_registry.json --repo-root .
+```
+
+The minimal validator currently checks:
+
+- required fields are present;
+- `evidence_id` values are unique;
+- manuscript targets are specific rather than ambiguous placeholders;
+- `status` is `candidate` or `accepted`;
+- source artefacts exist and match the recorded SHA-256 checksum.
 
 ## Phase-to-rule overlay
 

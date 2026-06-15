@@ -1,5 +1,5 @@
 # Handoff — MAF Bayesian paper evidence workflow
-_Checkpoint 2026-06-15 13:32_
+_Checkpoint 2026-06-15 14:00_
 
 ## Objective
 Build a newly generated, explicitly traceable results-to-paper evidence baseline.
@@ -40,16 +40,25 @@ Build a newly generated, explicitly traceable results-to-paper evidence baseline
   `residual_bands.csv` when enabled.
 - Added focused tests for posterior summaries, diagnostics export, prediction
   plot-data flattening, residual export tables, and analysis manifest writing.
+- Added the tracked registry file `registry/paper_evidence_registry.json`.
+- Added `src/io/evidence_registry.py` with a minimal validator and CLI for
+  evidence IDs, manuscript targets, source run IDs, artefact paths, checksums,
+  and `candidate`/`accepted` status.
+- Added focused tests for registry load/save, checksum validation, duplicate
+  evidence IDs, missing artefacts, missing run IDs, bad status values, and
+  ambiguous manuscript locations.
 
 ## Resume point
-Phase 3 is implemented and verified. The next gap is that paper-facing figures,
-tables, and claims still do not have a minimal tracked registry with validation
-status.
+Phase 4 is implemented and verified. The next step is to run one cheap
+end-to-end pilot that produces a new verified run, analysis exports, at least
+one registry entry, and then define practical scientific acceptance gates on
+top of that path.
 
 ## Next action
-Implement phase 4: add the minimal paper evidence registry and validator so a
-paper item can point to a stable source run, source artefact, checksum, and
-`candidate`/`accepted` status.
+Implement phase 5: execute a cheap end-to-end pilot through inference,
+analysis, export, and registry validation; then define the minimum scientific
+acceptance rules that decide when an entry can move from `candidate` to
+`accepted`.
 
 ## Karim OS Constraints
 - Enforce explicit provenance: never select or analyse a result implicitly.
@@ -72,11 +81,10 @@ paper item can point to a stable source run, source artefact, checksum, and
    Karim-rule focus: cold restart must be possible from durable artefacts and documented acceptance gates.
 
 ## Verification
-- `python3 -m py_compile analyze.py src/io/analysis_exports.py src/io/result_selection.py src/io/output_manager.py tests/test_analysis_exports.py tests/test_result_selection.py tests/test_run_bundle.py` — passed.
-- `uv run python -m unittest tests.test_analysis_exports tests.test_result_selection tests.test_run_bundle -v` — 21 tests passed.
-- `uv run python -m unittest discover -s tests -v` — 21 tests passed.
-- `uv run python analyze.py --help` — documents bundled source selection.
+- `python3 -m py_compile src/io/evidence_registry.py tests/test_evidence_registry.py` — passed.
+- `uv run python -m unittest tests.test_evidence_registry tests.test_analysis_exports tests.test_result_selection tests.test_run_bundle -v` — 29 tests passed.
+- `uv run python src/io/evidence_registry.py --help` — documents the minimal validator CLI.
 - `quarto render docs/paper_evidence_workflow.qmd` — passed.
 
 ## Last safe commit
-`84bc22e` — verified bundled analysis sources; tree dirty with the completed phase-3 structured-export changes ready to commit.
+`53038a1` — structured analysis artefacts; tree dirty with the completed phase-4 evidence-registry changes ready to commit.
