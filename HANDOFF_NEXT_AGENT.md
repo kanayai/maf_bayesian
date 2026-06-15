@@ -1,46 +1,41 @@
-# Handoff — MAF Bayesian paper
-_Checkpoint 2026-06-12_
+# Handoff — MAF Bayesian paper evidence workflow
+_Checkpoint 2026-06-15 11:16_
 
 ## Objective
-Organise the project for sustained AI-assisted work that finishes the academic paper.
+Build a newly generated, explicitly traceable results-to-paper evidence baseline.
 
 ## Done so far
-- Audited repository, paper drafts, documentation, branches, results, and activity dates.
-- Confirmed latest substantive paper edit was 2025-12-19; latest substantive code change was 2026-01-09.
-- Agreed `docs/` should remain in the repo and support the manuscript through an evidence map.
-- Aligned the proposed workflow with Karim AI OS: project work stays here; Karim_AI holds thin pointers and reusable knowledge.
-- Identified missing exact `.nc` files for three retained analysis folders and branch divergence requiring later review.
-- Preserved the untracked `stiffness_paper/` directory in University of Bath
-  OneDrive and verified all 87 files by SHA-256 checksum. See
-  `PAPER_ARCHIVE.md` and `paper_archive_manifest.csv`.
-- Identified `MAF_manuscript_21_NOV_KAI.docx` as the active draft and promoted
-  an unchanged copy to the undated OneDrive working file documented in
-  `PAPER_WORKING.md`.
-- Built the initial manuscript traceability audit in
-  `docs/manuscript_evidence_map.qmd` and `docs/manuscript_gaps.qmd`. Confirmed
-  that retained no-bias analyses are numerically different from the manuscript
-  results and must not be treated as their source.
-- Recovered the historical manuscript evidence in the read-only OneDrive
-  `MAF_Bayesian-main-old` tree. Exact table values, principal HDF5 links,
-  complete bias and leave-one-out families, RMSE/probability-area notebooks,
-  and several byte-identical embedded figures now map to the manuscript. See
-  `docs/historical_provenance_inventory.qmd`.
-- Archived both recovered legacy project trees as reference-only evidence under
-  `maf_bayesian_paper_archive/2026-06-15_legacy_evidence/`. Verified 2,935 files
-  and 386,127,926 bytes by SHA-256; Git metadata, environments, and caches were
-  excluded. See `PAPER_ARCHIVE.md`.
-- Added the minimal operational-memory layer for the new workflow:
-  `docs/paper_evidence_workflow.qmd` is the concise human runbook and
-  `AGENTS.md` contains the non-negotiable agent safeguards.
+- Archived and SHA-256 verified the historical paper and legacy evidence outside
+  Git; historical outputs are reference-only.
+- Added the concise operational guide in `docs/paper_evidence_workflow.qmd` and
+  automatic safeguards in `AGENTS.md`.
+- Removed implicit newest-result selection from `analyze.py`.
+- Analysis now requires `--results PATH`, validates an existing `.nc` file
+  before loading data or creating outputs, and records its resolved path.
+- Added `src/io/result_selection.py` and four focused unit tests.
 
 ## Resume point
-Historical evidence is preserved and the operational-memory layer is in place.
-The preferred direction is a newly generated, explicitly traceable
-results-to-paper evidence baseline.
+Explicit result selection is implemented and verified. Run manifests do not yet
+exist, so the analysis still uses the current mutable config rather than a
+configuration frozen when inference ran.
 
 ## Next action
-Remove implicit newest-result selection from `analyze.py` as the first pipeline
-change. Require an explicit result path and add focused selection tests.
+Implement the minimal immutable run bundle and `manifest.json` written by
+`main.py`, starting with frozen config, status, Git commit/dirty flag, command,
+seed, result checksum, and focused manifest tests.
+
+## Remaining phases
+1. Minimal immutable run bundle and manifest.
+2. Analyse by run ID and verify result checksum/frozen config.
+3. Structured metrics, diagnostics, and plot-data exports.
+4. Minimal paper evidence registry and validator.
+5. Cheap end-to-end pilot, then define scientific acceptance rules.
+
+## Verification
+- `uv run python -m unittest discover -s tests -v` — 4 tests passed.
+- `uv run python analyze.py` — correctly refuses missing `--results`.
+- `uv run python analyze.py --help` — documents explicit selection.
+- `quarto render docs` — passed.
 
 ## Last safe commit
-Legacy-archive commit `d68a83a`; tree has uncommitted operational-memory files.
+`7bc6791` — explicit-result-selection implementation and tests.
