@@ -87,22 +87,24 @@ Results are automatically saved with timestamped filenames. All `.nc` files are 
 
 ### 3. Running Analysis
 
-The analyzer automatically loads the **most recent** `.nc` file from `results/`:
+The analyzer requires the exact `.nc` result file to avoid silently analysing
+the wrong run:
 
 ```bash
 # Experimental analysis → saves to figures/tmp/
-uv run python analyze.py --experimental
+uv run python analyze.py --results results/tmp/example.nc --experimental
 
 # Final analysis → saves to figures/final/
-uv run python analyze.py --final
+uv run python analyze.py --results results/final/example.nc --final
 
 # Default analysis → saves to figures/
-uv run python analyze.py
+uv run python analyze.py --results results/example.nc
 ```
 
 Analysis outputs (plots, CSVs) are saved to timestamped directories based on the flag used.
 
 **Flags:**
+- `--results PATH`: Required explicit NetCDF result file
 - `--experimental`: Saves to `figures/tmp/analysis_<timestamp>/`
 - `--final`: Saves to `figures/final/analysis_<timestamp>/`
 - No flag: Saves to `figures/analysis_<timestamp>/`
@@ -128,7 +130,7 @@ The analysis script generates comprehensive visualizations and statistics, saved
 
 To run the analysis:
 ```bash
-uv run python analyze.py
+uv run python analyze.py --results results/example.nc
 ```
 
 ### 4. Reproducibility

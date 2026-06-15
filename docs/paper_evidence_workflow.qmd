@@ -28,14 +28,20 @@ The safeguards are being introduced one phase at a time.
 | Capability | Status |
 |---|---|
 | Historical evidence archive | Implemented and verified |
-| Explicit result selection in `analyze.py` | Next implementation phase |
-| Immutable run bundle and manifest | Planned |
+| Explicit result selection in `analyze.py` | Implemented |
+| Immutable run bundle and manifest | Next implementation phase |
 | Structured metrics and plot-data exports | Planned |
 | Paper evidence registry and validator | Planned |
 
-Until explicit result selection is implemented, do not treat newly generated
-analysis outputs as paper evidence. The current `analyze.py` can still select
-the newest result implicitly.
+Current analysis requires:
+
+```bash
+uv run python analyze.py --results results/example.nc
+```
+
+This prevents accidental newest-file selection. Until run manifests are
+implemented, the explicit source path improves traceability but does not make an
+analysis output accepted paper evidence.
 
 ## Intended daily workflow
 
@@ -47,8 +53,9 @@ and completion status.
 
 ### 2. Analyse that explicit run
 
-Analysis will require an explicit run ID. It will verify the run and result
-checksum before producing metrics, plot data, and rendered figures.
+Analysis currently requires an explicit result path. Once run bundles are
+implemented, it will require an explicit run ID and verify the result checksum
+before producing metrics, plot data, and rendered figures.
 
 ### 3. Review the evidence
 

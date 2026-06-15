@@ -39,8 +39,7 @@ for FE-vs-experiment bias correction. Full detail: `README.md`.
 ## Entry points
 
 - `main.py` — run inference (`uv run python main.py [--experimental|--final]`).
-- `analyze.py` — analysis entry point. It currently selects the most recent
-  result; removing that unsafe behaviour is the next implementation phase.
+- `analyze.py` — analysis entry point; requires explicit `--results PATH`.
 - `configs/default_config.py` — models, priors, data selection, analysis settings.
 - `src/` — `core/` (models, covariance), `io/` (data, output), `vis/` (plotting).
 

@@ -20,6 +20,7 @@ from configs.default_config import config
 from src.io.data_loader import load_all_data
 from src.core.models import model_n_hv, model_empirical, model_simple, posterior_predict
 from src.io.output_manager import save_config_log
+from src.io.result_selection import existing_netcdf_path
 from src.vis.plotting import (
     plot_experimental_data,
     plot_averaged_experimental_data,
@@ -140,10 +141,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python analyze.py                  # Default: saves to figures/analysis_<timestamp>/
-  python analyze.py --experimental   # Saves to figures/tmp/analysis_<timestamp>/
-  python analyze.py --final          # Saves to figures/final/analysis_<timestamp>/
+  python analyze.py --results results/example.nc
+  python analyze.py --results results/tmp/example.nc --experimental
+  python analyze.py --results results/final/example.nc --final
         """,
+    )
+    parser.add_argument(
+        "--results",
+        required=True,
+        type=existing_netcdf_path,
+        metavar="PATH",
+        help="Explicit .nc result file to analyse; implicit newest-file selection is disabled",
     )
 
     mode_group = parser.add_mutually_exclusive_group()
@@ -172,6 +180,9 @@ Examples:
         print("Running in default mode - figures will be saved to figures/")
 
     print("Starting analysis...")
+
+    result_file = args.results
+    print(f"Selected result: {result_file}")
 
     # 1. Load Data
     data_dict = load_all_data(config)
@@ -215,30 +226,12 @@ Examples:
         full_data_dict, save_path=figures_dir / "experimental_data_averaged.png"
     )
 
-    # 3. Load Latest Results
-    # 3. Load Latest Results
-    if output_mode == "experimental":
-        results_dir = Path("results") / "tmp"
-    elif output_mode == "final":
-        results_dir = Path("results") / "final"
-    else:
-        results_dir = Path("results")
-    
-    if not results_dir.exists():
-        print(f"Results directory {results_dir} does not exist.")
-        return
-
-    files = list(results_dir.glob("*.nc"))
-    if not files:
-        print("No result files found in results/")
-        return
-
-    latest_file = max(files, key=lambda f: f.stat().st_mtime)
-    print(f"Loading results from {latest_file}")
-    idata = az.from_netcdf(latest_file)
+    # 3. Load explicitly selected results
+    print(f"Loading results from {result_file}")
+    idata = az.from_netcdf(result_file)
 
     # Save Config Log
-    save_config_log(config, figures_dir, latest_file.name)
+    save_config_log(config, figures_dir, result_file)
 
     # 4. Categorized Posterior Plots
     samples = {}
