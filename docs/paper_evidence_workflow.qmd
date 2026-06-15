@@ -29,7 +29,7 @@ The safeguards are being introduced one phase at a time.
 |---|---|
 | Historical evidence archive | Implemented and verified |
 | Explicit result selection in `analyze.py` | Implemented |
-| Immutable run bundle and manifest | Next implementation phase |
+| Immutable run bundle and manifest | Implemented |
 | Structured metrics and plot-data exports | Planned |
 | Paper evidence registry and validator | Planned |
 
@@ -39,17 +39,20 @@ Current analysis requires:
 uv run python analyze.py --results results/example.nc
 ```
 
-This prevents accidental newest-file selection. Until run manifests are
-implemented, the explicit source path improves traceability but does not make an
-analysis output accepted paper evidence.
+This prevents accidental newest-file selection. Run manifests now freeze the
+inference configuration and result checksum, but analysis still targets an
+explicit `.nc` path rather than a run ID, so outputs are not yet promoted to
+accepted paper evidence automatically.
 
 ## Intended daily workflow
 
 ### 1. Create a run
 
-Inference will create one immutable run bundle containing the frozen
-configuration, code revision, data checksums, environment information, result,
-and completion status.
+Inference now creates one immutable run bundle containing the frozen
+configuration, code revision, command, seed, completion status, posterior
+result, and result checksum in `manifest.json`.
+
+Data checksums and environment capture are still pending.
 
 ### 2. Analyse that explicit run
 

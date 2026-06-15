@@ -2,14 +2,14 @@ import jax.random as random
 import jax.numpy as jnp
 from numpyro.infer import MCMC, NUTS, init_to_median
 import arviz as az
-import datetime
-from pathlib import Path
 import time
 import argparse
+import sys
 
 from configs.default_config import config
 from src.io.data_loader import load_all_data
 from src.core.models import model_n_hv, model_n, model_empirical, model_simple
+from src.io.run_bundle import mark_run_completed, mark_run_failed, prepare_run_bundle
 
 def run_inference(model, rng_key, data_dict, config):
     """
@@ -103,55 +103,21 @@ def run_inference(model, rng_key, data_dict, config):
     mcmc.print_summary()
     return mcmc
 
-def save_results(mcmc, config, output_mode="default"):
+def save_results(mcmc, bundle):
     """
-    Saves MCMC results to NetCDF.
+    Saves MCMC results to the prepared immutable run bundle.
     
     Args:
         mcmc: MCMC object with results
-        config: Configuration dictionary
-        output_mode: One of "experimental", "final", or "default"
-                    - "experimental": saves to results/tmp/
-                    - "final": saves to results/final/
-                    - "default": saves to results/
+        bundle: Run bundle metadata and target paths
     """
-    # Determine output directory based on mode
-    if output_mode == "experimental":
-        output_dir = Path("results") / "tmp"
-    elif output_mode == "final":
-        output_dir = Path("results") / "final"
-    else:
-        output_dir = Path("results")
-    
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    date_str = datetime.datetime.now().strftime("_%Y_%m_%d_%H_%M_%S_")
-    
-    # Construct filename
-    angles = config["data"]["angles"]
-    model_type = config["model_type"]
-    
-    if model_type == "model_n_hv":
-        suffix = "hv" + "".join([f"_{i}" for i in angles]) if len(angles) != 3 else "hv"
-    else:
-        # For model_n, include direction
-        direction = config["data"].get("direction", "h")
-        dir_tag = "shear" if direction == "h" else "normal"
-        suffix = f"{dir_tag}" + "".join([f"_{i}" for i in angles])
-        
-    bias_flags = config["bias"]
-    prefix = "bias_" if (bias_flags["add_bias_E1"] or bias_flags["add_bias_alpha"]) else "no_bias_"
-    if bias_flags["add_bias_E1"]: prefix += "E1_"
-    if bias_flags["add_bias_alpha"]: prefix += "alpha_"
-    
-    filename = f"{prefix}{suffix}{date_str}MAF_linear.nc"
-    file_path = output_dir / filename
-    
-    print(f"Saving results to {file_path}...")
+    print(f"Saving results to {bundle.result_path}...")
     idata = az.from_numpyro(mcmc)
-    az.to_netcdf(idata, file_path)
-    print("Done.")
-    return file_path
+    az.to_netcdf(idata, bundle.result_path)
+    manifest = mark_run_completed(bundle)
+    print(f"Done. Run bundle written to {bundle.bundle_dir}")
+    print(f"Manifest status: {manifest['status']}")
+    return bundle
 
 def main():
     # Parse command-line arguments
@@ -160,9 +126,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                  # Default: saves to results/
-  python main.py --experimental   # Saves to results/tmp/
-  python main.py --final          # Saves to results/final/
+  python main.py                  # Default: saves to results/<run_id>/
+  python main.py --experimental   # Saves to results/tmp/<run_id>/
+  python main.py --final          # Saves to results/final/<run_id>/
         """
     )
     
@@ -170,12 +136,12 @@ Examples:
     mode_group.add_argument(
         '--experimental',
         action='store_true',
-        help='Save results to results/tmp/ (for experimental/testing runs)'
+        help='Save results bundle to results/tmp/<run_id>/ (for experimental/testing runs)'
     )
     mode_group.add_argument(
         '--final',
         action='store_true',
-        help='Save results to results/final/ (for important/final runs)'
+        help='Save results bundle to results/final/<run_id>/ (for important/final runs)'
     )
     
     args = parser.parse_args()
@@ -183,43 +149,50 @@ Examples:
     # Determine output mode
     if args.experimental:
         output_mode = "experimental"
-        print("🧪 Running in EXPERIMENTAL mode - results will be saved to results/tmp/")
+        print("🧪 Running in EXPERIMENTAL mode - results will be saved to results/tmp/<run_id>/")
     elif args.final:
         output_mode = "final"
-        print("📌 Running in FINAL mode - results will be saved to results/final/")
+        print("📌 Running in FINAL mode - results will be saved to results/final/<run_id>/")
     else:
         output_mode = "default"
-        print("Running in default mode - results will be saved to results/")
+        print("Running in default mode - results will be saved to results/<run_id>/")
     
     print("Starting inference pipeline...")
-    
-    # 1. Load Data
-    print("Loading data...")
-    data_dict = load_all_data(config)
-    
-    # 2. Run Inference
-    print("Running MCMC...")
-    rng_key = random.PRNGKey(config.get("seed", 0))
-    
-    # Select model based on config (currently only model_n_hv is fully refactored and wired)
-    if config["model_type"] == "model_n_hv":
-        model = model_n_hv
-    elif config["model_type"] == "model_n":
-        model = model_n
-    elif config["model_type"] == "model_empirical":
-        model = model_empirical
-    elif config["model_type"] == "model_simple":
-        model = model_simple
-    else:
-        raise NotImplementedError(f"Model {config['model_type']} not yet implemented in main.py")
 
-    start_time = time.time()
-    print("Compiling model and warming up... (this may take a moment)")
-    mcmc = run_inference(model, rng_key, data_dict, config)
-    print(f"Inference completed in {time.time() - start_time:.2f}s")
-    
-    # 3. Save Results
-    save_results(mcmc, config, output_mode)
+    bundle = prepare_run_bundle(config, output_mode, [sys.executable, *sys.argv])
+    print(f"Prepared run bundle at {bundle.bundle_dir}")
+
+    try:
+        # 1. Load Data
+        print("Loading data...")
+        data_dict = load_all_data(config)
+
+        # 2. Run Inference
+        print("Running MCMC...")
+        rng_key = random.PRNGKey(config.get("seed", 0))
+
+        # Select model based on config (currently only model_n_hv is fully refactored and wired)
+        if config["model_type"] == "model_n_hv":
+            model = model_n_hv
+        elif config["model_type"] == "model_n":
+            model = model_n
+        elif config["model_type"] == "model_empirical":
+            model = model_empirical
+        elif config["model_type"] == "model_simple":
+            model = model_simple
+        else:
+            raise NotImplementedError(f"Model {config['model_type']} not yet implemented in main.py")
+
+        start_time = time.time()
+        print("Compiling model and warming up... (this may take a moment)")
+        mcmc = run_inference(model, rng_key, data_dict, config)
+        print(f"Inference completed in {time.time() - start_time:.2f}s")
+
+        # 3. Save Results
+        save_results(mcmc, bundle)
+    except Exception as exc:
+        mark_run_failed(bundle, str(exc))
+        raise
 
 if __name__ == "__main__":
     main()

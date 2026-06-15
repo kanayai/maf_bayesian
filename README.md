@@ -68,22 +68,27 @@ Modify `configs/default_config.py` to set:
 #### **With Automatic Organization (Recommended):**
 
 ```bash
-# Experimental/testing run → saves to results/tmp/
+# Experimental/testing run → saves to results/tmp/<run_id>/
 uv run python main.py --experimental
 
-# Final/important run → saves to results/final/
+# Final/important run → saves to results/final/<run_id>/
 uv run python main.py --final
 
-# Default run → saves to results/
+# Default run → saves to results/<run_id>/
 uv run python main.py
 ```
 
-Results are automatically saved with timestamped filenames. All `.nc` files are ignored by git and remain local-only.
+Each inference run now creates an immutable timestamped run bundle containing:
+
+- `manifest.json` with frozen config, status, Git commit/dirty flag, command, seed, and result checksum
+- the `.nc` posterior result file
+
+Run bundles are written beneath the selected mode directory. All `.nc` files are ignored by git and remain local-only.
 
 **Flags:**
-- `--experimental`: Automatically saves to `results/tmp/` for quick experiments
-- `--final`: Automatically saves to `results/final/` for important runs
-- No flag: Saves to `results/` (root level)
+- `--experimental`: Automatically saves to `results/tmp/<run_id>/` for quick experiments
+- `--final`: Automatically saves to `results/final/<run_id>/` for important runs
+- No flag: Saves to `results/<run_id>/`
 
 ### 3. Running Analysis
 
