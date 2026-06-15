@@ -119,6 +119,16 @@ Analysis outputs (plots, CSVs) are saved to timestamped directories based on the
 
 The analysis script generates comprehensive visualizations and statistics, saved in timestamped folders within `figures/` (e.g., `figures/analysis_model_n_hv_20231027_123045/`).
 
+Each analysis output now also includes `exports/` with machine-readable
+artefacts tied to the verified source run:
+
+- `analysis_manifest.json`: run ID, source manifest/result, output directory, and exported-file list
+- `posterior_summary.csv` and `posterior_summary.json`: posterior summary metrics across analysed parameters
+- `diagnostics_summary.json`: sampler diagnostics exported from ArviZ and sample statistics
+- `prediction_plot_data.csv`: grid-ready prior/posterior prediction intervals and means
+- `experimental_observations.csv`: flattened observed experimental points used in prediction plots
+- `residual_observations.csv` and `residual_bands.csv`: residual plot-data when residual analysis is enabled
+
 *   **Categorized Posterior Plots**:
     *   **Physical Parameters**: `E_1`, `E_2`, `v_12`, `v_23`, `G_12` (ordered).
     *   **Hyperparameters**: Emulator mean/scale, length scales, measurement noise.
@@ -133,6 +143,7 @@ The analysis script generates comprehensive visualizations and statistics, saved
     *   **Combined Plot**: Data + Prior + Posterior predictions.
 *   **Statistics**:
     *   CSV files (`inference_*_stats.csv`) containing Mean, Variance, and Std for all parameters.
+    *   Structured exports in `exports/` for downstream evidence review and registry insertion.
 
 To run the analysis:
 ```bash
@@ -146,7 +157,8 @@ To ensure the reproducibility of results, the analysis pipeline automatically ge
 *   **Contents**:
     1.  **Git Commit Hash**: The exact version of the code used for the analysis.
     2.  **Results File**: The precise `.nc` file loaded.
-    3.  **Configuration Dump**: A full JSON dump of the settings used.
+    3.  **Run ID and Manifest Path**: The verified bundle identity used for analysis.
+    4.  **Configuration Dump**: A full JSON dump of the settings used.
 
  This allows every figure and statistic to be traced back to the exact code version and dataset that produced it.
 

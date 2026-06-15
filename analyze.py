@@ -18,6 +18,14 @@ import argparse
 
 from src.io.data_loader import load_all_data
 from src.core.models import model_n_hv, model_empirical, model_simple, posterior_predict
+from src.io.analysis_exports import (
+    ensure_exports_dir,
+    write_analysis_manifest,
+    write_diagnostics_summary,
+    write_posterior_summary,
+    write_prediction_exports,
+    write_residual_exports,
+)
 from src.io.output_manager import save_config_log
 from src.io.result_selection import existing_analysis_source
 from src.vis.plotting import (
@@ -207,7 +215,9 @@ Examples:
 
     figures_dir = base_dir / f"analysis_{model_type}_{timestamp}"
     figures_dir.mkdir(parents=True, exist_ok=True)
+    exports_dir = ensure_exports_dir(figures_dir)
     print(f"Saving figures to {figures_dir}")
+    exported_files = []
 
     # Save Config Log (Output Rules) - Done early to ensure it exists even if later steps fail
     # We don't have the results filename yet if we haven't loaded it, but we should load it first?
@@ -599,6 +609,7 @@ Examples:
         df.set_index("Parameter", inplace=True)
         df.to_csv(figures_dir / filename)
         print(f"Saved stats to {figures_dir / filename}")
+        return df
 
     if model_type == "model_simple":
         # Simple model Analysis
@@ -1055,7 +1066,7 @@ Examples:
              except Exception as e:
                  print(f"Warning: Could not calculate slope for {key}: {e}")
 
-        if samples_slope:
+    if samples_slope:
             # Group slope samples for plotting
             slope_groups = {"h": {}, "v": {}}
             for key, val in samples_slope.items():
@@ -1079,6 +1090,24 @@ Examples:
                 use_gamma_logic=False
             )
             save_stats_csv(samples_slope, f"inference_derived_slope_stats_{suffix}.csv")
+
+    all_summary_samples = {}
+    for sample_group in [
+        samples_physical_ordered,
+        samples_hyper,
+        samples_bias,
+        samples_n,
+        samples_gamma,
+    ]:
+        all_summary_samples.update(sample_group)
+    if model_type == "model_simple":
+        all_summary_samples.update(samples_betas)
+        if "samples_sigma" in locals():
+            all_summary_samples.update(samples_sigma)
+    if "samples_slope" in locals():
+        all_summary_samples.update(samples_slope)
+    if all_summary_samples:
+        exported_files.extend(write_posterior_summary(all_summary_samples, exports_dir))
 
     # 5. Prediction Plots
     print("Generating prediction plots...")
@@ -1167,17 +1196,17 @@ Examples:
         try:
             sigma_measure = get_batch("sigma_measure")
         except KeyError:
-            sigma_measure = jnp.zeros_like(mu_emulator)
+            sigma_measure = jnp.zeros_like(mu_emulator_v)
 
         try:
             sigma_measure_base = get_batch("sigma_measure_base")
         except KeyError:
-            sigma_measure_base = jnp.zeros_like(mu_emulator)
+            sigma_measure_base = jnp.zeros_like(mu_emulator_v)
 
         try:
             sigma_constant = get_batch("sigma_constant")
         except KeyError:
-            sigma_constant = jnp.zeros_like(mu_emulator)
+            sigma_constant = jnp.zeros_like(mu_emulator_v)
 
         # Length scales
         l_P = get_batch("lambda_P")
@@ -1526,18 +1555,33 @@ Examples:
         save_path=figures_dir / f"prediction_posterior_grid_{suffix}.png",
         title_prefix="Posterior"
     )
+    exported_files.extend(write_prediction_exports(predictions_collection, exports_dir))
+    exported_files.append(write_diagnostics_summary(idata, exports_dir))
     # 9. Residual Analysis (Optional)
     if config["data"].get("run_residual_analysis", False) and config.get("model_type") not in ["model_empirical", "model_simple"]:
-        run_residual_analysis(idata, data_dict, figures_dir)
+        residual_export_paths = run_residual_analysis(idata, data_dict, figures_dir, exports_dir, config)
+        exported_files.extend(residual_export_paths)
 
     # 10. Traceplots (Optional)
     if config["data"].get("plot_trace", True):
         plot_trace_diagnostics(idata, figures_dir)
 
+    exported_files.append(
+        write_analysis_manifest(
+            exports_dir,
+            run_id=analysis_source.run_id,
+            manifest_path=analysis_source.manifest_path,
+            result_path=result_file,
+            figures_dir=figures_dir,
+            output_mode=output_mode,
+            exported_files=exported_files,
+        )
+    )
+
     print("Analysis complete.")
 
 
-def run_residual_analysis(idata, data_dict, figures_dir):
+def run_residual_analysis(idata, data_dict, figures_dir, exports_dir, config):
     print("\nRunning Residual Analysis...")
 
     # Extract data from dictionary
@@ -1912,6 +1956,7 @@ def run_residual_analysis(idata, data_dict, figures_dir):
     plt.savefig(figures_dir / "residuals_qq.png")
 
     print("Residual analysis complete.")
+    return write_residual_exports(rows, bands_data, exports_dir)
 
 
 def plot_trace_diagnostics(idata, figures_dir):

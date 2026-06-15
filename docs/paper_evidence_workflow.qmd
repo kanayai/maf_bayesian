@@ -30,7 +30,7 @@ The safeguards are being introduced one phase at a time.
 | Historical evidence archive | Implemented and verified |
 | Explicit result selection in `analyze.py` | Implemented |
 | Immutable run bundle and manifest | Implemented |
-| Structured metrics and plot-data exports | Planned |
+| Structured metrics and plot-data exports | Implemented |
 | Paper evidence registry and validator | Planned |
 
 Current analysis requires:
@@ -83,6 +83,11 @@ Karim-rule focus: eliminate ambiguous provenance and stop evidence-facing
 analysis from depending on mutable live configuration.
 
 ### 3. Review the evidence
+
+Each analysis output now writes machine-readable exports under `exports/`,
+including posterior summaries, diagnostics, prediction plot-data, flattened
+experimental observations, and residual plot-data when residual checks are
+enabled.
 
 Before a result can support the paper, check:
 
