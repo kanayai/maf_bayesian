@@ -1,5 +1,5 @@
 # Handoff — MAF Bayesian paper evidence workflow
-_Checkpoint 2026-06-15 12:24_
+_Checkpoint 2026-06-15 13:01_
 
 ## Objective
 Build a newly generated, explicitly traceable results-to-paper evidence baseline.
@@ -22,15 +22,26 @@ Build a newly generated, explicitly traceable results-to-paper evidence baseline
   file size; failed runs are marked `failed` with the error message.
 - Added four focused run-bundle tests and updated the README and paper workflow
   runbook.
+- Analysis now resolves an explicit run-bundle directory, bundled `.nc`, or
+  unique run ID via `src/io/result_selection.py`.
+- Analysis rejects unbundled, incomplete, ambiguous, or checksum-mismatched
+  sources before loading data.
+- `analyze.py` now uses the manifest-frozen configuration rather than
+  `configs/default_config.py`, including reconstructed prior distributions for
+  downstream plotting logic.
+- `config_log.md` now records the run ID and manifest path for analysed runs.
+- Added phase-2 tests for run-ID resolution, checksum verification, bundled
+  source enforcement, and frozen-config deserialization.
 
 ## Resume point
-Run bundles now exist, but `analyze.py` still takes an explicit `.nc` path and
-uses the live config module instead of the manifest's frozen configuration.
+Phase 2 is implemented and verified. The next gap is that analysis outputs are
+still mostly human-facing figures and CSVs rather than structured
+machine-checkable evidence exports.
 
 ## Next action
-Implement phase 2: analyse by run ID or bundle path, verify the stored result
-checksum before loading, and switch analysis logging to the manifest-frozen
-configuration rather than the mutable live config.
+Implement phase 3: export structured metrics, diagnostics, and plot-data from
+the verified source run so downstream evidence review and registry insertion can
+use stable machine-readable artefacts.
 
 ## Karim OS Constraints
 - Enforce explicit provenance: never select or analyse a result implicitly.
@@ -53,10 +64,12 @@ configuration rather than the mutable live config.
    Karim-rule focus: cold restart must be possible from durable artefacts and documented acceptance gates.
 
 ## Verification
-- `python3 -m py_compile main.py src/io/run_bundle.py src/io/output_manager.py tests/test_run_bundle.py tests/test_result_selection.py` — passed.
-- `uv run python -m unittest tests.test_run_bundle tests.test_result_selection -v` — 8 tests passed.
-- `uv run python -m unittest discover -s tests -v` — 8 tests passed.
+- `python3 -m py_compile analyze.py src/io/result_selection.py src/io/output_manager.py src/io/run_bundle.py tests/test_result_selection.py tests/test_run_bundle.py` — passed.
+- `uv run python -m unittest tests.test_result_selection tests.test_run_bundle -v` — 15 tests passed.
+- `uv run python -m unittest discover -s tests -v` — 15 tests passed.
+- `uv run python analyze.py --help` — documents bundled source selection.
+- `uv run python analyze.py` — correctly refuses missing `--results`.
 - `quarto render docs/paper_evidence_workflow.qmd` — passed.
 
 ## Last safe commit
-`7df63fd` — pre-run-bundle baseline; tree dirty with the completed phase ready to commit.
+`4baa53f` — lightweight Karim OS rule overlay; tree dirty with the completed phase-2 analysis-source changes ready to commit.

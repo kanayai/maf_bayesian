@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.io.output_manager import _config_encoder
+from src.io.output_manager import serialize_config
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -140,7 +140,7 @@ def _base_manifest(
             "sha256": None,
             "size_bytes": None,
         },
-        "config": json.loads(json.dumps(config, default=_config_encoder)),
+        "config": serialize_config(config),
     }
 
 

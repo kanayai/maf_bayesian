@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from typing import Any
 import numpyro.distributions as dist
 
 
@@ -70,7 +72,23 @@ def _config_encoder(obj):
     return str(obj)
 
 
-def save_config_log(config, output_dir, results_filename):
+def serialize_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Convert a config dict into a JSON-safe structure."""
+    return json.loads(json.dumps(config, default=_config_encoder))
+
+
+def deserialize_config(value: Any) -> Any:
+    """Reconstruct distribution objects from a serialized config structure."""
+    if isinstance(value, dict):
+        return {key: deserialize_config(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [deserialize_config(item) for item in value]
+    if isinstance(value, str) and value.startswith("dist."):
+        return eval(value, {"__builtins__": {}}, {"dist": dist})
+    return value
+
+
+def save_config_log(config, output_dir, results_filename, run_id=None, manifest_path=None):
     """
     Saves the configuration dictionary to a Markdown file.
     
@@ -78,6 +96,8 @@ def save_config_log(config, output_dir, results_filename):
         config (dict): The configuration dictionary.
         output_dir (Path): The directory to save the log file.
         results_filename (str or Path): The name of the .nc results file used.
+        run_id (str | None): The run ID if analysis is tied to a run bundle.
+        manifest_path (str | Path | None): The run bundle manifest path, if any.
     """
     import subprocess
 
@@ -97,6 +117,12 @@ def save_config_log(config, output_dir, results_filename):
         f.write("## Reproducibility Info\n")
         f.write(f"- **Git Commit**: `{git_hash}`\n")
         f.write(f"- **Results File**: `{results_filename}`\n\n")
+        if run_id is not None:
+            f.write(f"- **Run ID**: `{run_id}`\n")
+        if manifest_path is not None:
+            f.write(f"- **Manifest File**: `{Path(manifest_path)}`\n")
+        if run_id is not None or manifest_path is not None:
+            f.write("\n")
 
         f.write("## Configuration Settings\n")
         f.write("```json\n")

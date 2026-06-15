@@ -92,24 +92,25 @@ Run bundles are written beneath the selected mode directory. All `.nc` files are
 
 ### 3. Running Analysis
 
-The analyzer requires the exact `.nc` result file to avoid silently analysing
-the wrong run:
+The analyzer now requires a verified bundled source so it can use the
+manifest-frozen configuration and checksum-checked result rather than mutable
+live settings:
 
 ```bash
-# Experimental analysis → saves to figures/tmp/
-uv run python analyze.py --results results/tmp/example.nc --experimental
+# Experimental analysis from a run bundle directory → saves to figures/tmp/
+uv run python analyze.py --results results/tmp/<run_id> --experimental
 
-# Final analysis → saves to figures/final/
-uv run python analyze.py --results results/final/example.nc --final
+# Final analysis from a bundled .nc file → saves to figures/final/
+uv run python analyze.py --results results/final/<run_id>/<result>.nc --final
 
-# Default analysis → saves to figures/
-uv run python analyze.py --results results/example.nc
+# Analysis from a unique run ID → saves to figures/
+uv run python analyze.py --results <run_id>
 ```
 
 Analysis outputs (plots, CSVs) are saved to timestamped directories based on the flag used.
 
 **Flags:**
-- `--results PATH`: Required explicit NetCDF result file
+- `--results PATH_OR_RUN_ID`: Required explicit bundled source: run-bundle directory, bundled `.nc`, or unique run ID
 - `--experimental`: Saves to `figures/tmp/analysis_<timestamp>/`
 - `--final`: Saves to `figures/final/analysis_<timestamp>/`
 - No flag: Saves to `figures/analysis_<timestamp>/`
@@ -135,7 +136,7 @@ The analysis script generates comprehensive visualizations and statistics, saved
 
 To run the analysis:
 ```bash
-uv run python analyze.py --results results/example.nc
+uv run python analyze.py --results <run_id>
 ```
 
 ### 4. Reproducibility

@@ -36,13 +36,13 @@ The safeguards are being introduced one phase at a time.
 Current analysis requires:
 
 ```bash
-uv run python analyze.py --results results/example.nc
+uv run python analyze.py --results <run_id>
 ```
 
-This prevents accidental newest-file selection. Run manifests now freeze the
-inference configuration and result checksum, but analysis still targets an
-explicit `.nc` path rather than a run ID, so outputs are not yet promoted to
-accepted paper evidence automatically.
+This prevents accidental newest-file selection. Analysis now resolves a run
+bundle directory, bundled `.nc` file, or unique run ID; verifies the stored
+SHA-256 checksum before loading results; and uses the manifest-frozen
+configuration instead of the mutable live config module.
 
 ## Karim OS constraints for this project
 
@@ -74,9 +74,10 @@ Data checksums and environment capture are still pending.
 
 ### 2. Analyse that explicit run
 
-Analysis currently requires an explicit result path. Once run bundles are
-implemented, it will require an explicit run ID and verify the result checksum
-before producing metrics, plot data, and rendered figures.
+Analysis now requires an explicit bundled source and verifies the stored result
+checksum before producing plots. It also reconstructs the frozen run
+configuration from `manifest.json` so evidence-facing analysis does not drift
+with later config edits.
 
 Karim-rule focus: eliminate ambiguous provenance and stop evidence-facing
 analysis from depending on mutable live configuration.

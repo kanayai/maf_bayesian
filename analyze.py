@@ -16,11 +16,10 @@ from datetime import datetime
 import argparse
 
 
-from configs.default_config import config
 from src.io.data_loader import load_all_data
 from src.core.models import model_n_hv, model_empirical, model_simple, posterior_predict
 from src.io.output_manager import save_config_log
-from src.io.result_selection import existing_netcdf_path
+from src.io.result_selection import existing_analysis_source
 from src.vis.plotting import (
     plot_experimental_data,
     plot_averaged_experimental_data,
@@ -141,17 +140,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python analyze.py --results results/example.nc
-  python analyze.py --results results/tmp/example.nc --experimental
-  python analyze.py --results results/final/example.nc --final
+  python analyze.py --results results/final/model_empirical_20260615T120000000000Z
+  python analyze.py --results results/final/model_empirical_20260615T120000000000Z/posterior.nc --final
+  python analyze.py --results model_empirical_20260615T120000000000Z
         """,
     )
     parser.add_argument(
         "--results",
         required=True,
-        type=existing_netcdf_path,
-        metavar="PATH",
-        help="Explicit .nc result file to analyse; implicit newest-file selection is disabled",
+        type=existing_analysis_source,
+        metavar="PATH_OR_RUN_ID",
+        help="Explicit bundled analysis source: run-bundle directory, bundled .nc file, or unique run ID",
     )
 
     mode_group = parser.add_mutually_exclusive_group()
@@ -181,8 +180,12 @@ Examples:
 
     print("Starting analysis...")
 
-    result_file = args.results
+    analysis_source = args.results
+    result_file = analysis_source.result_path
+    config = analysis_source.config
+    print(f"Selected run bundle: {analysis_source.bundle_dir}")
     print(f"Selected result: {result_file}")
+    print(f"Verified run ID: {analysis_source.run_id}")
 
     # 1. Load Data
     data_dict = load_all_data(config)
@@ -231,7 +234,13 @@ Examples:
     idata = az.from_netcdf(result_file)
 
     # Save Config Log
-    save_config_log(config, figures_dir, result_file)
+    save_config_log(
+        config,
+        figures_dir,
+        result_file,
+        run_id=analysis_source.run_id,
+        manifest_path=analysis_source.manifest_path,
+    )
 
     # 4. Categorized Posterior Plots
     samples = {}
