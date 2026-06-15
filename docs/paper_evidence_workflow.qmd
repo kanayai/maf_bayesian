@@ -85,9 +85,9 @@ analysis from depending on mutable live configuration.
 ### 3. Review the evidence
 
 Each analysis output now writes machine-readable exports under `exports/`,
-including posterior summaries, diagnostics, prediction plot-data, flattened
-experimental observations, and residual plot-data when residual checks are
-enabled.
+including posterior summaries, diagnostics, an explicit acceptance gate report,
+prediction plot-data, flattened experimental observations, and residual
+plot-data when residual checks are enabled.
 
 Before a result can support the paper, check:
 
@@ -125,6 +125,37 @@ The minimal validator currently checks:
 - manuscript targets are specific rather than ambiguous placeholders;
 - `status` is `candidate` or `accepted`;
 - source artefacts exist and match the recorded SHA-256 checksum.
+
+For `accepted` entries, the validator now also requires an
+`acceptance_review` pointing to a matching `acceptance_summary.json` whose
+phase-5 gates all pass for the same run ID.
+
+## Phase-5 acceptance gates
+
+The current minimum scientific gates are intentionally simple and machine-checkable:
+
+- total divergences must be `0`;
+- maximum reported `r_hat` must be at most `1.05`;
+- minimum `ess_bulk` must be at least `100`;
+- minimum `ess_tail` must be at least `100`;
+- posterior observation-band coverage across exported observations must be at least `0.80`.
+
+These gates are written to `exports/acceptance_summary.json` for every analysis
+run. Candidate entries can carry that summary for review, but only entries with
+an all-pass summary can be promoted to `accepted`.
+
+## Cheap pilot
+
+Run the end-to-end pilot with:
+
+```bash
+uv run python scripts/run_phase5_pilot.py
+```
+
+This creates a cheap experimental run, analyses it, appends one candidate
+registry entry, and records the failed gate report expected from a low-budget
+smoke test. The pilot proves restartability and provenance; it is not intended
+to satisfy the acceptance thresholds.
 
 ## Phase-to-rule overlay
 

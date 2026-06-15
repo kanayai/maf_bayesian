@@ -9,6 +9,8 @@ import jax.numpy as jnp
 import numpy as np
 import pandas as pd
 
+from src.io.acceptance_rules import build_acceptance_summary
+
 
 def ensure_exports_dir(figures_dir: Path) -> Path:
     exports_dir = figures_dir / "exports"
@@ -147,6 +149,25 @@ def write_prediction_exports(
     prediction_df.to_csv(prediction_path, index=False)
     observation_df.to_csv(observation_path, index=False)
     return [prediction_path, observation_path]
+
+
+def write_acceptance_summary(
+    *,
+    run_id: str,
+    diagnostics_summary: dict[str, Any],
+    prediction_df: pd.DataFrame,
+    observation_df: pd.DataFrame,
+    exports_dir: Path,
+) -> Path:
+    acceptance_summary = build_acceptance_summary(
+        run_id=run_id,
+        diagnostics_summary=diagnostics_summary,
+        prediction_df=prediction_df,
+        observation_df=observation_df,
+    )
+    summary_path = exports_dir / "acceptance_summary.json"
+    summary_path.write_text(json.dumps(acceptance_summary, indent=2) + "\n")
+    return summary_path
 
 
 def write_residual_exports(

@@ -38,6 +38,22 @@ class EvidenceRegistryTests(unittest.TestCase):
             ],
         }
 
+    def _acceptance_summary(self, root: Path, run_id: str, *, all_gates_passed: bool = True) -> tuple[Path, str]:
+        summary_path = root / "figures" / "final" / "analysis_001" / "exports" / "acceptance_summary.json"
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(
+            json.dumps(
+                {
+                    "gates_version": 1,
+                    "run_id": run_id,
+                    "all_gates_passed": all_gates_passed,
+                    "gate_results": [{"name": "max_rhat", "passed": all_gates_passed}],
+                }
+            )
+            + "\n"
+        )
+        return summary_path, sha256_file(summary_path)
+
     def test_validate_registry_document_accepts_valid_entry(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -111,6 +127,38 @@ class EvidenceRegistryTests(unittest.TestCase):
 
             validated = validate_registry_file(registry_path, repo_root=root)
             self.assertEqual(len(validated), 1)
+
+    def test_accepted_entry_requires_valid_acceptance_review(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            document = self._valid_document(root)
+            run_id = document["entries"][0]["source_run_id"]
+            summary_path, summary_sha = self._acceptance_summary(root, run_id)
+            document["entries"][0]["status"] = "accepted"
+            document["entries"][0]["acceptance_review"] = {
+                "summary_artifact": str(summary_path.relative_to(root)),
+                "summary_artifact_sha256": summary_sha,
+                "gates_version": 1,
+            }
+
+            validated = validate_registry_document(document, repo_root=root)
+            self.assertEqual(validated[0]["status"], "accepted")
+
+    def test_accepted_entry_rejects_failed_acceptance_review(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            document = self._valid_document(root)
+            run_id = document["entries"][0]["source_run_id"]
+            summary_path, summary_sha = self._acceptance_summary(root, run_id, all_gates_passed=False)
+            document["entries"][0]["status"] = "accepted"
+            document["entries"][0]["acceptance_review"] = {
+                "summary_artifact": str(summary_path.relative_to(root)),
+                "summary_artifact_sha256": summary_sha,
+                "gates_version": 1,
+            }
+
+            with self.assertRaisesRegex(RegistryValidationError, "does not pass all required gates"):
+                validate_registry_document(document, repo_root=root)
 
 
 if __name__ == "__main__":

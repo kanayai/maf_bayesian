@@ -9,6 +9,7 @@ from typing import Any
 if __package__ in (None, ""):
     sys.path.append(str(Path(__file__).resolve().parents[2]))
 
+from src.io.acceptance_rules import ACCEPTANCE_GATES_VERSION, load_and_validate_acceptance_summary
 from src.io.run_bundle import sha256_file
 
 
@@ -130,6 +131,13 @@ def validate_registry_entry(
     normalized["manuscript_location"] = manuscript_location
     normalized["status"] = status
     normalized["resolved_source_artifact"] = str(artifact_path)
+
+    if status == "accepted":
+        normalized["acceptance_review"] = _validate_acceptance_review(
+            entry,
+            repo_root=repo_root,
+            source_run_id=entry["source_run_id"].strip(),
+        )
     return normalized
 
 
@@ -138,6 +146,68 @@ def resolve_registry_artifact(source_artifact: str, *, repo_root: Path) -> Path:
     if artifact_path.is_absolute():
         return artifact_path.resolve()
     return (repo_root / artifact_path).resolve()
+
+
+def _validate_acceptance_review(
+    entry: dict[str, Any],
+    *,
+    repo_root: Path,
+    source_run_id: str,
+) -> dict[str, Any]:
+    acceptance_review = entry.get("acceptance_review")
+    if not isinstance(acceptance_review, dict):
+        raise RegistryValidationError(
+            "Accepted registry entries must include an acceptance_review object"
+        )
+
+    summary_artifact = acceptance_review.get("summary_artifact")
+    if not isinstance(summary_artifact, str) or not summary_artifact.strip():
+        raise RegistryValidationError(
+            "Accepted registry entries must include acceptance_review.summary_artifact"
+        )
+
+    summary_sha = acceptance_review.get("summary_artifact_sha256")
+    if not isinstance(summary_sha, str) or not summary_sha.strip():
+        raise RegistryValidationError(
+            "Accepted registry entries must include acceptance_review.summary_artifact_sha256"
+        )
+
+    gates_version = acceptance_review.get("gates_version", ACCEPTANCE_GATES_VERSION)
+    if not isinstance(gates_version, int):
+        raise RegistryValidationError(
+            "Accepted registry entries must include an integer acceptance_review.gates_version"
+        )
+
+    summary_path = resolve_registry_artifact(summary_artifact, repo_root=repo_root)
+    if not summary_path.exists():
+        raise RegistryValidationError(
+            f"Acceptance review summary_artifact does not exist: {summary_path}"
+        )
+    if not summary_path.is_file():
+        raise RegistryValidationError(
+            f"Acceptance review summary_artifact is not a file: {summary_path}"
+        )
+
+    actual_summary_sha = sha256_file(summary_path)
+    if actual_summary_sha != summary_sha.strip():
+        raise RegistryValidationError(
+            "Acceptance review summary_artifact checksum mismatch for "
+            f"{summary_path}: expected {summary_sha}, got {actual_summary_sha}"
+        )
+
+    try:
+        load_and_validate_acceptance_summary(
+            summary_path,
+            expected_run_id=source_run_id,
+            gates_version=gates_version,
+        )
+    except ValueError as exc:
+        raise RegistryValidationError(str(exc)) from exc
+
+    normalized_review = dict(acceptance_review)
+    normalized_review["resolved_summary_artifact"] = str(summary_path)
+    normalized_review["gates_version"] = gates_version
+    return normalized_review
 
 
 def build_parser() -> argparse.ArgumentParser:

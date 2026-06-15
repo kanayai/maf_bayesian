@@ -7,12 +7,14 @@ from pathlib import Path
 
 import arviz as az
 import numpy as np
+import pandas as pd
 
 from src.io.analysis_exports import (
     compute_diagnostics_summary,
     ensure_exports_dir,
     flatten_prediction_collection,
     summarize_samples,
+    write_acceptance_summary,
     write_analysis_manifest,
     write_prediction_exports,
     write_posterior_summary,
@@ -120,6 +122,49 @@ class AnalysisExportsTests(unittest.TestCase):
             self.assertEqual(len(paths), 2)
             self.assertTrue(paths[0].exists())
             self.assertTrue(paths[1].exists())
+
+    def test_write_acceptance_summary_writes_gate_report(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            exports_dir = ensure_exports_dir(Path(directory))
+            diagnostics_summary = {
+                "parameters": [{"parameter": "theta", "ess_bulk": 150.0, "ess_tail": 120.0, "r_hat": 1.01}],
+                "total_divergences": 0,
+                "mean_acceptance_rate": 0.9,
+            }
+            prediction_df = pd.DataFrame(
+                [
+                    {
+                        "angle_deg": 45,
+                        "direction": "v",
+                        "load": 0.0,
+                        "posterior_observation_lower": 0.0,
+                        "posterior_observation_upper": 1.0,
+                        "posterior_function_lower": 0.1,
+                        "posterior_function_upper": 0.9,
+                    }
+                ]
+            )
+            observation_df = pd.DataFrame(
+                [
+                    {
+                        "angle_deg": 45,
+                        "direction": "v",
+                        "load": 0.0,
+                        "replicate_index": 0,
+                        "observed_extension": 0.5,
+                    }
+                ]
+            )
+            summary_path = write_acceptance_summary(
+                run_id="run_001",
+                diagnostics_summary=diagnostics_summary,
+                prediction_df=prediction_df,
+                observation_df=observation_df,
+                exports_dir=exports_dir,
+            )
+            summary = json.loads(summary_path.read_text())
+            self.assertTrue(summary["all_gates_passed"])
+            self.assertEqual(summary["run_id"], "run_001")
 
 
 if __name__ == "__main__":

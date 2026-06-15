@@ -1,4 +1,5 @@
 print("DEBUG: Pre-Import")
+import json
 import matplotlib
 matplotlib.use("Agg")
 import arviz as az
@@ -19,9 +20,11 @@ import argparse
 from src.io.data_loader import load_all_data
 from src.core.models import model_n_hv, model_empirical, model_simple, posterior_predict
 from src.io.analysis_exports import (
+    compute_diagnostics_summary,
     ensure_exports_dir,
+    flatten_prediction_collection,
     write_analysis_manifest,
-    write_diagnostics_summary,
+    write_acceptance_summary,
     write_posterior_summary,
     write_prediction_exports,
     write_residual_exports,
@@ -1555,8 +1558,21 @@ Examples:
         save_path=figures_dir / f"prediction_posterior_grid_{suffix}.png",
         title_prefix="Posterior"
     )
+    prediction_df, observation_df = flatten_prediction_collection(predictions_collection)
     exported_files.extend(write_prediction_exports(predictions_collection, exports_dir))
-    exported_files.append(write_diagnostics_summary(idata, exports_dir))
+    diagnostics_summary = compute_diagnostics_summary(idata)
+    diagnostics_summary_path = exports_dir / "diagnostics_summary.json"
+    diagnostics_summary_path.write_text(json.dumps(diagnostics_summary, indent=2) + "\n")
+    exported_files.append(diagnostics_summary_path)
+    exported_files.append(
+        write_acceptance_summary(
+            run_id=analysis_source.run_id,
+            diagnostics_summary=diagnostics_summary,
+            prediction_df=prediction_df,
+            observation_df=observation_df,
+            exports_dir=exports_dir,
+        )
+    )
     # 9. Residual Analysis (Optional)
     if config["data"].get("run_residual_analysis", False) and config.get("model_type") not in ["model_empirical", "model_simple"]:
         residual_export_paths = run_residual_analysis(idata, data_dict, figures_dir, exports_dir, config)

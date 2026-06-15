@@ -1,4 +1,18 @@
 {
   "schema_version": 1,
-  "entries": []
+  "entries": [
+    {
+      "evidence_id": "PILOT-model_empirical_20260615T160055698513Z",
+      "manuscript_location": "Appendix Pilot end-to-end evidence check",
+      "source_run_id": "model_empirical_20260615T160055698513Z",
+      "source_artifact": "figures/tmp/analysis_model_empirical_20260615_170104/exports/prediction_plot_data.csv",
+      "source_artifact_sha256": "574b6286c9424e72ea5984bda479af7d6ad10e64c684352045cb4cacc183cc66",
+      "status": "candidate",
+      "acceptance_review": {
+        "summary_artifact": "figures/tmp/analysis_model_empirical_20260615_170104/exports/acceptance_summary.json",
+        "summary_artifact_sha256": "a16252599e292e45de372508e0822cb3d7a355c43b839b3d73baafccb42b988a",
+        "gates_version": 1
+      }
+    }
+  ]
 }

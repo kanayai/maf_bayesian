@@ -1,5 +1,5 @@
 # Handoff — MAF Bayesian paper evidence workflow
-_Checkpoint 2026-06-15 14:00_
+_Checkpoint 2026-06-15 17:05_
 
 ## Objective
 Build a newly generated, explicitly traceable results-to-paper evidence baseline.
@@ -49,16 +49,44 @@ Build a newly generated, explicitly traceable results-to-paper evidence baseline
   ambiguous manuscript locations.
 
 ## Resume point
-Phase 4 is implemented and verified. The next step is to run one cheap
-end-to-end pilot that produces a new verified run, analysis exports, at least
-one registry entry, and then define practical scientific acceptance gates on
-top of that path.
+Phase 5 is implemented and exercised with one cheap end-to-end pilot. The next
+step is to decide whether to keep the current machine gates as-is or tighten
+them after one scientifically credible non-pilot run.
 
 ## Next action
-Implement phase 5: execute a cheap end-to-end pilot through inference,
-analysis, export, and registry validation; then define the minimum scientific
-acceptance rules that decide when an entry can move from `candidate` to
-`accepted`.
+Run one non-pilot evidence candidate with realistic MCMC settings, inspect its
+`exports/acceptance_summary.json`, and decide whether the current thresholds
+(`0` divergences, `r_hat <= 1.05`, `ESS >= 100`, coverage `>= 0.80`) are the
+right acceptance baseline before promoting any registry entry to `accepted`.
+
+## Phase-5 implementation
+- Added `src/io/acceptance_rules.py` with a versioned minimum acceptance policy.
+- Analysis now writes `exports/acceptance_summary.json` on every run.
+- `accepted` evidence-registry entries must now include an
+  `acceptance_review` whose summary checksum matches and whose gates all pass.
+- Added `scripts/run_phase5_pilot.py` to execute a cheap experimental
+  inference-analysis-registry smoke test.
+- Added focused tests for acceptance summaries and accepted-entry validation.
+
+## Pilot artefacts
+- Pilot run bundle:
+  `results/tmp/model_empirical_20260615T160055698513Z`
+- Pilot analysis output:
+  `figures/tmp/analysis_model_empirical_20260615_170104`
+- Pilot registry entry:
+  `PILOT-model_empirical_20260615T160055698513Z`
+
+## Pilot outcome
+- The provenance path works end to end: inference bundle, analysis exports,
+  acceptance summary, registry append, and registry validation all completed.
+- The pilot remains `candidate`, not `accepted`, because the cheap run failed
+  all scientific gates as expected.
+- Recorded pilot gate summary:
+  - divergences: `13`
+  - min `ess_bulk`: `2`
+  - min `ess_tail`: `3`
+  - posterior observation coverage: `0.5965`
+  - `r_hat` gate unavailable with a single short chain, so acceptance fails
 
 ## Karim OS Constraints
 - Enforce explicit provenance: never select or analyse a result implicitly.
@@ -81,10 +109,9 @@ acceptance rules that decide when an entry can move from `candidate` to
    Karim-rule focus: cold restart must be possible from durable artefacts and documented acceptance gates.
 
 ## Verification
-- `python3 -m py_compile src/io/evidence_registry.py tests/test_evidence_registry.py` — passed.
-- `uv run python -m unittest tests.test_evidence_registry tests.test_analysis_exports tests.test_result_selection tests.test_run_bundle -v` — 29 tests passed.
-- `uv run python src/io/evidence_registry.py --help` — documents the minimal validator CLI.
-- `quarto render docs/paper_evidence_workflow.qmd` — passed.
+- `uv run python -m unittest tests.test_acceptance_rules tests.test_analysis_exports tests.test_evidence_registry tests.test_result_selection tests.test_run_bundle -v` — 34 tests passed.
+- `uv run python scripts/run_phase5_pilot.py` — passed; created the pilot run, analysis, acceptance summary, and candidate registry entry.
+- `uv run python src/io/evidence_registry.py --registry registry/paper_evidence_registry.json --repo-root .` — implied by pilot script and passed.
 
 ## Last safe commit
-`53038a1` — structured analysis artefacts; tree dirty with the completed phase-4 evidence-registry changes ready to commit.
+`53038a1` — last recorded pre-phase-5 safe commit; tree now includes uncommitted phase-5 acceptance-rule and pilot changes plus generated pilot artefacts.

@@ -125,6 +125,7 @@ artefacts tied to the verified source run:
 - `analysis_manifest.json`: run ID, source manifest/result, output directory, and exported-file list
 - `posterior_summary.csv` and `posterior_summary.json`: posterior summary metrics across analysed parameters
 - `diagnostics_summary.json`: sampler diagnostics exported from ArviZ and sample statistics
+- `acceptance_summary.json`: explicit phase-5 gate report for divergences, ESS, R-hat availability, and posterior observation coverage
 - `prediction_plot_data.csv`: grid-ready prior/posterior prediction intervals and means
 - `experimental_observations.csv`: flattened observed experimental points used in prediction plots
 - `residual_observations.csv` and `residual_bands.csv`: residual plot-data when residual analysis is enabled
@@ -183,6 +184,29 @@ uv run python src/io/evidence_registry.py --registry registry/paper_evidence_reg
 
 The validator rejects missing run IDs, missing artefacts, checksum mismatches,
 unknown statuses, duplicate evidence IDs, and ambiguous manuscript locations.
+
+Accepted entries must also include an `acceptance_review` that points to a
+matching `acceptance_summary.json` with all phase-5 gates passed. Candidate
+entries may carry an acceptance summary for review, but they cannot be promoted
+to `accepted` unless that gate report validates successfully.
+
+### 6. Phase-5 pilot
+
+Run the cheap end-to-end pilot with:
+
+```bash
+uv run python scripts/run_phase5_pilot.py
+```
+
+The pilot creates:
+
+- a new experimental run bundle under `results/tmp/`
+- a matching analysis bundle under `figures/tmp/`
+- a candidate registry entry in `registry/paper_evidence_registry.json`
+
+The pilot is intentionally cheap and is expected to fail the scientific
+acceptance gates. Its purpose is to prove that the full safeguarded provenance
+path works and that acceptance remains explicit rather than implicit.
 
 ## Documentation
 
