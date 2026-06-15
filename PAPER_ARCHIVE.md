@@ -48,3 +48,35 @@ python3 scripts/create_paper_archive_manifest.py \
 
 The latest manuscript by modification time is
 `MAF_manuscript_21_NOV_KAI.docx`, modified on 2025-12-19.
+
+## Legacy evidence archive
+
+The two recovered historical project trees were separately preserved on
+2026-06-15 before starting a new results-to-paper evidence baseline.
+
+University of Bath OneDrive:
+
+`Mech Eng/OHT data (Tobi Laux)/maf_bayesian_paper_archive/2026-06-15_legacy_evidence/`
+
+Archived source trees:
+
+- `MAF_Bayesian-main-old/`
+- `MAF_Bayesian-main-backup-1-dec-2025/`
+
+The archive contains 2,935 research-evidence files totalling 386,127,926 bytes.
+Every copied file matched its source byte size and SHA-256 checksum.
+
+The archive deliberately excludes `.git`, `.conda`, `.venv`, `__pycache__`,
+`.ipynb_checkpoints`, and `.DS_Store` content. These are repository metadata,
+recreatable environments, or caches rather than historical research evidence.
+
+The external archive includes:
+
+- `legacy_archive_manifest.csv`: path, size, modification time, and SHA-256 for
+  every archived file;
+- `legacy_archive_summary.json`: source trees, exclusions, totals, and
+  verification status.
+
+Regenerate a new dated legacy archive with
+`scripts/archive_legacy_evidence.py`. The script refuses to overwrite an
+existing archive destination and marks incomplete archives on failure.

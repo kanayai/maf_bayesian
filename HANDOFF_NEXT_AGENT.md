@@ -25,25 +25,24 @@ Organise the project for sustained AI-assisted work that finishes the academic p
   complete bias and leave-one-out families, RMSE/probability-area notebooks,
   and several byte-identical embedded figures now map to the manuscript. See
   `docs/historical_provenance_inventory.qmd`.
+- Archived both recovered legacy project trees as reference-only evidence under
+  `maf_bayesian_paper_archive/2026-06-15_legacy_evidence/`. Verified 2,935 files
+  and 386,127,926 bytes by SHA-256; Git metadata, environments, and caches were
+  excluded. See `PAPER_ARCHIVE.md`.
 
 ## Resume point
-The paper directory and working manuscript are established, and most historical
-result provenance is recovered. Preserve and canonicalise that evidence before
-changing manuscript claims or figures.
+Historical evidence is preserved. The preferred direction is now a newly
+generated, explicitly traceable results-to-paper evidence baseline.
 
 ## Next action
-Create a controlled checksum inventory of the matching non-suffixed legacy
-evidence, then decide whether the paper will retain that historical baseline or
-adopt a regenerated current-code baseline. Continue searching for the Figure 5
-sensitivity source without modifying the legacy tree.
+Agree and add the minimal operational-memory layer for the new workflow, then
+remove implicit newest-result selection from `analyze.py` as the first pipeline
+change.
 
 ## Last safe commit
-Evidence-audit commit `fc70b22`. The local `stiffness_paper/` directory remains
-ignored and the OneDrive legacy tree remains untouched.
+Provenance-audit commit `1094768`; tree has uncommitted Phase 0 archive records
+and `scripts/archive_legacy_evidence.py`.
 
 ## Blockers
-- Exact `.nc` result files corresponding to three newer retained analysis
-  folders have not been located.
-- Figure 5 sensitivity provenance and the exact historical generating code
-  commit remain unknown.
-- Some final aggregate prediction-figure variants still need exact mapping.
+- The operational-memory/runbook structure for the new traceability workflow
+  has not yet been added.

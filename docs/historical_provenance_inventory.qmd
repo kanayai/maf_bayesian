@@ -18,6 +18,16 @@ Nothing in that tree was moved, renamed, or modified. The non-suffixed folders
 below match the manuscript; `_HEXCEL` and `_IFAVG` folders are separate
 variants.
 
+Both recovered legacy project trees were copied to the verified, read-only
+reference archive on 2026-06-15:
+
+`Mech Eng/OHT data (Tobi Laux)/maf_bayesian_paper_archive/2026-06-15_legacy_evidence/`
+
+The archive contains 2,935 research-evidence files totalling 386,127,926 bytes.
+Every copied file matched its source byte size and SHA-256 checksum. Git
+metadata, environments, caches, and system metadata were deliberately excluded.
+See [`../PAPER_ARCHIVE.md`](../PAPER_ARCHIVE.md).
+
 ## Recovered evidence set
 
 - 38 HDF5 MCMC result files
@@ -74,7 +84,8 @@ exact final aggregate figure variants still need mapping.
 
 ## Remaining provenance risks
 
-- The legacy tree is a loose historical snapshot and has no usable Git history,
+- The legacy evidence is now preserved as a verified reference-only archive,
+  but the source tree is a loose historical snapshot with no usable Git history,
   so the exact generating code commit is not traceable.
 - Figure 5's Elementary Effects sensitivity-analysis source has not been found.
 - Duplicate `_HEXCEL` and `_IFAVG` variants require deliberate canonicalisation.
