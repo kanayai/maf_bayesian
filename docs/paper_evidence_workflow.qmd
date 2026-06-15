@@ -44,6 +44,24 @@ inference configuration and result checksum, but analysis still targets an
 explicit `.nc` path rather than a run ID, so outputs are not yet promoted to
 accepted paper evidence automatically.
 
+## Karim OS constraints for this project
+
+This project does not need a heavy Karim-AI compliance framework. The useful
+overlay is smaller: only the operating constraints that materially affect
+provenance, restartability, and evidence safety should shape implementation.
+
+- Explicit provenance: never select or analyse a result implicitly.
+- Immutable evidence outputs: completed run bundles must not be silently
+  overwritten.
+- Cheap cold restart: each workflow phase should leave an explicit resume point
+  and source artefact.
+- Clean system boundaries: code and schemas belong in this repo; live
+  operational state belongs in `HANDOFF_NEXT_AGENT.md` and
+  `Karim_AI/karim-ai-os/research/`.
+
+The implementation phases below should be read with those constraints in mind,
+but they should not be expanded into a full cross-project bureaucracy.
+
 ## Intended daily workflow
 
 ### 1. Create a run
@@ -59,6 +77,9 @@ Data checksums and environment capture are still pending.
 Analysis currently requires an explicit result path. Once run bundles are
 implemented, it will require an explicit run ID and verify the result checksum
 before producing metrics, plot data, and rendered figures.
+
+Karim-rule focus: eliminate ambiguous provenance and stop evidence-facing
+analysis from depending on mutable live configuration.
 
 ### 3. Review the evidence
 
@@ -80,6 +101,16 @@ The Git-tracked paper evidence registry will record:
 - `candidate` or `accepted` status.
 
 Only accepted entries should be inserted into the working manuscript.
+
+## Phase-to-rule overlay
+
+| Phase | Domain goal | Karim-rule focus |
+|---|---|---|
+| 1. Run bundle | Freeze the inference output into a named bundle | Explicit provenance and no silent overwrite of completed outputs |
+| 2. Explicit analysis source | Analyse only a named, checked run | No implicit source selection; no mutable live config for evidence-facing analysis |
+| 3. Metrics and plot-data exports | Make evidence artefacts inspectable and reproducible | Source artefacts must stay explicit and regenerable from a named run |
+| 4. Evidence registry | Link paper items to accepted evidence | Paper-facing claims need a stable tracked source link |
+| 5. Pilot and acceptance rules | Validate the full safeguarded path | Cold restart and acceptance gates must be durable and testable |
 
 ## Where information belongs
 
