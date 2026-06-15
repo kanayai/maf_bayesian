@@ -1,0 +1,104 @@
+---
+title: "Paper Evidence Workflow"
+date: 2026-06-15
+format:
+  html:
+    toc: true
+    toc-depth: 2
+---
+
+## Purpose
+
+This is the short operational guide for creating and using results in the
+paper. It is the first place to read when returning to manuscript analysis
+work.
+
+The rule to remember is:
+
+> A paper figure, table, or numerical claim is usable only when it points to an
+> explicit completed run and a checked source artefact.
+
+Historical results are preserved as reference material, but the active paper
+evidence baseline will be regenerated using the safeguarded workflow below.
+
+## Current implementation status
+
+The safeguards are being introduced one phase at a time.
+
+| Capability | Status |
+|---|---|
+| Historical evidence archive | Implemented and verified |
+| Explicit result selection in `analyze.py` | Next implementation phase |
+| Immutable run bundle and manifest | Planned |
+| Structured metrics and plot-data exports | Planned |
+| Paper evidence registry and validator | Planned |
+
+Until explicit result selection is implemented, do not treat newly generated
+analysis outputs as paper evidence. The current `analyze.py` can still select
+the newest result implicitly.
+
+## Intended daily workflow
+
+### 1. Create a run
+
+Inference will create one immutable run bundle containing the frozen
+configuration, code revision, data checksums, environment information, result,
+and completion status.
+
+### 2. Analyse that explicit run
+
+Analysis will require an explicit run ID. It will verify the run and result
+checksum before producing metrics, plot data, and rendered figures.
+
+### 3. Review the evidence
+
+Before a result can support the paper, check:
+
+- the run completed successfully;
+- the selected source is explicit;
+- required sampler and scientific diagnostics pass;
+- the table, figure, or claim has a stable paper evidence ID.
+
+### 4. Link it to the manuscript
+
+The Git-tracked paper evidence registry will record:
+
+- stable evidence ID;
+- manuscript location;
+- source run ID;
+- source artefact and checksum;
+- `candidate` or `accepted` status.
+
+Only accepted entries should be inserted into the working manuscript.
+
+## Where information belongs
+
+| Information | Location |
+|---|---|
+| How to perform the workflow | This runbook |
+| Non-negotiable agent safeguards | `AGENTS.md` |
+| Exact command syntax | Command `--help` output |
+| Current resume point and next action | `HANDOFF_NEXT_AGENT.md` |
+| Cross-project research pointer | `Karim_AI/karim-ai-os/research/` |
+| Historical binary evidence | Verified OneDrive archive |
+| Code, scripts, schemas, and registry | This Git repository |
+
+Do not duplicate this runbook in `Karim_AI` or `sync-infra`. `Karim_AI` keeps
+thin operational pointers; `sync-infra` only distributes the repositories.
+
+## Recovery shortcut
+
+When returning to the project:
+
+1. Read `HANDOFF_NEXT_AGENT.md`.
+2. Read this page if the task concerns runs, analysis, or manuscript evidence.
+3. Use command `--help` for exact syntax.
+4. Ask the agent to update the handoff before stopping mid-phase.
+
+## Historical archive
+
+Recovered historical evidence is reference-only and preserved under:
+
+`OneDrive/Mech Eng/OHT data (Tobi Laux)/maf_bayesian_paper_archive/2026-06-15_legacy_evidence/`
+
+See [`../PAPER_ARCHIVE.md`](../PAPER_ARCHIVE.md) for scope and verification.

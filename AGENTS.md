@@ -16,12 +16,31 @@ for FE-vs-experiment bias correction. Full detail: `README.md`.
 ## Read first
 
 1. `README.md` — full workflow, models, noise models, reproducibility.
-2. `.agent/rules/` — repo conventions (reproducibility, git, docs, roles, output).
+2. `docs/paper_evidence_workflow.qmd` — short operational guide for any work
+   involving results, plots, tables, claims, or the manuscript.
+3. `.agent/rules/` — repo conventions (reproducibility, git, docs, roles, output).
+
+## Paper evidence safeguards
+
+- Never select or analyse a result implicitly for paper-facing work. Require an
+  explicit result path or run ID once supported.
+- Never describe a result, plot, table, or claim as paper evidence unless its
+  source run and artefact are explicit and checked.
+- Treat historical results as reference-only. Do not promote them into the new
+  evidence baseline.
+- Keep large results and archives outside Git; keep scripts, manifests,
+  registries, and documentation in Git.
+- Completed run bundles must not be overwritten.
+- Do not insert a paper-facing item into the working manuscript unless it has an
+  accepted evidence-registry entry once the registry is implemented.
+- Update `HANDOFF_NEXT_AGENT.md` after each completed workflow phase so the next
+  concrete action remains obvious.
 
 ## Entry points
 
 - `main.py` — run inference (`uv run python main.py [--experimental|--final]`).
-- `analyze.py` — run analysis on the most recent result (large, ~76 KB single file).
+- `analyze.py` — analysis entry point. It currently selects the most recent
+  result; removing that unsafe behaviour is the next implementation phase.
 - `configs/default_config.py` — models, priors, data selection, analysis settings.
 - `src/` — `core/` (models, covariance), `io/` (data, output), `vis/` (plotting).
 

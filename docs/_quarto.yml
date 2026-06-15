@@ -9,6 +9,7 @@ book:
     - part: "Overview"
       chapters:
         - CODE_DESCRIPTION.qmd
+        - paper_evidence_workflow.qmd
     - part: "Data & Design"
       chapters:
         - data_provenance.md

@@ -29,20 +29,18 @@ Organise the project for sustained AI-assisted work that finishes the academic p
   `maf_bayesian_paper_archive/2026-06-15_legacy_evidence/`. Verified 2,935 files
   and 386,127,926 bytes by SHA-256; Git metadata, environments, and caches were
   excluded. See `PAPER_ARCHIVE.md`.
+- Added the minimal operational-memory layer for the new workflow:
+  `docs/paper_evidence_workflow.qmd` is the concise human runbook and
+  `AGENTS.md` contains the non-negotiable agent safeguards.
 
 ## Resume point
-Historical evidence is preserved. The preferred direction is now a newly
-generated, explicitly traceable results-to-paper evidence baseline.
+Historical evidence is preserved and the operational-memory layer is in place.
+The preferred direction is a newly generated, explicitly traceable
+results-to-paper evidence baseline.
 
 ## Next action
-Agree and add the minimal operational-memory layer for the new workflow, then
-remove implicit newest-result selection from `analyze.py` as the first pipeline
-change.
+Remove implicit newest-result selection from `analyze.py` as the first pipeline
+change. Require an explicit result path and add focused selection tests.
 
 ## Last safe commit
-Provenance-audit commit `1094768`; tree has uncommitted Phase 0 archive records
-and `scripts/archive_legacy_evidence.py`.
-
-## Blockers
-- The operational-memory/runbook structure for the new traceability workflow
-  has not yet been added.
+Legacy-archive commit `d68a83a`; tree has uncommitted operational-memory files.
