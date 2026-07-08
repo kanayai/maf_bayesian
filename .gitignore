@@ -31,3 +31,6 @@ figures/*
 # Documentation build artifacts
 docs/_site/
 docs/*_files/
+
+# Paper ingest source (binary; provenance in OneDrive archive)
+paper/source/*.docx

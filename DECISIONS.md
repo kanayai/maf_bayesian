@@ -3,6 +3,42 @@
 Why key choices were made in this project — the rationale behind the code, not
 just the outcome. Newest first. Capture via the `/decision` skill (auto-dated).
 
+## 2026-07-08 — Defer the model choice; run more MCMC first; start the paper track in parallel
+
+**Context:** The paper's model direction (physics `main` / semi-empirical
+`feature/empirical-model` / both) is still unmade. Karim wants to run a few more MCMC
+simulations before committing.
+
+**Decision:** Do **not** decide the model yet. Proceed with the **paper Word→Quarto
+authoring track** now (Phase 0–3), in parallel, since ingest and the Quarto skeleton
+don't depend on which model wins — only the final reported results/numbers do. `paper/`
+lives on `main`.
+
+**Why:** Keeps the write-up moving without prematurely forcing the modelling decision
+(which would otherwise be made silently by merging branches — see 2026-07-07 decision).
+The model call stays gated on the extra MCMC evidence.
+
+**Reverse if:** the extra MCMC runs settle the model direction — then feed the chosen
+model's results into the paper and revisit the branch merge (base = `main`).
+
+## 2026-07-08 — Collaborator round-trip: one-way (Option A)
+
+**Context:** The paper is authored in Quarto (`paper/paper.qmd` = single source of
+truth) and exported one-way to `.docx` for the two Word-using collaborators (Tobi
+Laux, Janice Dulieu-Barton). Question: how do their returned edits re-enter the `.qmd`?
+
+**Decision:** One-way. Their returned `.docx` is feedback, not source — accepted edits
+are **re-typed by hand** into `paper.qmd`. The `.docx` is never ingested back through
+pandoc.
+
+**Why:** Karim is the only Quarto author; collaborators comment a few times near the
+end. Re-ingesting each return would re-mangle math (OMML→TeX), tables, and references
+every round — the one-time QA cost paid at ingest would recur indefinitely. Re-typing a
+handful of accepted edits is cheaper and keeps `paper.qmd` pristine.
+
+**Reverse if:** a collaborator returns extensive rewrites where manual re-entry is
+clearly more costly than a one-off pandoc `--track-changes` ingest + merge.
+
 ## 2026-07-07 — Keep the physics and semi-empirical model branches separate (do not merge yet)
 
 **Context:** The repo has two branches with *unrelated git roots*:
