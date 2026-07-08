@@ -34,22 +34,38 @@ eLife LaTeX → Overleaf; here the target is **Word via pandoc reference-doc**.
 
 ### Latest Word source (authoritative, checksummed)
 
-- **`MAF_manuscript_21_NOV_KAI.docx`** — modified **2025-12-19**, Word revision 162,
-  41 embedded media, 30 review comments, SHA-256 `d2c62cf1…b07033`. The "21_NOV"
-  name is misleading; it is the newest.
-- Already promoted to a stable working copy:
-  `OneDrive/Mech Eng/OHT data (Tobi Laux)/maf_bayesian_paper/paper/working/maf_bayesian_manuscript.docx`.
-- Full checksummed archive: `…/maf_bayesian_paper_archive/2026-06-13/` (87 files).
+The OneDrive area `Mech Eng/OHT data (Tobi Laux)/` was reorganised into **four roles**
+(reorg rationale: separate the live `.docx` from history; keep a stable checksummed
+archive; preserve the old tree as evidence not an edit target; remove ambiguity about
+which file is current; enable this Word→Quarto migration without losing provenance):
+
+| Role | Path (under `Mech Eng/OHT data (Tobi Laux)/`) | Use here |
+|---|---|---|
+| **Active manuscript** | `maf_bayesian_paper/paper/working/maf_bayesian_manuscript.docx` | **The authoritative ingest source** |
+| **Snapshot archive** | `maf_bayesian_paper_archive/2026-06-13/` | Checksummed manuscript snapshot (87 files) — provenance backstop |
+| **Legacy evidence** | `maf_bayesian_paper_archive/2026-06-15_legacy_evidence/` | 2,935 verified evidence files (sizes + SHA-256) |
+| **Old source tree** | `MAF_Bayesian-main-old/` | Read-only legacy source, evidence only |
+
+- Ingest the **active manuscript working copy**, NOT `MAF_manuscript_21_NOV_KAI.docx`
+  directly. That file — modified **2025-12-19**, Word revision 162, 41 embedded media,
+  30 review comments, SHA-256 `d2c62cf1…b07033` (the "21_NOV" name is misleading; it
+  was the newest) — was **promoted** into the `paper/working/` slot as the stable copy.
+  The working copy should carry the same checksum; **verify they match** at Phase 0.
+- Provenance backstop for Phase 2 cross-mapping: if ingested numbers/figures are
+  ambiguous, check `2026-06-13/` and the legacy-evidence archive rather than re-deriving.
 - Known state: abstract deleted in tracked changes; extensive tracked changes + 30
   comments; reported numbers do NOT reproduce from current code (legacy provenance).
+- Full location map: `karim-memory/inventory/locations/maf-bayesian.md`.
 
 ### Execution steps
 
 - **Phase 0 — prerequisites / BLOCKER.** macOS TCC blocks the terminal from reading
   OneDrive (`ls` on the folder → "Operation not permitted"). Before ingest, EITHER
-  grant the terminal Full Disk Access, OR (simplest) Karim copies the target `.docx`
+  grant the terminal Full Disk Access, OR (simplest) Karim copies the **active
+  manuscript working copy** (`…/maf_bayesian_paper/paper/working/maf_bayesian_manuscript.docx`)
   into the repo, e.g. `paper/source/maf_bayesian_manuscript.docx`. Then confirm it
-  still matches SHA-256 `d2c62cf1…b07033`.
+  matches SHA-256 `d2c62cf1…b07033` (same checksum as the promoted `21_NOV` source —
+  if they differ, the working copy has diverged; reconcile before ingesting).
 - **Phase 1 — pandoc ingest, two passes.**
   - Review copy: `pandoc … --track-changes=all --extract-media=media` → captures the
     30 comments, tracked edits, and the deleted abstract as a review checklist.
