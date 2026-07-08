@@ -34,3 +34,8 @@ docs/*_files/
 
 # Paper ingest source (binary; provenance in OneDrive archive)
 paper/source/*.docx
+
+# Quarto render artifacts (generated; not source)
+paper/paper.html
+paper/paper_files/
+paper/*_files/

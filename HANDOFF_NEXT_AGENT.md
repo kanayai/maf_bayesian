@@ -1,98 +1,83 @@
 # Handoff — next agent / next session
 
-_Checkpoint 2026-07-07 (branch: `main`)_
+_Checkpoint 2026-07-08 (branch: `main`)_
 
-## Where we are
+## TL;DR — where we are
 
-Two things happened this session: (1) the two-branch situation was diagnosed and a
-decision recorded; (2) the paper-writing workflow was scoped into a plan (not yet
-executed). Pick up from the **paper workflow plan** below — that is the concrete
-next task. The model-strategy decision is Karim's and is not blocking the paper work.
+The paper is being authored in **Quarto** (`paper/paper.qmd`) as a **living document**.
+Phases 0–2 of the Word→Quarto migration are **done and committed**: source ingested, a
+full Quarto skeleton built, renders cleanly to HTML. The project is now **parked at a
+deliberate boundary**: Karim goes off to run **lots of MCMC on both models** to decide the
+final model. **No paper-reproducibility wiring happens until he converges to one model on
+one branch.** Do not wire figures/tables early.
 
-### 1. Branch situation — RESOLVED (decision recorded)
+## The governing plan (read `DECISIONS.md` 2026-07-08 entries for full rationale)
 
-`maf_bayesian` carries two competing models on **unrelated-root git branches**:
+The paper co-evolves with the science. Two kinds of change, kept separate:
 
-- `main` (Dec 2025) — physics-informed `model_n_hv`. Holds manuscript-provenance
-  commits `ec8563a`, `02bdcfb` (NOT on the other branch). This is the canonical /
-  paper-narrative branch.
-- `feature/empirical-model` (Jun 2026) — weakened-assumption `model_empirical` +
-  the evidence/provenance/registry workflow + direction-specific emulator.
-
-**Decision (2026-07-07): keep them separate, do NOT merge** until Karim decides the
-paper's model (physics / semi-empirical / both). Full rationale in this repo's
-`DECISIONS.md` (commit `62af0b7`). Do not "fix" the split by merging.
-
-## 2. Paper workflow — PLAN, ready to execute next session
-
-Goal: Karim drafts his own clean **Quarto** version of the paper (he works in Quarto,
-not Word), and only at the very end exports **one-way to `.docx`** for the two
-Word-using collaborators. Pattern borrowed from `iquitos_spillover`
-(`manuscript/paper.qmd` = single source of truth → `render-and-stage.sh` generates
-the collaborator format, never hand-edit the generated file). There the target was
-eLife LaTeX → Overleaf; here the target is **Word via pandoc reference-doc**.
-
-### Latest Word source (authoritative, checksummed)
-
-The OneDrive area `Mech Eng/OHT data (Tobi Laux)/` was reorganised into **four roles**
-(reorg rationale: separate the live `.docx` from history; keep a stable checksummed
-archive; preserve the old tree as evidence not an edit target; remove ambiguity about
-which file is current; enable this Word→Quarto migration without losing provenance):
-
-| Role | Path (under `Mech Eng/OHT data (Tobi Laux)/`) | Use here |
+| Kind | Driver | Mechanism |
 |---|---|---|
-| **Active manuscript** | `maf_bayesian_paper/paper/working/maf_bayesian_manuscript.docx` | **The authoritative ingest source** |
-| **Snapshot archive** | `maf_bayesian_paper_archive/2026-06-13/` | Checksummed manuscript snapshot (87 files) — provenance backstop |
-| **Legacy evidence** | `maf_bayesian_paper_archive/2026-06-15_legacy_evidence/` | 2,935 verified evidence files (sizes + SHA-256) |
-| **Old source tree** | `MAF_Bayesian-main-old/` | Read-only legacy source, evidence only |
+| **Narrative** (prose, structure, argument, which model) | Karim authoring | hand-edits `paper.qmd`, ongoing |
+| **Results** (figures, tables, numbers) | model code | code **generates** artifacts; `.qmd` **links** figures / **reads** CSVs; rerun → re-render → auto-updates. **No manual copy.** |
 
-- Ingest the **active manuscript working copy**, NOT `MAF_manuscript_21_NOV_KAI.docx`
-  directly. That file — modified **2025-12-19**, Word revision 162, 41 embedded media,
-  30 review comments, SHA-256 `d2c62cf1…b07033` (the "21_NOV" name is misleading; it
-  was the newest) — was **promoted** into the `paper/working/` slot as the stable copy.
-  The working copy should carry the same checksum; **verify they match** at Phase 0.
-- Provenance backstop for Phase 2 cross-mapping: if ingested numbers/figures are
-  ambiguous, check `2026-06-13/` and the legacy-evidence archive rather than re-deriving.
-- Known state: abstract deleted in tracked changes; extensive tracked changes + 30
-  comments; reported numbers do NOT reproduce from current code (legacy provenance).
-- Full location map: `karim-memory/inventory/locations/maf-bayesian.md`.
+Rules: heavy MCMC/GP code stays **out** of the `.qmd` (only lightweight read/format glue in
+the paper); each run emits a `manifest.json` for provenance; freeze a checksummed bundle at
+submission.
 
-### Execution steps
+### Phased roadmap
+- **Phase 1 — Exploration (NOW).** Karim runs MCMC on both models (physics on `main`,
+  semi-empirical on `feature/empirical-model`). Paper is a provisional living draft; pasted
+  images are temporary placeholders only. **No wiring.**
+- **Milestone — Convergence.** Karim settles on the final model (physics / semi-empirical /
+  combination) → branches collapse to **one branch, one model**.
+- **Phase 2 — Wire (once, at convergence).** Define the artifact contract against the real
+  converged model (figure names/formats PDF|SVG, tables CSV|JSON, output dir, `manifest.json`);
+  update that model's analysis code to emit them; rewire `paper.qmd` to link/read them and
+  delete the placeholder images; add `render-and-stage.sh` (regenerate → `quarto render` →
+  HTML/PDF for Karim, one-way `.docx` for collaborators).
+- **Phase 3 — Steady state.** Rerun model → figures/tables auto-update on re-render; Karim
+  keeps evolving prose; freeze provenance bundle at submission.
 
-- **Phase 0 — prerequisites / BLOCKER.** macOS TCC blocks the terminal from reading
-  OneDrive (`ls` on the folder → "Operation not permitted"). Before ingest, EITHER
-  grant the terminal Full Disk Access, OR (simplest) Karim copies the **active
-  manuscript working copy** (`…/maf_bayesian_paper/paper/working/maf_bayesian_manuscript.docx`)
-  into the repo, e.g. `paper/source/maf_bayesian_manuscript.docx`. Then confirm it
-  matches SHA-256 `d2c62cf1…b07033` (same checksum as the promoted `21_NOV` source —
-  if they differ, the working copy has diverged; reconcile before ingesting).
-- **Phase 1 — pandoc ingest, two passes.**
-  - Review copy: `pandoc … --track-changes=all --extract-media=media` → captures the
-    30 comments, tracked edits, and the deleted abstract as a review checklist.
-  - Clean base: `pandoc … --track-changes=accept -t markdown --wrap=none
-    --extract-media=media -o paper.qmd`.
-  - QA the OMML→LaTeX math; tables → markdown; references likely arrive as plain text
-    → plan a `references.bib` rebuild.
-- **Phase 2 — restructure into a Quarto skeleton.** YAML front matter (title, authors,
-  affils, abstract restored from the review copy), clean section hierarchy, tables,
-  `references.bib`. Treat the 41 extracted figures as reference placeholders only
-  (figures to be regenerated from code later); cross-map against
-  `manuscript_evidence_map.qmd` (on `feature/empirical-model`).
-- **Phase 3 — one-way export out.** Quarto `format: docx` with
-  `reference-doc: reference.docx` (Bath/journal styling) = the end-of-line, few-times
-  export for collaborators; also `html`/`pdf` for Karim. Mirror iquitos's
-  `render-and-stage.sh`. Decide how collaborator edits come back (recommend one-way,
-  re-enter comments; alt: ingest returned commented `.docx` via `--track-changes`).
-- **Phase 4 (later, separate task).** Fold the `docs/*.qmd` methodology documentation
-  into the paper workflow. Karim flagged this as the step AFTER the ingest plan.
+**Do NOT** rebuild the earlier cross-branch/model-partitioned-outputs machinery — it was
+ruled unnecessary because convergence to one branch precedes wiring.
 
-### Decisions pending from Karim (get these before executing)
+## What was done this session (all committed except final handoff)
 
-1. OneDrive access: grant Full Disk Access, or he drops the `.docx` into the repo.
-2. Which branch `paper/` lives on (recommendation: `main`, kept separate from the
-   unresolved model decision).
-3. Collaborator round-trip: one-way vs ingest-their-returns.
+- **Phase 0** — copied the authoritative OneDrive working copy into `paper/source/`
+  (`maf_bayesian_manuscript.docx`, git-ignored); **SHA-256 verified** = `d2c62cf1…b07033`
+  (matches the promoted `21_NOV_KAI` source). TCC did NOT block the terminal this session.
+- **Phase 1** — two-pass pandoc ingest (Quarto's bundled pandoc 3.8.3; no standalone pandoc
+  installed): `paper/paper_ingest.md` (clean base) + `paper/review/manuscript_review.md`
+  (all tracked changes + 16 comments; abstract recovered from here).
+- **Phase 2** — `paper/paper.qmd`: YAML (4 authors, Bath/Bristol affils, restored abstract,
+  keywords, `references.bib`, commented `docx` export stub); full §1–5 heading hierarchy;
+  14 labelled equations `@eq-1..14`; 11 tables transcribed to Markdown; 17 figure
+  placeholders `@fig-*`; all `[N]` → `[@refN]`. **Renders to HTML with zero unresolved
+  xrefs/citations.** QA checklist is at the top of `paper.qmd`.
+- `paper/references.bib` — all 42 refs, keys `ref1..ref42` = manuscript `[1]..[42]`.
+- Decisions recorded in `DECISIONS.md`: (1) reproducibility/wiring plan, (2) model-deferral +
+  paper-track kickoff, (3) one-way collaborator round-trip (Option A), (4) keep branches
+  separate.
+- Housekeeping: un-tracked `paper/paper.html` + `paper/paper_files/` (generated) and added
+  them to `.gitignore`.
+
+## Known issues / QA debt (do NOT lose these)
+
+- **Reported numbers do NOT reproduce from current code** (legacy provenance) — every number
+  and figure in `paper.qmd` is a **placeholder**, to be regenerated in Phase 2. See the QA
+  checklist atop `paper.qmd`.
+- `fig-loo-be1` source is a Windows `.emf` — will not render; regenerate from code.
+- Transcribed table cells must be double-checked against source before submission.
+- Two author queries preserved as a `callout-note` in §5; one in-text TODO ("Add more recent
+  references from CMAME journal").
+
+## Decisions pending from Karim (deferred, not blocking Phase 1)
+
+1. **Final model choice** — the gating decision; comes out of the MCMC exploration.
+2. Canonical output location for artifacts (recommended: in-repo `results/paper_artifacts/`,
+   or a sibling dir outside the repo) — decide at wiring time.
 
 ## Last safe commit
 
-`main` @ `62af0b7` (this handoff adds only docs; no code touched this session).
+`main` — this handoff + `DECISIONS.md` update + gitignore/html-untrack are the only changes
+since the Phase 0–2 commit `92f02da`. No model code touched.
