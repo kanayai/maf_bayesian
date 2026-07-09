@@ -3,6 +3,35 @@
 Why key choices were made in this project — the rationale behind the code, not
 just the outcome. Newest first. Capture via the `/decision` skill (auto-dated).
 
+## 2026-07-09 — Track runs on both branches now; keep paper-wiring deferred (refines 2026-07-08)
+
+**Context:** Revisited the wiring-timing decision. Karim first floated wiring the paper
+*early* against `main`/physics (the paper is written for the physics model), then landed on a
+better split after we separated two concerns that had been bundled:
+- **Run tracking (provenance):** record every MCMC run — model, branch, git commit, config,
+  seed, date, outputs. Cheap, model-agnostic; a tracked run does NOT commit the paper to it.
+- **Paper wiring:** linking paper figures/tables to *specific* runs. Expensive, model-specific.
+
+**Decision:**
+- Run MCMC on **both** models from now on (physics `main`, semi-empirical
+  `feature/empirical-model`), and **track every run now, on both branches**, so runs form a
+  curated pool — at merge/convergence, keep some, drop others.
+- **Paper-wiring stays deferred** to single-branch convergence (2026-07-08 decision stands).
+- The wire-early-against-`main` idea was **rejected**: it front-loads the expensive,
+  model-specific work against a model that might be dropped.
+
+**Why:** Does the cheap thing (provenance) early and keeps the expensive thing (wiring)
+deferred — the right split. This does not reverse 2026-07-08; it pulls the planned
+`manifest.json`/registry idea forward and makes it span both branches.
+
+**Check first (next session):** `feature/empirical-model` reportedly already holds an
+"evidence-provenance/registry/run-bundle workflow" (see 2026-07-07 entry). The real task may
+be **porting that onto `main`** and making it cross-branch, not building it new. Also inspect
+what `main`'s `analyze.py` currently emits, to size the gap.
+
+**Reverse if:** Karim commits to one model sooner than expected (then wire that branch), or
+the paper becomes an explicit physics-vs-empirical comparison.
+
 ## 2026-07-08 — Paper reproducibility: wire figures/tables to code, gated on single-branch convergence
 
 **Context:** The paper is authored in Quarto (`paper/paper.qmd`) as a **living, evolving

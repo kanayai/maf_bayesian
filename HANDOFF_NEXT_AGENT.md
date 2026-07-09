@@ -1,6 +1,21 @@
 # Handoff — next agent / next session
 
-_Checkpoint 2026-07-08 (branch: `main`)_
+_Checkpoint 2026-07-09 (branch: `main`) — supersedes 2026-07-08 on the workflow question_
+
+## UPDATE 2026-07-09 — workflow direction refined (no code changed this session)
+
+New governing split (see `DECISIONS.md` 2026-07-09 entry): **run MCMC on both models and
+track every run NOW, on both branches** (physics `main`, semi-empirical
+`feature/empirical-model`), forming a curated pool to keep/drop at merge. **Paper-wiring
+stays deferred** to single-branch convergence — the wire-early-against-`main` idea was
+rejected (front-loads expensive model-specific work against a model that might be dropped).
+
+**Concrete next action:** inspect the "evidence-provenance/registry/run-bundle workflow" said
+to already live on `feature/empirical-model`, and what `main`'s `analyze.py` currently emits.
+The likely task is **porting that run-tracking onto `main` / making it cross-branch**, not
+building new. Nothing was implemented this session — this is a decision-only checkpoint.
+
+The Phase 1–3 roadmap below still holds; only the run-tracking timing moved earlier.
 
 ## TL;DR — where we are
 
