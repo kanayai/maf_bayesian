@@ -835,6 +835,14 @@ Examples:
             )
             save_stats_csv(samples_hyper_ordered, f"inference_hyper_stats_{suffix}.csv")
 
+    # Map experiment index to angle (needed for both bias and normalized
+    # bias renaming below; defined here so it exists even for no-bias runs).
+    exp_angles = []
+    for i in range(len(data_dict["input_xy_exp"])):
+        ang_rad = data_dict["input_xy_exp"][i][0, 1]
+        ang_deg = int(round(np.rad2deg(ang_rad)))
+        exp_angles.append(ang_deg)
+
     if samples_bias:
         print(f"DEBUG: samples_bias len: {len(samples_bias)}")
         print(f"DEBUG: samples_bias keys: {list(samples_bias.keys())[:5]}")
@@ -842,15 +850,7 @@ Examples:
         if "b_slope" in samples_bias and len(samples_bias) > 1:
             if any(k.startswith("b_") and k != "b_slope" for k in samples_bias):
                 samples_bias.pop("b_slope", None)
-        
-        # Rename keys: b_{i}_slope -> b_{angle}_{count}
-        # First, map experiment index to angle
-        exp_angles = []
-        for i in range(len(data_dict["input_xy_exp"])):
-            ang_rad = data_dict["input_xy_exp"][i][0, 1]
-            ang_deg = int(round(np.rad2deg(ang_rad)))
-            exp_angles.append(ang_deg)
-            
+
         # Count occurrences to decide on numbering
         from collections import Counter
         angle_counts_total = Counter(exp_angles)

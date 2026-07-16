@@ -30,8 +30,8 @@ config = {
     },
     # MCMC settings
     "mcmc": {
-        "num_warmup": 1000,
-        "num_samples": 1000,
+        "num_warmup": 2000,
+        "num_samples": 3000,
         "num_chains": 1,
         "thinning": 1,
     },
@@ -39,7 +39,7 @@ config = {
     "bias": {
         "add_bias_E1": False,
         "add_bias_alpha": False,
-        "add_bias_slope": True, # For model_empirical
+        "add_bias_slope": False, # For model_empirical
     },
     # Priors
     # Note: These are defined as functions that return numpyro distributions or values
