@@ -606,31 +606,9 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
                 dir_label = "Shear" if direction == "h" else "Normal"
                 ax.set_ylabel(f"{dir_label} - Load (kN)")
                 
-            # Limits (consistent with user request)
-            if direction == "v":
-                if int(angle) == 90:
-                    ax.set_xlim(-0.05, 0.05)
-                elif int(angle) == 45:
-                     ax.set_xlim(-0.05, 0.1) # Updated
-                elif int(angle) == 135:
-                     ax.set_xlim(-0.1, 0.1) # Default for 135 V? User specified "135 degrees Shear".
-                     # Assuming "both 45 degree plots" meant H/V for 45.
-                     # For 135, user said "for the 135 degrees Shear". 
-                     # I will leave 135 V as -0.1, 0.1 unless clarified, or set to -0.05, 0.1 if user implied "both" earlier logic applies?
-                     # Ideally 135 Normal is stiff? 
-                     # Let's keep 45 V as -0.05, 0.1.
-                else:
-                    ax.set_xlim(-0.05, 0.05)
-            else:
-                # Shear
-                if int(angle) == 90:
-                    ax.set_xlim(-0.05, 0.15) # Updated
-                elif int(angle) == 45:
-                    ax.set_xlim(-0.05, 0.1) # Updated
-                elif int(angle) == 135:
-                    ax.set_xlim(-0.05, 0.1) # Updated
-                else:
-                    ax.set_xlim(0, 0.15)
+            # Use a consistent extension range across the full prior/posterior grid.
+            ax.set_xlim(-0.15, 0.2)
+            ax.set_ylim(0, 15)
                 
             ax.grid(True, alpha=0.5)
             
