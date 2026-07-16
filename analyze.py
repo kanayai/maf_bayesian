@@ -1541,22 +1541,52 @@ Examples:
 
     # 6. Grid Predictions (Consolidated Spaghetti)
     
-    # Prior Grid
-    print("\nGenerating Prior Spaghetti Grid...")
+    # Prior Grid: averaged data + function prediction only
+    print("\nGenerating Prior Spaghetti Grid (averaged data, function only)...")
     plot_grid_spaghetti(
         predictions_collection,
         angles_to_predict,
-        save_path=figures_dir / f"prediction_prior_grid_{suffix}.png",
-        title_prefix="Prior"
+        save_path=figures_dir / f"prediction_prior_grid_avg_function_{suffix}.png",
+        title_prefix="Prior",
+        observed_data_mode="average",
+        prediction_mode="function",
+        show_spaghetti=True,
     )
 
-    # Posterior Grid
-    print("Generating Posterior Spaghetti Grid...")
+    # Prior Grid: raw data + observation prediction only
+    print("Generating Prior Spaghetti Grid (raw data, observation only)...")
     plot_grid_spaghetti(
         predictions_collection,
         angles_to_predict,
-        save_path=figures_dir / f"prediction_posterior_grid_{suffix}.png",
-        title_prefix="Posterior"
+        save_path=figures_dir / f"prediction_prior_grid_raw_observation_{suffix}.png",
+        title_prefix="Prior",
+        observed_data_mode="raw",
+        prediction_mode="observation",
+        show_spaghetti=False,
+    )
+
+    # Posterior Grid: averaged data + function prediction only
+    print("Generating Posterior Spaghetti Grid (averaged data, function only)...")
+    plot_grid_spaghetti(
+        predictions_collection,
+        angles_to_predict,
+        save_path=figures_dir / f"prediction_posterior_grid_avg_function_{suffix}.png",
+        title_prefix="Posterior",
+        observed_data_mode="average",
+        prediction_mode="function",
+        show_spaghetti=True,
+    )
+
+    # Posterior Grid: raw data + observation prediction only
+    print("Generating Posterior Spaghetti Grid (raw data, observation only)...")
+    plot_grid_spaghetti(
+        predictions_collection,
+        angles_to_predict,
+        save_path=figures_dir / f"prediction_posterior_grid_raw_observation_{suffix}.png",
+        title_prefix="Posterior",
+        observed_data_mode="raw",
+        prediction_mode="observation",
+        show_spaghetti=False,
     )
     prediction_df, observation_df = flatten_prediction_collection(predictions_collection)
     exported_files.extend(write_prediction_exports(predictions_collection, exports_dir))

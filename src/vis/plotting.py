@@ -513,7 +513,15 @@ def plot_spaghetti_verification(
         plt.show()
     plt.close()
 
-def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="Posterior"):
+def plot_grid_spaghetti(
+    prediction_data,
+    angles,
+    save_path=None,
+    title_prefix="Posterior",
+    observed_data_mode="raw",
+    prediction_mode="both",
+    show_spaghetti=True,
+):
     """
     Plots a 2xN grid of spaghetti plots.
     Rows: Shear (H), Normal (V)
@@ -545,55 +553,92 @@ def plot_grid_spaghetti(prediction_data, angles, save_path=None, title_prefix="P
             data_exp = p_data['data_exp']
             training_info = p_data.get('training_info')
 
-            # Determine what to plot based on title_prefix or available keys
-            # Now we have both function (_f) and observation (_y) percentiles
+            # Determine what to plot based on title_prefix or available keys.
             if "Prior" in title_prefix:
-                samples = p_data.get('prior_f_samples')  # Use function samples for spaghetti
-                pct_f = p_data.get('pct_prior_f')  # Function uncertainty
-                pct_y = p_data.get('pct_prior_y')  # Observation uncertainty
+                function_samples = p_data.get('prior_f_samples')
+                pct_f = p_data.get('pct_prior_f')
+                pct_y = p_data.get('pct_prior_y')
             else:
-                samples = p_data.get('post_f_samples')  # Use function samples for spaghetti
-                pct_f = p_data.get('pct_post_f')  # Function uncertainty
-                pct_y = p_data.get('pct_post_y')  # Observation uncertainty
+                function_samples = p_data.get('post_f_samples')
+                pct_f = p_data.get('pct_post_f')
+                pct_y = p_data.get('pct_post_y')
 
-            # Plot Samples (Spaghetti) - function samples
-            if samples is not None:
-                num_samples = samples.shape[0]
+            show_function = prediction_mode in ("both", "function")
+            show_observation = prediction_mode in ("both", "observation")
+
+            # Plot Samples (Spaghetti) - function samples only.
+            if show_spaghetti and function_samples is not None:
+                num_samples = function_samples.shape[0]
                 # Plot ~100 lines max for visibility
                 for s in range(min(num_samples, 100)):
-                    ax.plot(samples[s], test_loads, color='blue', alpha=0.1, lw=0.5)
+                    ax.plot(function_samples[s], test_loads, color='blue', alpha=0.1, lw=0.5)
 
             # Plot Observation Uncertainty Band (outer, wider) - includes noise
-            if pct_y is not None:
+            if show_observation and pct_y is not None:
                 ax.fill_betweenx(test_loads, pct_y[0], pct_y[1], 
                                  color='lightblue', alpha=0.3, label='95% Observation')
                 ax.plot(pct_y[0], test_loads, color='blue', linestyle=':', linewidth=0.5)
                 ax.plot(pct_y[1], test_loads, color='blue', linestyle=':', linewidth=0.5)
 
             # Plot Function Uncertainty Band (inner, narrower) - epistemic only
-            if pct_f is not None:
+            if show_function and pct_f is not None:
                 ax.fill_betweenx(test_loads, pct_f[0], pct_f[1],
                                  color='lightgreen', alpha=0.5, label='95% Function')
                 ax.plot(pct_f[0], test_loads, color='green', linestyle='--', linewidth=0.8)
                 ax.plot(pct_f[1], test_loads, color='green', linestyle='--', linewidth=0.8)
             
-            # Overlay Data (Averaged)
+            # Overlay Data
             if input_xy_exp is not None and data_exp is not None:
                 markers = ['o', '^', 's', 'D', 'v', '<', '>', 'p', '*', 'h']
                 for i in range(len(input_xy_exp)):
                     marker = markers[i % len(markers)]
-                    # Average sensors (Right, Center, Left -> axis 1)
-                    if data_exp[i].ndim > 1 and data_exp[i].shape[1] > 1:
-                        # Plot each column (sensor) separately
-                        for col in range(data_exp[i].shape[1]):
-                             ax.plot(data_exp[i][:, col], input_xy_exp[i][:,0], 
-                                    marker, color="black", markerfacecolor="white", markeredgewidth=0.5, 
-                                    markersize=2, linewidth=0, alpha=0.6, label=f'Exp {i+1}' if col==0 else "_nolegend_")
+                    if observed_data_mode == "average":
+                        exp_series = np.asarray(data_exp[i])
+                        if exp_series.ndim > 1:
+                            exp_series = np.mean(exp_series, axis=1)
+                        else:
+                            exp_series = exp_series.flatten()
+                        ax.plot(
+                            exp_series,
+                            input_xy_exp[i][:, 0],
+                            marker,
+                            color="black",
+                            markerfacecolor="white",
+                            markeredgewidth=0.5,
+                            markersize=2,
+                            linewidth=0,
+                            alpha=0.8,
+                            label=f'Exp {i+1}',
+                        )
                     else:
-                        mean_ext = data_exp[i].flatten()
-                        ax.plot(mean_ext, input_xy_exp[i][:,0], 
-                                marker, color="black", markerfacecolor="white", markeredgewidth=0.5, 
-                                markersize=2, linewidth=0, alpha=0.8, label=f'Exp {i+1}')
+                        exp_series = np.asarray(data_exp[i])
+                        if exp_series.ndim > 1 and exp_series.shape[1] > 1:
+                            for col in range(exp_series.shape[1]):
+                                ax.plot(
+                                    exp_series[:, col],
+                                    input_xy_exp[i][:, 0],
+                                    marker,
+                                    color="black",
+                                    markerfacecolor="white",
+                                    markeredgewidth=0.5,
+                                    markersize=2,
+                                    linewidth=0,
+                                    alpha=0.6,
+                                    label=f'Exp {i+1}' if col == 0 else "_nolegend_",
+                                )
+                        else:
+                            ax.plot(
+                                exp_series.flatten(),
+                                input_xy_exp[i][:, 0],
+                                marker,
+                                color="black",
+                                markerfacecolor="white",
+                                markeredgewidth=0.5,
+                                markersize=2,
+                                linewidth=0,
+                                alpha=0.8,
+                                label=f'Exp {i+1}',
+                            )
 
             # Labels and Limits
             if row_idx == 0:
