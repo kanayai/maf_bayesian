@@ -14,7 +14,7 @@ config = {
         # 'constant': sigma^2 = sigma_constant^2
         "noise_model": "proportional",
         "base_path": "./data",  # Root data directory
-        "max_load": 10.0,  # Maximum load [kN] for data truncation and prediction
+        "max_load": 11.0,  # Maximum load [kN] for data truncation and prediction
         "angles": [45, 90, 135],  # Angles to load
         "prediction_angle": [45, 90, 135],  # Angle for prediction/plotting
         "direction": "v",  # 'h' or 'v' for single direction models/plots
