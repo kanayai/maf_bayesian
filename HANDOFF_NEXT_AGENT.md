@@ -1,6 +1,36 @@
 # Handoff — next agent / next session
 
-_Checkpoint 2026-07-09 (branch: `main`) — supersedes 2026-07-08 on the workflow question_
+_Checkpoint 2026-07-17 (branch: `main`) — adds the Mac-mini worktree decision; 2026-07-09
+content below still governs the workflow_
+
+## ⚠️ READ FIRST — next time at the Mac mini (Mac C): decide the worktree setup
+
+**Karim: you asked to be reminded of this because you won't remember. Decide before working.**
+
+**The situation.** This project runs two models on two git branches with **no shared
+history**: physics on `main`, semi-empirical on `feature/empirical-model`. The paper
+(`paper/paper.qmd`) exists **only on `main`**. On 2026-07-17 the Mac mini looked like it was
+"missing" the paper — it wasn't; it was simply checked out on `feature/empirical-model`. We
+switched it to `main` that day (nothing lost; the branch is on origin), but that means the
+mini currently **cannot run the semi-empirical model**, and its `syncwork` auto-sync will
+now commit to `main`.
+
+**The proposed fix (liked, not yet decided): a git worktree.** Two folders from one repo, so
+both branches are checked out at once and nothing swaps files under a running MCMC job:
+
+```bash
+cd ~/Projects/Research/maf_bayesian
+git checkout feature/empirical-model          # semi-empirical runs live here again
+git worktree add ../maf_bayesian_paper main   # physics runs + paper live here
+```
+
+This allows simultaneously: semi-empirical runs (`maf_bayesian`), physics runs and paper
+editing (`maf_bayesian_paper` — both live on `main`). Each folder commits/pushes to its own
+branch. One rule: the same branch cannot be checked out in two worktrees (not needed here).
+
+**If deciding yes:** run the two commands above on the mini, check which folder `syncwork`
+auto-sync is registered against (it must not auto-commit to `main` unintentionally), and log
+it with `/decision`. **If no:** pick a branch for the mini and note it here.
 
 ## UPDATE 2026-07-09 — workflow direction refined (no code changed this session)
 
