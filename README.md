@@ -71,6 +71,9 @@ Modify `configs/default_config.py` to set:
 # Experimental/testing run → saves to results/tmp/<run_id>/
 uv run python main.py --experimental
 
+# Experimental run followed by analysis of the exact generated bundle
+uv run python scripts/run_experimental_and_analyze.py
+
 # Final/important run → saves to results/final/<run_id>/
 uv run python main.py --final
 
@@ -89,6 +92,10 @@ Run bundles are written beneath the selected mode directory. All `.nc` files are
 - `--experimental`: Automatically saves to `results/tmp/<run_id>/` for quick experiments
 - `--final`: Automatically saves to `results/final/<run_id>/` for important runs
 - No flag: Saves to `results/<run_id>/`
+
+Use `scripts/run_experimental_and_analyze.py` when you want the standard
+experimental inference plus matching analysis without manually copying the run
+bundle path.
 
 ### 3. Running Analysis
 
