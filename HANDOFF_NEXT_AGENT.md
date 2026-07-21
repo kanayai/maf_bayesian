@@ -1,30 +1,21 @@
-# Handoff — MAF Bayesian plotting variants
-_Checkpoint 2026-07-16_
+# Handoff — MAF Bayesian empirical workflow
+_Checkpoint 2026-07-21 18:32_
 
 ## Objective
-Compare prediction-grid presentation variants before deciding whether to keep using the empirical model outputs in the current workflow.
+Continue empirical-model experimentation with reproducible inference/analysis handoff and inspect the latest empirical analysis outputs.
 
 ## Done so far
-- `plot_grid_spaghetti()` now uses a fixed extension range of `-0.15` to `0.2` mm and a fixed load range of `0` to `15` kN for all prior/posterior grid panels.
-- Axis-range-only changes were committed and pushed as `bd8cf3d` (`Adjust spaghetti grid axis ranges`).
-- The grid plotting code now supports:
-  - `observed_data_mode="average"` or `"raw"`
-  - `prediction_mode="function"` or `"observation"`
-  - optional function-sample spaghetti via `show_spaghetti`
-- `analyze.py` now writes four grid variants per analysis run:
-  - `prediction_prior_grid_avg_function_<suffix>.png`
-  - `prediction_prior_grid_raw_observation_<suffix>.png`
-  - `prediction_posterior_grid_avg_function_<suffix>.png`
-  - `prediction_posterior_grid_raw_observation_<suffix>.png`
-- Variant behavior currently matches the July 16 request:
-  - averaged-data variants plot averaged experimental data plus function-only prediction and keep the faint spaghetti lines
-  - raw-data variants plot raw experimental data plus observation-only prediction and suppress spaghetti lines
+- Confirmed branch state on `feature/empirical-model`; `paper/paper.qmd` is only on `main`, not the empirical feature branch.
+- Committed and pushed Karim's empirical prior change: `7456131` (`mu_emulator_v` and `mu_emulator_h` prior median changed from `0.01` to `0.05`).
+- Added, validated, committed, and pushed `scripts/run_experimental_and_analyze.py` as `1e3619a`; command is `uv run python scripts/run_experimental_and_analyze.py`.
+- Ran analysis on the latest completed experimental bundle: `results/tmp/model_empirical_20260721T172217019398Z`.
+- Latest analysis output: `figures/tmp/analysis_model_empirical_20260721_183052`; worktree was clean after the analysis run.
 
 ## Resume point
-The code changes are complete but had not yet been exercised through a fresh `analyze.py --results ...` run at handoff time.
+Start from the latest analysis output in `figures/tmp/analysis_model_empirical_20260721_183052`, especially the posterior/prior grid plots and exported diagnostics. The analysed run bundle is `results/tmp/model_empirical_20260721T172217019398Z`.
 
 ## Next action
-Run analysis for the intended explicit results bundle, inspect the four new grid outputs, and decide whether the raw-data/observation-only variant needs its own spaghetti or any further legend/text adjustments.
+Open/inspect the latest prediction grid outputs and diagnostics, then decide whether the updated empirical prior scale (`0.05`) improves the Normal/Shear fits enough to keep.
 
 ## Last safe commit
-`bd8cf3d`
+`1e3619a` before this checkpoint update; tree clean at handoff start.
