@@ -9,6 +9,9 @@ matplotlib.rcParams["axes.formatter.limits"] = [-4,4]
 matplotlib.rcParams["font.size"] = 14
 matplotlib.rcParams["font.family"] = 'sans-serif'
 
+def direction_display_label(direction):
+    return "Shear (h)" if direction == "h" else "Normal (v)"
+
 def plot_experimental_data(data_dict, save_path=None):
     """
     Plots experimental data (Shear and Normal) with color-coded angles and position markers.
@@ -42,7 +45,7 @@ def plot_experimental_data(data_dict, save_path=None):
 
     # Plot Shear
     ax1 = plt.subplot(1, 2, 1)
-    plot_direction(ax1, data_exp_h, 'Shear Extension', 'Shear Extension [mm]')
+    plot_direction(ax1, data_exp_h, 'Shear (h) Extension', 'Shear (h) Extension [mm]')
     
     # Custom Legend
     custom_lines_ang = [Line2D([0], [0], color='k', lw=0, label='Angles:'),
@@ -58,7 +61,7 @@ def plot_experimental_data(data_dict, save_path=None):
 
     # Plot Normal
     ax2 = plt.subplot(1, 2, 2)
-    plot_direction(ax2, data_exp_v, 'Normal Extension', 'Normal Extension [mm]')
+    plot_direction(ax2, data_exp_v, 'Normal (v) Extension', 'Normal (v) Extension [mm]')
     ax2.legend(handles=custom_lines_ang + custom_lines_pos, loc='best')
 
     plt.tight_layout()
@@ -104,7 +107,7 @@ def plot_averaged_experimental_data(data_dict, save_path=None):
 
     # Plot Shear
     ax1 = plt.subplot(1, 2, 1)
-    plot_direction(ax1, data_exp_h, 'Averaged Shear Extension', 'Shear Extension [mm]')
+    plot_direction(ax1, data_exp_h, 'Averaged Shear (h) Extension', 'Shear (h) Extension [mm]')
     
     # Custom Legend
     custom_lines_ang = [Line2D([0], [0], color=angle_colors[45], lw=2, label='45°'),
@@ -115,7 +118,7 @@ def plot_averaged_experimental_data(data_dict, save_path=None):
 
     # Plot Normal
     ax2 = plt.subplot(1, 2, 2)
-    plot_direction(ax2, data_exp_v, 'Averaged Normal Extension', 'Normal Extension [mm]')
+    plot_direction(ax2, data_exp_v, 'Averaged Normal (v) Extension', 'Normal (v) Extension [mm]')
     ax2.legend(handles=custom_lines_ang, loc='best')
 
     plt.tight_layout()
@@ -369,7 +372,7 @@ def plot_grid_prediction(predictions_collection, angles, save_path=None, interva
     elif cols == 1: axes = axes[:, None]
         
     for r, direction in enumerate(directions):
-        dir_label = "Shear" if direction == "h" else "Normal"
+        dir_label = direction_display_label(direction)
         
         for c, angle in enumerate(angles):
             ax = axes[r, c]
@@ -489,7 +492,7 @@ def plot_spaghetti_verification(
                         "o", color="black", markerfacecolor="white", markeredgewidth=0.5, 
                         markersize=1.5, linewidth=0, alpha=0.7, label=lbl)
 
-    dir_label = "Shear" if direction == "h" else "Normal"
+    dir_label = direction_display_label(direction)
     ax.set_title(f"{plot_type} Spaghetti Verification - {angle}° {dir_label}")
     ax.set_xlabel("Extension [mm]")
     ax.set_ylabel("Load [kN]")
@@ -648,7 +651,7 @@ def plot_grid_spaghetti(
                 ax.set_xlabel("Extension (mm)")
                 
             if col_idx == 0:
-                dir_label = "Shear" if direction == "h" else "Normal"
+                dir_label = direction_display_label(direction)
                 ax.set_ylabel(f"{dir_label} - Load (kN)")
                 
             # Use a consistent extension range across the full prior/posterior grid.
@@ -751,7 +754,7 @@ def plot_distributions_grid_2x3(grouped_data, angles, save_path=None, prior_pdf_
     elif cols == 1: axes = axes[:, None]
     
     for r, direction in enumerate(directions):
-        dir_label = "Shear" if direction == "h" else "Normal"
+        dir_label = direction_display_label(direction)
         
         for c, angle in enumerate(angles):
             ax = axes[r, c]

@@ -32,6 +32,7 @@ from src.io.analysis_exports import (
 from src.io.output_manager import save_config_log
 from src.io.result_selection import existing_analysis_source
 from src.vis.plotting import (
+    direction_display_label,
     plot_experimental_data,
     plot_averaged_experimental_data,
     plot_posterior_distributions,
@@ -761,7 +762,7 @@ Examples:
                  b_mean = np.mean(beta_full)
                  ax.plot(load_grid, load_grid * trig_factor * b_mean, "r-", linewidth=2, label="Mean Fit")
                  
-                 ax.set_title(f"Angle {angle}° - Direction {direction.upper()}")
+                 ax.set_title(f"Angle {angle}° - {direction_display_label(direction)}")
                  ax.set_xlabel("Load [kN]")
                  if i == 0: ax.set_ylabel("Extension [mm]")
                  
@@ -1455,7 +1456,7 @@ Examples:
         }
 
         for direction in ["v", "h"]:
-            dir_label = "Normal" if direction == "v" else "Shear"
+            dir_label = direction_display_label(direction)
             dir_file_tag = "normal" if direction == "v" else "shear"
             
             # Determine Training Status Label
@@ -1782,7 +1783,7 @@ def run_residual_analysis(idata, data_dict, figures_dir, exports_dir, config):
         max_load = jnp.max(loads)
 
         for direction in directions_to_check:
-            label = "Normal" if direction == "v" else "Shear"
+            label = direction_display_label(direction)
             
             mu_em = mu_emulator_h if direction == "h" else mu_emulator_v
              
