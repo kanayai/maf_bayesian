@@ -1039,7 +1039,7 @@ Examples:
         )
         save_stats_csv(samples_gamma, f"inference_gamma_stats_{suffix}.csv")
 
-        # --- Derived Slope Parameters (Gamma * Mu_Emulator) ---
+        # --- Derived Slope Parameters (Mu * Gamma, with shear factor 2) ---
         print("Calculating derived slope parameters...")
         samples_slope = {}
         for key, val in samples_gamma.items():
@@ -1060,7 +1060,8 @@ Examples:
                          
                          # Ensure shapes match (mu is per-chain, gamma is per-chain)
                          # Both are usually (N_samples,)
-                         slope_val = val * mu_val
+                         slope_multiplier = 2.0 if direction == "h" else 1.0
+                         slope_val = slope_multiplier * val * mu_val
                          
                          new_key = f"slope_{direction}_{angle_str}"
                          samples_slope[new_key] = slope_val
@@ -1087,7 +1088,7 @@ Examples:
                 slope_groups,
                 standard_angles,
                 save_path=figures_dir / f"posterior_derived_slope_grid_{suffix}.png",
-                title_prefix="Derived Slope (Gamma * Mu)",
+                title_prefix="Derived Slope (Mu * Gamma, h x2)",
                 use_gamma_logic=False
             )
             save_stats_csv(samples_slope, f"inference_derived_slope_stats_{suffix}.csv")
@@ -1126,7 +1127,7 @@ Examples:
             generated_beta_groups,
             standard_angles,
             save_path=figures_dir / f"posterior_generated_beta_grid_{suffix}.png",
-            title_prefix="Generated Beta (Mu * Gamma + b)",
+            title_prefix="Generated Beta (Mu * Gamma + b, h x2)",
             use_gamma_logic=False
         )
         save_stats_csv(generated_beta_renamed, f"inference_generated_beta_stats_{suffix}.csv")

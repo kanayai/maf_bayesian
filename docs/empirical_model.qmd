@@ -33,7 +33,7 @@ Where:
 
 *   **Shared Global Slope** ($\mu_{emulator}$): The foundational empirical compliance scale.
     *   Current implementation uses a Normal reparameterisation,
-        $$ \mu_{emulator} = 0.01 + 0.1 z,\qquad z\sim\mathcal{N}(0,1). $$
+        $$ \mu_{emulator} = 0.026 + 0.1 z,\qquad z\sim\mathcal{N}(0,1). $$
     *   **Interpretation**: This gives one shared scale for the normal-extension response before angle and specimen effects are applied.
 
 *   **Shear-Extension Scale Factor**: The factor 2 in the shear equation is an explicit modelling choice motivated by the distinction between normal extension and engineering shear extension. In continuum and composite mechanics, engineering shear strain satisfies

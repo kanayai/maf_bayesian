@@ -618,7 +618,7 @@ def model_empirical(
             bias = bias_slope[i]
             
         beta_v = mean_emulator * gamma_v + bias
-        beta_h = mean_emulator * gamma_h + bias
+        beta_h = 2.0 * mean_emulator * gamma_h + bias
         numpyro.deterministic(f"generated_beta_v_{i+1}", beta_v)
         numpyro.deterministic(f"generated_beta_h_{i+1}", beta_h)
 
@@ -871,7 +871,7 @@ def posterior_predict(
              bias = 0.0
         
         if direction == "h":
-             beta = mean_emulator * gamma_h + bias
+             beta = 2.0 * mean_emulator * gamma_h + bias
              means = load * beta
         else:
              beta = mean_emulator * gamma_v + bias
