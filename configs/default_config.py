@@ -39,7 +39,7 @@ config = {
     "bias": {
         "add_bias_E1": False,
         "add_bias_alpha": False,
-        "add_bias_slope": False, # For model_empirical
+        "add_bias_slope": True, # For model_empirical
     },
     # Priors
     # Note: These are defined as functions that return numpyro distributions or values
@@ -61,8 +61,8 @@ config = {
         # Hyperparameters
         "hyper": {
             # Emulator mean - Normal reparameterization: val = mean + scale * N(0,1)
-            "mu_emulator_v": {"mean": 0.01, "scale": 0.005},
-            "mu_emulator_h": {"mean": 0.01, "scale": 0.005},
+            "mu_emulator_v": {"mean": 0.01, "scale": 0.1},
+            "mu_emulator_h": {"mean": 0.01, "scale": 0.001},
             # Emulator standard deviation - LogNormal reparameterization
             "sigma_emulator": {"log_mean": np.log(0.03), "log_scale": 0.5},  # ln(0.02) ≈ -3.91
             # Length scales - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))
@@ -77,7 +77,7 @@ config = {
             },
             # Measurement noise - Unified to LogNormal(log(0.001), 0.5)
             # Standardized format
-            "sigma_measure": {"log_mean": np.log(0.005), "log_scale": 0.1},
+            "sigma_measure": {"log_mean": np.log(0.0005), "log_scale": 0.1},
             "sigma_measure_base": {"target_dist": dist.Exponential(100.0)},
             "sigma_constant": {
                 "target_dist": dist.Exponential(0.1)
@@ -89,7 +89,7 @@ config = {
         "bias_priors": {
             "sigma_b_E1": dist.Exponential(0.001),
             "sigma_b_alpha": dist.Exponential(1 / np.deg2rad(10)),
-            "sigma_b_slope": dist.Exponential(10), # Mean = 1/1000 = 0.001. Strong regularization (bias ~ 0.1% of slope).
+            "sigma_b_slope": dist.Exponential(1000), # Mean = 1/1000 = 0.001. Strong regularization (bias ~ 0.1% of slope).
         },
         # Simple Model Priors
         "simple": {

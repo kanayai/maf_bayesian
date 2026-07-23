@@ -1,21 +1,21 @@
 # Handoff — MAF Bayesian empirical workflow
-_Checkpoint 2026-07-21 18:32_
+_Checkpoint 2026-07-23 15:27 BST_
 
 ## Objective
-Continue empirical-model experimentation with reproducible inference/analysis handoff and inspect the latest empirical analysis outputs.
+Preserve the current empirical-model state before changing the slope parameterisation toward a mechanics-informed shared scale.
 
 ## Done so far
-- Confirmed branch state on `feature/empirical-model`; `paper/paper.qmd` is only on `main`, not the empirical feature branch.
-- Committed and pushed Karim's empirical prior change: `7456131` (`mu_emulator_v` and `mu_emulator_h` prior median changed from `0.01` to `0.05`).
-- Added, validated, committed, and pushed `scripts/run_experimental_and_analyze.py` as `1e3619a`; command is `uv run python scripts/run_experimental_and_analyze.py`.
-- Ran analysis on the latest completed experimental bundle: `results/tmp/model_empirical_20260721T172217019398Z`.
-- Latest analysis output: `figures/tmp/analysis_model_empirical_20260721_183052`; worktree was clean after the analysis run.
+- Confirmed `mu_emulator_v` and `mu_emulator_h` use Normal reparameterisations in the config/model path, not LogNormal.
+- Updated analysis plots so direction labels read `Normal (v)` and `Shear (h)`, reordered `posterior_hyper`, and included `sigma_b_slope` when slope bias is sampled.
+- Added solid green reference lines to the four spaghetti-grid plots and corrected them to plot `Load = Extension / cos(alpha)` for normal and `Load = Extension / sin(alpha)` for shear.
+- Documented the mechanics-based empirical slope scale in `docs/empirical_model.qmd`, with sources: `paper/paper.html` Section 2 line 234 and Laux et al. (2020) Figure 4(a)/Table 2 page 5.
+- Current uncommitted config state enables slope bias and uses: `mu_emulator_v` scale `0.1`, `mu_emulator_h` scale `0.001`, `sigma_measure` median `0.0005`, and `sigma_b_slope ~ Exponential(1000)`.
 
 ## Resume point
-Start from the latest analysis output in `figures/tmp/analysis_model_empirical_20260721_183052`, especially the posterior/prior grid plots and exported diagnostics. The analysed run bundle is `results/tmp/model_empirical_20260721T172217019398Z`.
+Start from `configs/default_config.py` and `src/core/models.py::model_empirical`. Karim wants to try a new empirical model motivated by the finding that the mechanics scale is direction-specific through `R(alpha) cos(alpha)` and `R(alpha) sin(alpha)`, even if the underlying `R(alpha)` comes from a shared compliance idea.
 
 ## Next action
-Open/inspect the latest prediction grid outputs and diagnostics, then decide whether the updated empirical prior scale (`0.05`) improves the Normal/Shear fits enough to keep.
+Before editing the model, decide the exact new parameterisation: likely replace separate `mu_emulator_v`/`mu_emulator_h` with a shared mechanics-scale parameter (or shared prior mean) and direction factors based on the computed `R(alpha)` table.
 
 ## Last safe commit
-`1e3619a` before this checkpoint update; tree clean at handoff start.
+`87fe5e1` before this checkpoint; tree dirty with `configs/default_config.py` and this handoff update pending commit.
