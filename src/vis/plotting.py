@@ -130,7 +130,15 @@ def plot_averaged_experimental_data(data_dict, save_path=None):
         plt.show()
     plt.close()
 
-def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None, save_path=None, layout_rows=None, shared_xlim_groups=None):
+def plot_posterior_distributions(
+    samples,
+    prior_pdf_fn=None,
+    prior_samples=None,
+    save_path=None,
+    layout_rows=None,
+    shared_xlim_groups=None,
+    row_labels=None,
+):
     """
     Plots histograms of posterior samples for all parameters.
     If prior_pdf_fn is provided, plots analytical prior density as a green line.
@@ -230,6 +238,12 @@ def plot_posterior_distributions(samples, prior_pdf_fn=None, prior_samples=None,
             
         axes[i].set_title(key)
         # axes[i].legend() 
+
+    if row_labels:
+        for row_idx, row_label in enumerate(row_labels):
+            axis_idx = row_idx * cols
+            if axis_idx < len(axes):
+                axes[axis_idx].set_ylabel(row_label)
         
     # Hide unused subplots
     if num_vars > 1:

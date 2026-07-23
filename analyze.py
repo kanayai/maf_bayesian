@@ -804,35 +804,31 @@ Examples:
             samples_hyper_plot = samples_hyper
 
         if samples_hyper_plot:
-            # Organize hyperparameters in a 2x3 grid layout (transposed):
-            # Row 1: gamma_scale_v, mu_emulator_v, sigma_b_slope
-            # Row 2: gamma_scale_h, mu_emulator_h, sigma_measure
+            # Organize hyperparameters in a 2x3 grid layout:
+            # Row 1: gamma_scale_v, mu_emulator_v, sigma_measure
+            # Row 2: gamma_scale_h, mu_emulator_h
             hyper_order = [
-                "gamma_scale_v", "mu_emulator_v", "sigma_b_slope",
-                "gamma_scale_h", "mu_emulator_h", "sigma_measure"
+                "gamma_scale_v", "mu_emulator_v", "sigma_measure",
+                "gamma_scale_h", "mu_emulator_h"
             ]
             # Filter to only include params that exist in samples
             samples_hyper_ordered = {
                 k: samples_hyper_plot[k] for k in hyper_order if k in samples_hyper_plot
             }
-            # Add any remaining hyper params not in the order (in case some are added later)
-            for k, v in samples_hyper_plot.items():
-                if k not in samples_hyper_ordered:
-                    samples_hyper_ordered[k] = v
             
             # Unified range for parameters that should be compared
             shared_xlim_groups = {
                 "mu_emulator": ["mu_emulator_v", "mu_emulator_h"],
                 "gamma_scale": ["gamma_scale_v", "gamma_scale_h"],
-                "sigma": ["sigma_measure", "sigma_b_slope"]
             }
             
             plot_posterior_distributions(
                 samples_hyper_ordered,
                 prior_pdf_fn=get_prior_pdf,
                 save_path=figures_dir / f"posterior_hyper_{suffix}.png",
-                layout_rows=2,  # Transposed: 2 rows x 3 cols
+                layout_rows=2,
                 shared_xlim_groups=shared_xlim_groups,
+                row_labels=["Normal (v)", "Shear (h)"],
             )
             save_stats_csv(samples_hyper_ordered, f"inference_hyper_stats_{suffix}.csv")
 
