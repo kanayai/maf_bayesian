@@ -12,6 +12,22 @@ matplotlib.rcParams["font.family"] = 'sans-serif'
 def direction_display_label(direction):
     return "Shear (h)" if direction == "h" else "Normal (v)"
 
+def _plot_direction_reference_line(ax, loads, angle, direction):
+    angle_rad = np.deg2rad(float(angle))
+    denominator = np.sin(angle_rad) if direction == "h" else np.cos(angle_rad)
+    if np.isclose(denominator, 0.0, atol=1e-12):
+        return
+
+    reference_extension = np.asarray(loads) / denominator
+    ax.plot(
+        reference_extension,
+        loads,
+        color="green",
+        linestyle="-",
+        linewidth=2.0,
+        label="P / sin(alpha)" if direction == "h" else "P / cos(alpha)",
+    )
+
 def plot_experimental_data(data_dict, save_path=None):
     """
     Plots experimental data (Shear and Normal) with color-coded angles and position markers.
@@ -603,6 +619,8 @@ def plot_grid_spaghetti(
                                  color='lightgreen', alpha=0.5, label='95% Function')
                 ax.plot(pct_f[0], test_loads, color='green', linestyle='--', linewidth=0.8)
                 ax.plot(pct_f[1], test_loads, color='green', linestyle='--', linewidth=0.8)
+
+            _plot_direction_reference_line(ax, test_loads, angle, direction)
             
             # Overlay Data
             if input_xy_exp is not None and data_exp is not None:
