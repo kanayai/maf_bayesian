@@ -18,10 +18,12 @@ def _plot_direction_reference_line(ax, loads, angle, direction):
     if np.isclose(denominator, 0.0, atol=1e-12):
         return
 
-    reference_extension = np.asarray(loads) / denominator
+    extension_min, extension_max = ax.get_xlim()
+    reference_extension = np.linspace(extension_min, extension_max, 200)
+    reference_load = reference_extension / denominator
     ax.plot(
         reference_extension,
-        loads,
+        reference_load,
         color="green",
         linestyle="-",
         linewidth=2.0,
