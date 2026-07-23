@@ -806,10 +806,10 @@ Examples:
         if samples_hyper_plot:
             # Organize hyperparameters in a 2x3 grid layout:
             # Row 1: gamma_scale_v, mu_emulator_v, sigma_measure
-            # Row 2: gamma_scale_h, mu_emulator_h
+            # Row 2: gamma_scale_h, mu_emulator_h, sigma_b_slope
             hyper_order = [
                 "gamma_scale_v", "mu_emulator_v", "sigma_measure",
-                "gamma_scale_h", "mu_emulator_h"
+                "gamma_scale_h", "mu_emulator_h", "sigma_b_slope"
             ]
             # Filter to only include params that exist in samples
             samples_hyper_ordered = {
