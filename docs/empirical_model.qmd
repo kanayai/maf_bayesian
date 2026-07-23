@@ -53,6 +53,73 @@ Where:
 *   **Test Angle** ($\alpha_i$): The angle (radians or degrees) at which experiment $i$ was conducted.
     *   Standard configuration: $45^\circ, 90^\circ, 135^\circ$ (Consistent with previous Certest models).
 
+### Mechanics-Based Scale for the Empirical Slope
+
+The empirical model uses a load-extension relation of the form
+
+$$ y = P \beta, $$
+
+where $y$ is extension in mm and $P$ is the applied load in kN. A simple linear-elastic reference model gives
+
+$$ y = \frac{L}{A E_{\mathrm{eff}}(\alpha)} P_N, $$
+
+where $P_N$ is load in N, $L$ is the effective gauge length, $A$ is the specimen cross-sectional area, and $E_{\mathrm{eff}}(\alpha)$ is an angle-dependent effective modulus. Because the data use kN, the corresponding slope in mm/kN is
+
+$$ R(\alpha) = \frac{1000 L}{A E_{\mathrm{eff}}(\alpha)}. $$
+
+For the present MAF/DIC data, the working Bayesian manuscript states in Section 2, "Multiaxial MAF experiment and FE model", that the top and bottom DIC displacements are extracted 10 mm above and 10 mm below the hole centre. This gives an effective gauge length
+
+$$ L = 20\ \mathrm{mm}. $$
+
+The specimen-design figure in Laux et al. (2020), Figure 4(a), gives the gauge-section width as
+
+$$ w_g = 30\ \mathrm{mm}. $$
+
+The Bayesian manuscript gives the laminate thickness in the same Section 2 paragraph as
+
+$$ t_{\mathrm{lam}} = 2.09\ \mathrm{mm}. $$
+
+Thus, a consistent cross-sectional area for the current manuscript is
+
+$$ A = w_g t_{\mathrm{lam}} = 30 \times 2.09 = 62.7\ \mathrm{mm}^2. $$
+
+Using the current configuration prior means
+
+$$
+E_1 = 154900\ \mathrm{MPa},\quad
+E_2 = 10285\ \mathrm{MPa},\quad
+\nu_{12} = 0.33,\quad
+G_{12} = 5115\ \mathrm{MPa},
+$$
+
+the off-axis compliance approximation for a single orthotropic lamina loaded at angle $\alpha$ is
+
+$$
+\frac{1}{E_{\mathrm{eff}}(\alpha)}
+=
+\frac{m^4}{E_1}
++ \left(\frac{1}{G_{12}} - \frac{2\nu_{12}}{E_1}\right)m^2n^2
++ \frac{n^4}{E_2},
+$$
+
+where $m = \cos\alpha$ and $n = \sin\alpha$.
+
+This gives the following reference values.
+
+| $\alpha$ | $E_{\mathrm{eff}}(\alpha)$ [MPa] | $R(\alpha)$ [mm/kN] | $R(\alpha)\cos\alpha$ [mm/kN] | $R(\alpha)\sin\alpha$ [mm/kN] |
+|---:|---:|---:|---:|---:|
+| $45^\circ$ | 13562.7 | 0.02352 | 0.01663 | 0.01663 |
+| $90^\circ$ | 10285.0 | 0.03101 | 0.00000 | 0.03101 |
+| $135^\circ$ | 13562.7 | 0.02352 | -0.01663 | 0.01663 |
+
+These values should be interpreted as a rough mechanics-based prior scale, not as a replacement for the empirical model. The MAF specimen is an open-hole multidirectional laminate with non-uniform strain fields, so the scalar bar-compliance calculation cannot capture the full FE response. Its main use is to put the empirical slope parameters on a plausible order of magnitude. In particular, it suggests that prior means for direction-specific empirical slopes around $10^{-2}$ mm/kN are mechanically reasonable.
+
+Source notes:
+
+*   Gauge length and manuscript thickness: `paper/paper.html`, Section 2, line 234 in the repository source view. The paragraph states that the DIC edge displacements are extracted 10 mm above and below the hole centre and gives $t_{\mathrm{lam}} = 2.09$ mm.
+*   Gauge-section width: Laux et al. (2020), "Ply thickness and fibre orientation effects in multidirectional composite laminates subjected to combined tension/compression and shear", Figure 4(a), page 5. The specimen-design figure labels $w_g = 30$ mm.
+*   Related measured laminate thicknesses: Laux et al. (2020), Table 2, page 5. The reported mean thicknesses are 2.326 mm, 2.133 mm, and 2.301 mm for Laminates 1-3, respectively. These are useful checks, but the current Bayesian manuscript value $t_{\mathrm{lam}} = 2.09$ mm was used for the calculation above.
+
 ### Likelihood
 
 The likelihood assumes independent Gaussian noise around the mean prediction:
