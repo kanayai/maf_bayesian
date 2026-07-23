@@ -31,35 +31,13 @@ def get_priors_from_config(config, num_exp):
          # --- Slope (mu_emulator) ---
          hyper = priors["hyper"]
          
-         # Check if we have split mu_emulator (v/h) or single mu_emulator
-         if "mu_emulator_v" in hyper and "mu_emulator_h" in hyper:
-             # Use split parameters
-             mean_emulator_n_v = numpyro.sample("mu_emulator_n_v", dist.Normal())
-             mu_cfg_v = hyper["mu_emulator_v"]
-             if "log_mean" in mu_cfg_v:
-                 mean_emulator_v = jnp.exp(mu_cfg_v["log_mean"] + mu_cfg_v["log_scale"] * mean_emulator_n_v)
-             else:
-                 mean_emulator_v = mu_cfg_v["mean"] + mu_cfg_v["scale"] * mean_emulator_n_v
-             numpyro.deterministic("mu_emulator_v", mean_emulator_v)
-
-             mean_emulator_n_h = numpyro.sample("mu_emulator_n_h", dist.Normal())
-             mu_cfg_h = hyper["mu_emulator_h"]
-             if "log_mean" in mu_cfg_h:
-                 mean_emulator_h = jnp.exp(mu_cfg_h["log_mean"] + mu_cfg_h["log_scale"] * mean_emulator_n_h)
-             else:
-                 mean_emulator_h = mu_cfg_h["mean"] + mu_cfg_h["scale"] * mean_emulator_n_h
-             numpyro.deterministic("mu_emulator_h", mean_emulator_h)
+         mean_emulator_n = numpyro.sample("mu_emulator_n", dist.Normal())
+         mu_cfg = hyper.get("mu_emulator", hyper.get("mu_emulator_v"))
+         if "log_mean" in mu_cfg:
+             mean_emulator = jnp.exp(mu_cfg["log_mean"] + mu_cfg["log_scale"] * mean_emulator_n)
          else:
-             # Use single parameter (backward compatibility)
-             mean_emulator_n = numpyro.sample("mu_emulator_n", dist.Normal())
-             mu_cfg = hyper["mu_emulator"]
-             if "log_mean" in mu_cfg:
-                 mean_emulator = jnp.exp(mu_cfg["log_mean"] + mu_cfg["log_scale"] * mean_emulator_n)
-             else:
-                 mean_emulator = mu_cfg["mean"] + mu_cfg["scale"] * mean_emulator_n
-             numpyro.deterministic("mu_emulator", mean_emulator)
-             mean_emulator_v = mean_emulator  # Use same for both
-             mean_emulator_h = mean_emulator
+             mean_emulator = mu_cfg["mean"] + mu_cfg["scale"] * mean_emulator_n
+         numpyro.deterministic("mu_emulator", mean_emulator)
          
          # --- Measurement Noise ---
          noise_model = config["data"].get("noise_model", "proportional")
@@ -122,8 +100,8 @@ def get_priors_from_config(config, num_exp):
              None, # theta
              bias_slope, # bias_E1 (repurposed as bias_slope list)
              None, # bias_alpha
-             mean_emulator_v,
-             mean_emulator_h,
+             mean_emulator,
+             mean_emulator,
              None, # stdev_emulator
              None, # length_xy
              None, # length_theta
@@ -560,8 +538,8 @@ def model_empirical(
         _,
         bias_slope, 
         _,
-        mean_emulator_v, 
-        mean_emulator_h, 
+        mean_emulator,
+        _,
         _,
         _,
         _,
@@ -639,8 +617,10 @@ def model_empirical(
         if bias_slope:
             bias = bias_slope[i]
             
-        beta_v = mean_emulator_v * gamma_v + bias
-        beta_h = mean_emulator_h * gamma_h + bias
+        beta_v = mean_emulator * gamma_v + bias
+        beta_h = mean_emulator * gamma_h + bias
+        numpyro.deterministic(f"generated_beta_v_{i+1}", beta_v)
+        numpyro.deterministic(f"generated_beta_h_{i+1}", beta_h)
 
         # Model Mean
         # Vertical: mean = P * beta_v
@@ -1238,7 +1218,10 @@ def sample_prior_predictive_curves(
             train_y_aug = train_y
         
         # Extract hyperparameters
-        mu_em = s["mu_emulator_h"] if direction == "h" else s["mu_emulator_v"]
+        if "mu_emulator" in s:
+            mu_em = s["mu_emulator"]
+        else:
+            mu_em = s["mu_emulator_h"] if direction == "h" else s["mu_emulator_v"]
         sig_em = s["sigma_emulator"]
         sig_meas = s.get("sigma_measure", 0.0)
         sig_base = s.get("sigma_measure_base", 0.0)

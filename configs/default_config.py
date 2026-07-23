@@ -61,8 +61,7 @@ config = {
         # Hyperparameters
         "hyper": {
             # Emulator mean - Normal reparameterization: val = mean + scale * N(0,1)
-            "mu_emulator_v": {"mean": 0.01, "scale": 0.1},
-            "mu_emulator_h": {"mean": 0.01, "scale": 0.001},
+            "mu_emulator": {"mean": 0.026, "scale": 0.1},
             # Emulator standard deviation - LogNormal reparameterization
             "sigma_emulator": {"log_mean": np.log(0.03), "log_scale": 0.5},  # ln(0.02) ≈ -3.91
             # Length scales - LogNormal reparameterization: val = exp(log_mean + log_scale * N(0,1))

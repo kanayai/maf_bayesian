@@ -24,20 +24,21 @@ $$ y_h = P \cdot \beta_h + \epsilon $$
 
 ### Hierarchical Structure
 
-The effective slopes $\beta$ are constructed from direction-specific global emulator slopes, probabilistic geometric factors ($\gamma$), and an experiment-specific bias ($b_i$):
+The effective slopes $\beta$ are constructed from a shared global empirical slope, direction-specific geometric factors ($\gamma$), a shear-extension scale factor, and an experiment-specific bias ($b_i$):
 
-$$ \beta_{v,i} = \mu_{emulator,v} \cdot \gamma_{v,\alpha_i} + b_i $$
-$$ \beta_{h,i} = \mu_{emulator,h} \cdot \gamma_{h,\alpha_i} + b_i $$
+$$ \beta_{v,i} = \mu_{emulator} \cdot \gamma_{v,\alpha_i} + b_i $$
+$$ \beta_{h,i} = 2\mu_{emulator} \cdot \gamma_{h,\alpha_i} + b_i $$
 
 Where:
 
-*   **Direction-Specific Global Slopes**: The foundational stiffness/compliance parameters for each loading direction.
-    *   **Normal Direction** ($\mu_{emulator,v}$): 
-        $$ \mu_{emulator,v} \sim \text{LogNormal}(\ln(0.01), 0.2) $$
-    *   **Shear Direction** ($\mu_{emulator,h}$): 
-        $$ \mu_{emulator,h} \sim \text{LogNormal}(\ln(0.01), 0.2) $$
-    *   **Prior**: Independent LogNormal distributions with `log_mean` = $\ln(0.01) \approx -4.605$ and `log_scale` = 0.2.
-    *   **Interpretation**: Median slope of $0.01$ for both directions, allowing independent learning of systematic corrections for Normal and Shear responses.
+*   **Shared Global Slope** ($\mu_{emulator}$): The foundational empirical compliance scale.
+    *   Current implementation uses a Normal reparameterisation,
+        $$ \mu_{emulator} = 0.01 + 0.1 z,\qquad z\sim\mathcal{N}(0,1). $$
+    *   **Interpretation**: This gives one shared scale for the normal-extension response before angle and specimen effects are applied.
+
+*   **Shear-Extension Scale Factor**: The factor 2 in the shear equation is an explicit modelling choice motivated by the distinction between normal extension and engineering shear extension. In continuum and composite mechanics, engineering shear strain satisfies
+    $$ \gamma_{xy} = 2\epsilon_{xy}, $$
+    where $\epsilon_{xy}$ is the tensor shear strain. Since the DIC horizontal-extension channel is used as the shear response, a factor of two is a plausible first-order correction when comparing shear-extension and normal-extension scales.
 
 *   **Geometric Factors** ($\gamma$): Probabilistic terms that typically track the trigonometric projection ($\cos \alpha, \sin \alpha$) but allow for deviation (e.g., misalignment).
     *   **Shared per Angle**: All experiments conducted at the same angle $\alpha$ share the same $\gamma$ parameters.
@@ -59,13 +60,15 @@ The empirical model uses a load-extension relation of the form
 
 $$ y = P \beta, $$
 
-where $y$ is extension in mm and $P$ is the applied load in kN. A simple linear-elastic reference model gives
+where $y$ is extension in mm and $P$ is the applied load as plotted in kN. A simple linear-elastic reference model gives
 
-$$ y = \frac{L}{A E_{\mathrm{eff}}(\alpha)} P_N, $$
+$$ y = \frac{L}{A E_{\mathrm{eff}}(\alpha)} (1000P), $$
 
-where $P_N$ is load in N, $L$ is the effective gauge length, $A$ is the specimen cross-sectional area, and $E_{\mathrm{eff}}(\alpha)$ is an angle-dependent effective modulus. Because the data use kN, the corresponding slope in mm/kN is
+where $1000P$ converts the plotted load from kN to N, $L$ is the effective gauge length, $A$ is the specimen cross-sectional area, and $E_{\mathrm{eff}}(\alpha)$ is an angle-dependent effective modulus. Since $A E_{\mathrm{eff}}(\alpha)$ has units of N, the corresponding slope with respect to the plotted kN load is
 
 $$ R(\alpha) = \frac{1000 L}{A E_{\mathrm{eff}}(\alpha)}. $$
+
+Mechanically, $R(\alpha)$ is a simple effective compliance for the specimen at loading angle $\alpha$: it is the predicted extension per unit applied load in the idealised bar calculation. For example, $R(45^\circ) = 0.02352\ \mathrm{mm/kN}$ means that this reference model predicts about $0.02352$ mm of gauge extension for each 1 kN of applied load. It combines the gauge length, cross-sectional area, and angle-dependent effective modulus, so it should be interpreted as a rough structural load-extension slope rather than as a fundamental material property.
 
 For the present MAF/DIC data, the working Bayesian manuscript states in Section 2, "Multiaxial MAF experiment and FE model", that the top and bottom DIC displacements are extracted 10 mm above and 10 mm below the hole centre. This gives an effective gauge length
 
@@ -106,19 +109,51 @@ where $m = \cos\alpha$ and $n = \sin\alpha$.
 
 This gives the following reference values.
 
-| $\alpha$ | $E_{\mathrm{eff}}(\alpha)$ [MPa] | $R(\alpha)$ [mm/kN] | $R(\alpha)\cos\alpha$ [mm/kN] | $R(\alpha)\sin\alpha$ [mm/kN] |
-|---:|---:|---:|---:|---:|
-| $45^\circ$ | 13562.7 | 0.02352 | 0.01663 | 0.01663 |
-| $90^\circ$ | 10285.0 | 0.03101 | 0.00000 | 0.03101 |
-| $135^\circ$ | 13562.7 | 0.02352 | -0.01663 | 0.01663 |
+| $\alpha$ | $E_{\mathrm{eff}}(\alpha)$ [MPa] | $R(\alpha)$ [mm/kN] |
+|---:|---:|---:|
+| $45^\circ$ | 13562.7 | 0.02352 |
+| $90^\circ$ | 10285.0 | 0.03101 |
+| $135^\circ$ | 13562.7 | 0.02352 |
 
-These values should be interpreted as a rough mechanics-based prior scale, not as a replacement for the empirical model. The MAF specimen is an open-hole multidirectional laminate with non-uniform strain fields, so the scalar bar-compliance calculation cannot capture the full FE response. Its main use is to put the empirical slope parameters on a plausible order of magnitude. In particular, it suggests that prior means for direction-specific empirical slopes around $10^{-2}$ mm/kN are mechanically reasonable.
+These values should be interpreted as a rough mechanics-based prior scale, not as a replacement for the empirical model. The MAF specimen is an open-hole multidirectional laminate with non-uniform strain fields, so the scalar bar-compliance calculation cannot capture the full FE response. Its main use is to put the empirical slope parameters on a plausible order of magnitude. In particular, the calculation suggests that empirical slopes around $10^{-2}$ mm/kN are mechanically reasonable.
+
+This scalar reference scale is not, by itself, a direction-specific theory for the two DIC outputs. The empirical model has separate normal and shear extension responses,
+
+$$ y_v = P\beta_v,\qquad y_h = P\beta_h, $$
+
+but $R(\alpha)$ only gives one idealised extension-per-load scale at each loading angle. A direction-specific mechanics approximation would require separate quantities such as
+
+$$ R_v(\alpha)\quad\text{and}\quad R_h(\alpha), $$
+
+where $R_v(\alpha)$ is the normal-extension compliance and $R_h(\alpha)$ is the shear-extension compliance. Deriving these properly would require a richer mechanics model, for example a laminate-level transformed compliance calculation for the measured normal and shear strains, or direct FE-based load-extension slopes for the two DIC extension channels. The simple off-axis modulus calculation above does not provide those two quantities.
+
+As a first empirical approximation, it is still reasonable to use the load-component projections
+
+$$ \beta_v(\alpha) \approx R(\alpha)\cos\alpha,\qquad \beta_h(\alpha) \approx 2R(\alpha)\sin\alpha, $$
+
+because the manuscript defines the normal and shear load components as $P_y = P\cos\alpha$ and $P_x = P\sin\alpha$, while the shear-extension channel is naturally tied to engineering shear. This should be treated as a projection heuristic for prior scaling, not as a complete mechanics derivation. It is useful if the goal is to distinguish the orders of magnitude of normal and shear empirical slopes while keeping the model simple.
+
+As a diagnostic check, `scripts/plot_empirical_origin_slopes.py` fits origin-constrained least-squares regressions to the averaged experimental extensions, using
+
+$$ y = P\beta $$
+
+separately for the normal and shear channels at each loading angle. This diagnostic is not used as prior information for inference, but it is a useful sanity check on scale. Excluding the unstable $90^\circ$ normal-extension case, the averaged data give
+
+| $\alpha$ | $\hat\beta_v$ [mm/kN] | $\hat\beta_h$ [mm/kN] | $\hat\beta_h / \hat\beta_v$ |
+|---:|---:|---:|---:|
+| $45^\circ$ | 0.003864 | 0.007590 | 1.96 |
+| $135^\circ$ | -0.003786 | 0.007881 | -2.08 |
+
+The pointwise extension ratios tell the same story: the median shear-to-normal extension ratio is about 1.95 at $45^\circ$ and -2.11 at $135^\circ$. This supports including the factor of two in the empirical shear scale, while the independent mechanics justification remains the engineering-shear convention and the biaxial-extensometer definition of separate normal and shear extension channels.
 
 Source notes:
 
 *   Gauge length and manuscript thickness: `paper/paper.html`, Section 2, line 234 in the repository source view. The paragraph states that the DIC edge displacements are extracted 10 mm above and below the hole centre and gives $t_{\mathrm{lam}} = 2.09$ mm.
 *   Gauge-section width: Laux et al. (2020), "Ply thickness and fibre orientation effects in multidirectional composite laminates subjected to combined tension/compression and shear", Figure 4(a), page 5. The specimen-design figure labels $w_g = 30$ mm.
 *   Related measured laminate thicknesses: Laux et al. (2020), Table 2, page 5. The reported mean thicknesses are 2.326 mm, 2.133 mm, and 2.301 mm for Laminates 1-3, respectively. These are useful checks, but the current Bayesian manuscript value $t_{\mathrm{lam}} = 2.09$ mm was used for the calculation above.
+*   Normal/shear DIC extensometer definition: Laux et al. (2020), accepted manuscript lines 304-328 in the repository/PDF view. The paper defines vertical extension as the normal response and horizontal extension as the shear response.
+*   Engineering shear convention: standard composite plane-stress compliance relations use engineering shear strain $\gamma_{xy}$, with $\gamma_{xy}=2\epsilon_{xy}$.
+*   Empirical diagnostic outputs: `figures/empirical_origin_slope_estimates.png`, `figures/empirical_origin_slope_estimates.csv`, `figures/empirical_extension_ratio_by_angle.png`, and `figures/empirical_extension_ratio_by_angle.csv`.
 
 ### Likelihood
 

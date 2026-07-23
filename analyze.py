@@ -266,6 +266,7 @@ Examples:
     # Define categories
     physical_params = ["E_1", "E_2", "v_12", "v_23", "G_12"]
     hyper_params = [
+        "mu_emulator",
         "mu_emulator_v",
         "mu_emulator_h",
         "sigma_emulator",
@@ -303,6 +304,10 @@ Examples:
     samples_gamma = {
         k: v for k, v in samples.items() 
         if k.startswith("gamma_") and not k.startswith("gamma_scale")
+    }
+    samples_generated_beta = {
+        k: v for k, v in samples.items()
+        if k.startswith("generated_beta_")
     }
 
     # Unpack data
@@ -422,18 +427,13 @@ Examples:
 
         # Emulator Mean/Scale
         # mu_emulator: Normal(mean, scale) or LogNormal(log_mean, log_scale)
-        if key in ["mu_emulator_v", "mu_emulator_h"]:
+        if key in ["mu_emulator", "mu_emulator_v", "mu_emulator_h"]:
             if key in priors_config["hyper"]:
                  p = priors_config["hyper"][key]
                  if "log_mean" in p:
                      return lognorm.pdf(x_vals, s=p["log_scale"], scale=np.exp(p["log_mean"]))
                  return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
-            if "log_mean" in p:
-                # LogNormal: val = exp(log_mean + log_scale * N(0,1))
-                # scipy lognorm: s=log_scale, scale=exp(log_mean)
-                return lognorm.pdf(x_vals, s=p["log_scale"], scale=np.exp(p["log_mean"]))
-            else:
-                return norm.pdf(x_vals, loc=p["mean"], scale=p["scale"])
+            return None
 
         # Helper to extract PDF from numpyro distribution in config
         def get_pdf_from_target_dist(hyper_key):
@@ -805,11 +805,9 @@ Examples:
 
         if samples_hyper_plot:
             # Organize hyperparameters in a 2x3 grid layout:
-            # Row 1: gamma_scale_v, mu_emulator_v, sigma_measure
-            # Row 2: gamma_scale_h, mu_emulator_h, sigma_b_slope
             hyper_order = [
-                "gamma_scale_v", "mu_emulator_v", "sigma_measure",
-                "gamma_scale_h", "mu_emulator_h", "sigma_b_slope"
+                "gamma_scale_v", "mu_emulator", "sigma_measure",
+                "gamma_scale_h", "mu_emulator_v", "mu_emulator_h", "sigma_b_slope"
             ]
             # Filter to only include params that exist in samples
             samples_hyper_ordered = {
@@ -839,6 +837,8 @@ Examples:
         ang_rad = data_dict["input_xy_exp"][i][0, 1]
         ang_deg = int(round(np.rad2deg(ang_rad)))
         exp_angles.append(ang_deg)
+    from collections import Counter
+    angle_counts_total = Counter(exp_angles)
 
     if samples_bias:
         print(f"DEBUG: samples_bias len: {len(samples_bias)}")
@@ -849,8 +849,6 @@ Examples:
                 samples_bias.pop("b_slope", None)
 
         # Count occurrences to decide on numbering
-        from collections import Counter
-        angle_counts_total = Counter(exp_angles)
         angle_counters = {a: 0 for a in exp_angles}
         
         samples_bias_renamed = {}
@@ -1053,9 +1051,12 @@ Examples:
                      angle_str = parts[2]
                      
                      # Find corresponding mu_emulator
-                     mu_key = f"mu_emulator_{direction}"
-                     if mu_key in samples_hyper:
-                         mu_val = samples_hyper[mu_key]
+                     if "mu_emulator" in samples_hyper:
+                         mu_val = samples_hyper["mu_emulator"]
+                     else:
+                         mu_key = f"mu_emulator_{direction}"
+                         mu_val = samples_hyper.get(mu_key)
+                     if mu_val is not None:
                          
                          # Ensure shapes match (mu is per-chain, gamma is per-chain)
                          # Both are usually (N_samples,)
@@ -1091,6 +1092,45 @@ Examples:
             )
             save_stats_csv(samples_slope, f"inference_derived_slope_stats_{suffix}.csv")
 
+    if samples_generated_beta:
+        generated_beta_groups = {"h": {}, "v": {}}
+        generated_beta_renamed = {}
+        generated_beta_counters = {
+            (direction, angle): 0 for direction in ["v", "h"] for angle in exp_angles
+        }
+
+        for key, val in samples_generated_beta.items():
+            try:
+                parts = key.split("_")
+                # generated_beta_v_1 / generated_beta_h_1
+                direction = parts[2]
+                exp_idx = int(parts[3]) - 1
+                if direction not in ["v", "h"] or not (0 <= exp_idx < len(exp_angles)):
+                    generated_beta_renamed[key] = val
+                    continue
+
+                angle = exp_angles[exp_idx]
+                generated_beta_counters[(direction, angle)] += 1
+                count = generated_beta_counters[(direction, angle)]
+                if angle_counts_total[angle] > 1:
+                    label = f"generated_beta_{direction}_{angle}_{count}"
+                else:
+                    label = f"generated_beta_{direction}_{angle}"
+
+                generated_beta_renamed[label] = val
+                generated_beta_groups[direction].setdefault(angle, []).append((label, val, key))
+            except (IndexError, ValueError):
+                generated_beta_renamed[key] = val
+
+        plot_distributions_grid_2x3(
+            generated_beta_groups,
+            standard_angles,
+            save_path=figures_dir / f"posterior_generated_beta_grid_{suffix}.png",
+            title_prefix="Generated Beta (Mu * Gamma + b)",
+            use_gamma_logic=False
+        )
+        save_stats_csv(generated_beta_renamed, f"inference_generated_beta_stats_{suffix}.csv")
+
     all_summary_samples = {}
     for sample_group in [
         samples_physical_ordered,
@@ -1098,6 +1138,7 @@ Examples:
         samples_bias,
         samples_n,
         samples_gamma,
+        samples_generated_beta,
     ]:
         all_summary_samples.update(sample_group)
     if model_type == "model_simple":
@@ -1178,17 +1219,13 @@ Examples:
         test_theta = jnp.stack([E_1, E_2, v_12, v_23, G_12], axis=1)  # (N, 5)
 
         # Hyper
-        # Hyper
-        # mu_emulator = get_batch("mu_emulator")
-        try:
+        if "mu_emulator" in samples_dict:
+            mu_emulator = get_batch("mu_emulator")
+            mu_emulator_v = mu_emulator
+            mu_emulator_h = mu_emulator
+        else:
             mu_emulator_v = get_batch("mu_emulator_v")
-        except KeyError:
-            mu_emulator_v = jnp.zeros_like(E_1) # Should not happen with new results
-
-        try:
             mu_emulator_h = get_batch("mu_emulator_h")
-        except KeyError:
-            mu_emulator_h = jnp.zeros_like(E_1)
         sigma_emulator = get_batch("sigma_emulator")
 
         # Check noise model parameters (backward compatibility)
@@ -1658,16 +1695,13 @@ def run_residual_analysis(idata, data_dict, figures_dir, exports_dir, config):
     test_theta = jnp.stack([E_1, E_2, v_12, v_23, G_12], axis=1)
 
     # Hyper
-    # mu_emulator = get_batch("mu_emulator")
-    try: 
+    if "mu_emulator" in posterior:
+        mu_emulator = get_batch("mu_emulator")
+        mu_emulator_v = mu_emulator
+        mu_emulator_h = mu_emulator
+    else:
         mu_emulator_v = get_batch("mu_emulator_v")
-    except KeyError:
-        mu_emulator_v = jnp.zeros_like(E_1)
-
-    try:
         mu_emulator_h = get_batch("mu_emulator_h")
-    except KeyError:
-        mu_emulator_h = jnp.zeros_like(E_1)
     sigma_emulator = get_batch("sigma_emulator")
 
     try:
