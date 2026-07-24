@@ -31,11 +31,13 @@ To focus the analysis on the relevant elastic/plastic region and avoid high-load
 *   **Configuration**: Controlled by `data.max_load` in `default_config.py`.
 *   **Effect**: Any data points where `Load > max_load` are excluded from the inference dataset.
 
-### D. Averaging (for Inference)
-As noted in `model_analysis.qmd`, the Bayesian inference currently treats the three sensor positions (Left, Center, Right) as independent samples of the mean behavior.
+### D. DIC Columns and Averaging
+The loader returns both averaged and raw three-column DIC extension data.
 
-*   **Operation**: The code computes the mean extension across valid sensors for each load step.
-*   **Output**: A single "mean extension" vector per experiment is passed to the likelihood function.
+*   **Averaged outputs**: `data_exp_h`, `data_exp_v`, `data_exp_h_full_mean`, and `data_exp_v_full_mean` are useful for diagnostics and plotting.
+*   **Raw outputs**: `data_exp_h_raw` and `data_exp_v_raw` preserve the three DIC extensometer positions for each load step.
+
+The active `model_empirical` likelihood currently uses the raw three-column arrays, transposes each `(N, 3)` experiment to `(3, N)`, and treats the three DIC columns as batched replicate load-extension curves with one shared mean curve. Diagnostic scripts may still fit or plot the averaged vectors, so documentation and plots should state explicitly which convention they use.
 
 ## 3. Reproducibility
 

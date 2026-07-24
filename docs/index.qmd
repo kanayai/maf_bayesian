@@ -7,9 +7,9 @@ The project uses Gaussian Process (GP) emulators to calibrate material parameter
 
 ## Recent Updates
 
+-   **Empirical Direction Factor Notes**: Clarified current `model_empirical` behaviour, the shear factor of two, FE/experimental extraction differences, and the negligible effect of changing `E1` on `R(45°)`/`R(135°)`. See [Direction-Specific Empirical Emulator Notes](direction_specific_emulator.qmd).
 -   **Prediction Methodology**: Fixed prior prediction bands by properly separating conditioning data. Prior predictions now condition only on simulation data (training), while posterior predictions condition on both simulation and experimental data. See [Prediction Methodology](prediction_methodology.qmd) for implementation details.
 -   **GP Theory Documentation**: Added comprehensive documentation on Gaussian Process theory and Cholesky sampling methods. See [GP Prediction Theory](prior_prediction_issue.qmd) for mathematical background and why spatial correlation preservation via Cholesky decomposition is critical.
 -   **Residual Analysis**: A comprehensive diagnostic suite has been added to `analyze.py`, featuring residual plots with 95% uncertainty bands, Q-Q plots, and distribution histograms.
 -   **Additive Noise Model**: An optional measurement error model ($\sigma^2 = \sigma_1^2 P + \sigma_0^2$) has been implemented to handle low-load noise. This is configurable via `default_config.py`.
-
 

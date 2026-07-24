@@ -1,88 +1,170 @@
 ---
-title: "Direction-Specific Emulator Parameters"
+title: "Direction-Specific Empirical Emulator Notes"
 author: "MAF Bayesian Project"
-date: "2025-12-19"
+date: "2026-07-24"
 format: html
 ---
 
-## Overview
+## Purpose
 
-The hierarchical models (`model_n_hv` and `model_empirical`) now support **direction-specific emulator mean parameters**, allowing independent learning of systematic corrections for Normal (vertical) and Shear (horizontal) loading directions.
+This note records the current empirical-model state after the July 2026
+factor-of-two checks. It is deliberately scoped to points that affect how the
+code should be read. More speculative mechanics arguments belong under the
+explicit interpretation heading below.
 
-## Motivation
+## Current Code Behaviour
 
-Previously, a single `mu_emulator` parameter was used for both loading directions. This assumed that any systematic bias in the emulator predictions was identical across directions. By splitting this into direction-specific parameters, the model can better capture:
+The active empirical model is `model_empirical` in `src/core/models.py`.
 
-- Different systematic errors in vertical vs. horizontal predictions
-- Direction-dependent model form errors
-- Anisotropic behavior in the composite material response
-
-## Parameter Definitions
-
-### Split Parameters
-
-- **`μ_emulator,v`**: Emulator mean correction for Normal (vertical) direction
-- **`μ_emulator,h`**: Emulator mean correction for Shear (horizontal) direction
-
-Both parameters use identical, independent LogNormal priors:
-
-$$
-\mu_{\text{emulator},v} \sim \text{LogNormal}(\log(0.01), 0.2)
-$$
-
-$$
-\mu_{\text{emulator},h} \sim \text{LogNormal}(\log(0.01), 0.2)
-$$
-
-## Implementation
-
-### Configuration
-
-In `configs/default_config.py`:
+As of this note, the empirical model uses one shared slope scale,
+`mu_emulator`, not separate `mu_emulator_v` and `mu_emulator_h` parameters.
+The current configuration prior is in `configs/default_config.py`:
 
 ```python
-"priors": {
-    "hyper": {
-        "mu_emulator_v": {"log_mean": np.log(0.01), "log_scale": 0.2},
-        "mu_emulator_h": {"log_mean": np.log(0.01), "log_scale": 0.2},
-        # ... other hyperparameters
-    }
-}
+"mu_emulator": {"mean": 0.0054, "scale": 0.001}
 ```
 
-### Model Usage
+For each standard angle, the model samples angle factors centred on the load
+components:
 
-#### Hierarchical GP Model (`model_n_hv`)
+$$
+\gamma_v(\alpha) \sim N(\cos\alpha, \sigma_{\gamma v}),
+\qquad
+\gamma_h(\alpha) \sim N(\sin\alpha, \sigma_{\gamma h}).
+$$
 
-The GP mean function uses direction-specific corrections:
+The generated experiment-level slopes are currently:
 
-- **Horizontal (Shear)**: $\mu_h(P, \alpha, \theta) = \mu_{\text{emulator},h} \cdot P \sin(\alpha) + f_{GP,h}$
-- **Vertical (Normal)**: $\mu_v(P, \alpha, \theta) = \mu_{\text{emulator},v} \cdot P \cos(\alpha) + f_{GP,v}$
+$$
+\beta_v = \mu_{\mathrm{emulator}}\gamma_v + b_i,
+$$
 
-#### Hierarchical Empirical Model (`model_empirical`)
+$$
+\beta_h = 2\mu_{\mathrm{emulator}}\gamma_h + b_i.
+$$
 
-The empirical slopes incorporate direction-specific means:
+The explicit factor `2.0` is therefore in the current code for the horizontal
+shear-extension channel. The same additive experiment-specific slope bias
+`b_i` is added to both normal and shear slopes when `add_bias_slope` is enabled.
 
-- **Horizontal**: $\beta_h = \mu_{\text{emulator},h} \cdot \gamma_h + b_i$
-- **Vertical**: $\beta_v = \mu_{\text{emulator},v} \cdot \gamma_v + b_i$
+The empirical likelihood currently observes the three DIC extensometer columns
+as batched replicate curves. In code, each `(N, 3)` experimental extension array
+is transposed to `(3, N)` and passed to a multivariate normal likelihood whose
+mean is one load-extension curve. That is different from the diagnostic scripts
+which often fit or plot the averaged DIC extension.
 
-where $\gamma_{v/h}$ are angle-specific scaling factors.
+The full GP model path still has compatibility code for split
+`mu_emulator_v`/`mu_emulator_h` if those keys are present in the configuration.
+That is not the active empirical configuration described above.
 
-## Backward Compatibility
+## Observed Evidence
 
-The code maintains backward compatibility with the original single-parameter specification. If `mu_emulator` (without `_v/_h` suffix) is found in the configuration, both directions will use the same value.
+Origin-constrained regressions on the averaged experimental data, fitting only
+the normal component and then predicting shear with the factor-two relation,
+gave:
 
-## Verification
+| Alpha | Fitted normal slope [mm/kN] | Predicted shear slope [mm/kN] | Observed shear slope [mm/kN] | Observed / predicted |
+|---:|---:|---:|---:|---:|
+| 45 | 0.003864 | 0.007729 | 0.007590 | 0.982 |
+| 135 | -0.003786 | 0.007573 | 0.007881 | 1.041 |
 
-Both hierarchical models have been verified with the split parameters:
+The prediction used
 
-1. **`model_n_hv`**: Inference samples both `mu_emulator_v` and `mu_emulator_h` independently while still inferring physical parameters (E₁, E₂, etc.)
-2. **`model_empirical`**: Inference samples both split parameters while correctly avoiding physical parameter inference (empirical-only approach)
+$$
+\beta_{h,\mathrm{pred}} = 2\beta_v\tan\alpha.
+$$
 
-Trace plots confirm healthy convergence for both parameters in both models.
+The finite-element emulator training data also shows approximately the same
+two-to-one direction effect when fitted against the corresponding load
+components:
 
-## Related Documentation
+| Quantity | Slope [mm/kN] |
+|---|---:|
+| FE shear extension vs. \(P\sin\alpha\) | 0.01055 |
+| FE normal extension vs. \(P\cos\alpha\) | 0.00520 |
+| Ratio | 2.03 |
 
-- [Model Analysis](model_analysis.qmd) - Overview of hierarchical models
-- [Empirical Model](empirical_model.qmd) - Details on the empirical hierarchical model
-- [GP Hyperparameter Analysis](gp_hyperparameter_analysis.qmd) - Discussion of other hyperparameters
+This means the factor-two pattern is present in both the experimental DIC data
+and the FE emulator outputs. It is not only an experimental fitting artefact.
+
+## FE And Experimental Extraction Difference
+
+The FE extraction folder reviewed was:
+
+```text
+/Users/kai21/Library/CloudStorage/OneDrive-UniversityofBath/Mech Eng/OHT data (Tobi Laux)/MAF_lhs
+```
+
+The FE script `simulation_data_extract.m` performs rigid-motion correction and
+then computes:
+
+```matlab
+disps_corr = (coords_1_corr - coords_0)/2;
+```
+
+It then extracts horizontal or vertical extension with the same
+top-minus-bottom virtual extensometer function:
+
+```matlab
+extensions(i) = mean(disps_top) - mean(disps_bot);
+```
+
+The experimental extraction scripts reviewed use the same virtual extensometer
+idea, but do not apply the `/2` before calculating extension:
+
+```matlab
+disp_corr = coords_1_corr - coords_0;
+```
+
+The `/2` in the FE extraction scales both FE shear and FE normal outputs. It
+therefore does not explain the FE shear/normal ratio by itself. Removing it
+would double both FE slopes while leaving their ratio essentially unchanged.
+
+## E1 Sensitivity Of R(alpha)
+
+The scalar reference compliance in `docs/empirical_model.qmd` is
+
+$$
+R(\alpha) = \frac{1000L}{A E_{\mathrm{eff}}(\alpha)}.
+$$
+
+Changing only \(E_1\) has almost no effect on \(R(\alpha)\) at 45 and 135
+degrees under that off-axis formula. This was checked because different \(E_1\)
+values have been discussed in the manuscript and project history.
+
+| E1 [MPa] | R(2 deg) [mm/kN] | R(45 deg) [mm/kN] | R(90 deg) [mm/kN] | R(135 deg) [mm/kN] |
+|---:|---:|---:|---:|---:|
+| 145000 | 0.002269 | 0.023531 | 0.031014 | 0.023531 |
+| 154900 | 0.002129 | 0.023519 | 0.031014 | 0.023519 |
+| 161000 | 0.002051 | 0.023512 | 0.031014 | 0.023512 |
+
+Relative to \(E_1 = 154900\) MPa, \(E_1 = 161000\) MPa changes \(R(45^\circ)\)
+and \(R(135^\circ)\) by about -0.03 percent. \(E_1 = 145000\) MPa changes those
+values by about +0.05 percent. The effect is only noticeable close to zero
+degrees: \(R(2^\circ)\) changes by about -3.65 percent for 161000 MPa and
++6.58 percent for 145000 MPa.
+
+## Interpretation
+
+The strongest non-speculative statement is that the current factor-two empirical
+form matches a pattern found in both experimental and FE-extracted extension
+data.
+
+A plausible mechanics interpretation is that the horizontal DIC
+top-minus-bottom displacement difference is an engineering-shear-like
+displacement measure rather than a tensor-shear strain measure. That would make
+a factor of two mechanically plausible. This explanation is not stated
+explicitly in the old manuscript versions or in the MATLAB extraction scripts,
+so it should be treated as an interpretation to verify before using it as a
+paper claim.
+
+## Open Checks
+
+- Decide whether the FE `/2` convention should remain as historical emulator
+  provenance or be corrected in a future regenerated emulator dataset.
+- Decide whether the empirical model should keep additive `b_i` slope bias or
+  switch to a multiplicative specimen compliance factor such as
+  \(\eta_i\), where \(\eta_i > 1\) means a more compliant specimen and
+  \(\eta_i < 1\) means a stiffer specimen.
+- Run and analyse a fresh explicit empirical MCMC bundle before treating this
+  parameterisation as viable evidence.
