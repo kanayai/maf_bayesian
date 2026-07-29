@@ -16,6 +16,9 @@ from src.io.data_loader import load_all_data
 
 def fit_origin_slope(load, extension):
     """Least-squares fit for extension = beta * load through the origin."""
+    if extension.ndim == 2:
+        load = np.repeat(load, extension.shape[1])
+        extension = extension.reshape(-1)
     denominator = np.sum(load**2)
     if denominator <= 0:
         return np.nan
@@ -39,7 +42,8 @@ def main():
     input_xy_exp = data["input_xy_exp"]
     normal_data = data["data_exp_v"]
     shear_data = data["data_exp_h"]
-    angles = [45, 135]
+    angles = [45, 90, 135]
+    direct_shear_angle = 90
 
     output_dir = Path("figures")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -47,9 +51,9 @@ def main():
     fig, axes = plt.subplots(
         2,
         len(angles),
-        figsize=(11, 7),
-        sharex="col",
-        sharey="row",
+        figsize=(15, 7),
+        sharex=False,
+        sharey=False,
         squeeze=False,
     )
     rows = []
@@ -65,7 +69,10 @@ def main():
         all_normal_load = np.concatenate([item[1] for item in normal_matches])
         all_normal_extension = np.concatenate([item[2] for item in normal_matches])
         beta_v = fit_origin_slope(all_normal_load, all_normal_extension)
-        beta_h_pred = 2.0 * beta_v * np.tan(np.deg2rad(angle))
+        if angle == direct_shear_angle:
+            beta_h_pred = np.nan
+        else:
+            beta_h_pred = 2.0 * beta_v * np.tan(np.deg2rad(angle))
         max_load = max(
             np.max(all_normal_load),
             max(np.max(item[1]) for item in shear_matches) if shear_matches else 0.0,
@@ -112,20 +119,39 @@ def main():
                 edgecolor="none",
                 label=f"Exp {exp_idx + 1}",
             )
+        if shear_matches:
+            all_shear_load = np.concatenate([item[1] for item in shear_matches])
+            all_shear_extension = np.concatenate([item[2] for item in shear_matches])
+            beta_h_observed = fit_origin_slope(all_shear_load, all_shear_extension)
+        else:
+            all_shear_load = np.array([])
+            all_shear_extension = np.array([])
+            beta_h_observed = np.nan
+
+        shear_line_beta = beta_h_observed if angle == direct_shear_angle else beta_h_pred
+        shear_line_label = (
+            "Direct least-squares fit"
+            if angle == direct_shear_angle
+            else r"Prediction from normal fit"
+        )
         ax_shear.plot(
             load_grid,
-            beta_h_pred * load_grid,
+            shear_line_beta * load_grid,
             color="black",
             linewidth=2.2,
-            label=r"Prediction from normal fit",
+            label=shear_line_label,
         )
         ax_shear.set_title(f"{angle} deg shear")
         ax_shear.set_xlabel("Load [kN]")
         ax_shear.set_ylabel("Shear extension [mm]")
+        if angle == direct_shear_angle:
+            shear_text = rf"$\hat{{\beta}}_h = {beta_h_observed:.5g}$ mm/kN"
+        else:
+            shear_text = rf"$\beta_h^{{pred}} = 2\hat{{\beta}}_v\tan({angle}^\circ) = {beta_h_pred:.5g}$ mm/kN"
         ax_shear.text(
             0.04,
             0.96,
-            rf"$\beta_h^{{pred}} = 2\hat{{\beta}}_v\tan({angle}^\circ) = {beta_h_pred:.5g}$ mm/kN",
+            shear_text,
             transform=ax_shear.transAxes,
             ha="left",
             va="top",
@@ -138,22 +164,23 @@ def main():
             ax.grid(True, alpha=0.35)
             ax.legend(fontsize=7, loc="best")
 
-        if shear_matches:
-            all_shear_load = np.concatenate([item[1] for item in shear_matches])
-            all_shear_extension = np.concatenate([item[2] for item in shear_matches])
-            beta_h_observed = fit_origin_slope(all_shear_load, all_shear_extension)
-        else:
-            all_shear_load = np.array([])
-            all_shear_extension = np.array([])
-            beta_h_observed = np.nan
-
         rows.append(
             {
                 "angle_deg": angle,
+                "direction": "shear",
+                "fit_type": (
+                    "direct_origin_least_squares"
+                    if angle == direct_shear_angle
+                    else "predicted_from_normal_fit"
+                ),
                 "normal_slope_beta_v_mm_per_kN": float(beta_v),
                 "predicted_shear_slope_beta_h_mm_per_kN": float(beta_h_pred),
                 "observed_shear_slope_for_check_only_mm_per_kN": float(beta_h_observed),
-                "observed_shear_over_predicted_shear": float(beta_h_observed / beta_h_pred),
+                "observed_shear_over_predicted_shear": (
+                    np.nan
+                    if np.isnan(beta_h_pred)
+                    else float(beta_h_observed / beta_h_pred)
+                ),
                 "n_normal_points": int(len(all_normal_load)),
                 "n_shear_points": int(len(all_shear_load)),
                 "n_normal_experiments": int(len(normal_matches)),
