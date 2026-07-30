@@ -13,6 +13,111 @@ This approach is particularly useful when:
 *   We want to establish a baseline for pure data-driven performance.
 *   Physical parameter identification is not the primary goal, but rather predictive performance for new experiments.
 
+## Simplest Empirical Model (Single-Parameter Baseline)
+
+Before the full hierarchical model below, we start from the simplest model that
+is still consistent with the FE functional-form findings (linear in load, normal
+$\propto\cos\alpha$, shear $\propto\sin\alpha$, one shared compliance scale). It
+is a deliberately minimal baseline to build on. It is implemented as the
+standalone script `scripts/empirical_simple_model.py`; it does **not** touch the
+config-driven pipeline or the hierarchical `model_empirical`, and it creates no
+paper-evidence run bundle.
+
+### Model
+
+Two extension channels share a **single** scalar parameter $\mu$, with **fixed**
+(non-random) trigonometric projections and **no** per-specimen bias:
+
+$$ y_v = P\cos(\alpha)\,\mu + \varepsilon, \qquad
+   y_h = 2P\sin(\alpha)\,\mu + \varepsilon, \qquad
+   \varepsilon \sim \mathcal{N}(0,\ \sigma^2 P). $$
+
+Here $y_v$ is the vertical (normal) extension and $y_h$ the horizontal (shear)
+extension, $P$ is load (kN) and $\alpha$ is the loading angle. Both regressions
+pass **through the origin** — there is no intercept, so a zero load predicts zero
+extension. The only unknowns are $\mu$ and a **single shared** error scale
+$\sigma$.
+
+The error is a **proportional (load-dependent) model**: the variance grows
+linearly with load, $\operatorname{Var}(\varepsilon) = \sigma^2 P$, so the
+standard deviation is $\sigma\sqrt{P}$. This makes the scatter fan out with load
+and pinch to zero at the origin, matching the way the measured spread widens as
+the load increases; consequently $\sigma$ has units of $\mathrm{mm}\,
+\mathrm{kN}^{-1/2}$. Rows at exactly $P = 0$ carry zero variance and are excluded
+from the likelihood.
+
+Compared with the hierarchical model below, the geometric factors are the fixed
+constants $\cos\alpha$ and $\sin\alpha$ (not random $\gamma$), the shear factor of
+two is imposed exactly, and there is no experiment bias term. Everything is
+treated as independent: the vertical and horizontal channels are independent of
+each other, and the observations are independent, so the fit is an ordinary
+least-squares-type regression cast in Bayesian form.
+
+### Priors
+
+$$ \mu \sim \mathcal{N}(0.0054,\ 0.001^2), \qquad
+   \sigma \sim \text{HalfNormal}(0.02). $$
+
+The $\mu$ prior mean $0.0054$ is the current `mu_emulator` prior mean (see the
+provenance discussion later in this document) and the standard deviation $0.001$
+matches the reparameterisation used elsewhere. The $\sigma$ prior is weakly
+informative: with the proportional error model $\sigma$ is on the order of
+$10^{-3}\ \mathrm{mm}\,\mathrm{kN}^{-1/2}$, so a half-normal with scale $0.02$ is
+comfortably diffuse.
+
+### Data and inference
+
+The model is fitted to the **averaged** experimental data (DIC sensors averaged),
+at the three experimental angles $45^\circ, 90^\circ, 135^\circ$, truncated to
+loads $\le 10$ kN (beyond which the real data soften away from linearity, as seen
+in the FE overlay) and with the zero-load rows removed (the proportional error
+model gives them zero variance). Inference is by NUTS (numpyro), 4 chains of 2000
+samples with 1000 warmup, seed 0. The fit, posterior summary, and prediction
+figure are regenerated on render:
+
+```{python}
+#| label: simple-fit
+#| include: false
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path.cwd().parent / "scripts"))
+import empirical_simple_model as esm
+simple_res = esm.main(verbose=False)
+```
+
+```{python}
+#| label: tbl-simple-post
+#| echo: false
+#| output: asis
+import numpy as np
+from IPython.display import Markdown
+mu_s, sig_s = simple_res["mu"], simple_res["sigma"]
+c = simple_res["counts"]
+def _row(name, s):
+    return (f"| {name} | {s.mean():.6f} | {s.std():.6f} | "
+            f"[{np.percentile(s,3):.6f}, {np.percentile(s,97):.6f}] |")
+tbl = ["**Posterior** (averaged data, $P\\le 10$ kN, "
+       f"{simple_res['n_obs']} observations: "
+       f"normal {c['v']}, shear {c['h']}):\n",
+       "| parameter | mean | sd | 94% HDI |",
+       "|---|---|---|---|",
+       _row("$\\mu$", mu_s), _row("$\\sigma$", sig_s)]
+Markdown("\n".join(tbl))
+```
+
+$\mu$ is pinned far more tightly than its prior (the data dominate), landing
+essentially on the $0.0054$ anchor, and $\sigma$ is the single shared residual
+scale.
+
+### Predictions vs data
+
+```{python}
+#| label: fig-simple-pred
+#| echo: false
+#| fig-cap: "Simplest-model posterior predictions vs averaged experimental data (extension horizontal, load vertical): normal (top) and shear (bottom) at the three angles. Black line is the posterior mean; the darker band is the 94% credible interval for the mean and the lighter band the 94% posterior-predictive interval. Under the proportional error model the predictive band fans out with load (width $\\propto\\sqrt{P}$) and pinches to zero at the origin. The shear channel and the $45^\\circ/135^\\circ$ normal channels fit well; normal at $90^\\circ$ is predicted $\\approx 0$ (since $\\cos 90^\\circ = 0$) while the data show a small non-zero spread that the load-dependent $\\sigma$ absorbs."
+from IPython.display import Image
+Image(filename=str(simple_res["fig"]))
+```
+
 ## Mathematical Formulation
 
 ### Core Regression
@@ -192,6 +297,291 @@ Source notes:
 
 The likelihood assumes independent Gaussian noise around the mean prediction:
 $$ y_{obs} \sim \mathcal{N}(P \cdot \beta, \Sigma_{noise}) $$
+
+## FE Functional-Form Exercise
+
+This section documents a standalone diagnostic used to *learn* a good functional
+form for the empirical model directly from the finite-element (FE) simulations,
+rather than assuming it. It is **not** a run-bundle experiment and it changes no
+model or configuration; it only informs modelling choices. The code is
+`scripts/fe_functional_form.py` and the figures are written to the git-ignored
+`figures/fe_functional_form/`.
+
+### Motivation: controllable vs uncontrollable inputs
+
+The paper draws a distinction between **controllable** inputs, set by the
+experimenter, and **uncontrollable** inputs, which are material properties fixed
+by the specimen but not chosen by us:
+
+*   Controllable: applied load $P$ (kN) and loading angle $\alpha$ (rad).
+*   Uncontrollable: the five material parameters $\theta = (E_1, E_2, \nu_{12},
+    \nu_{23}, G_{12})$.
+
+The empirical model posits a load-extension relation $y = P\,\beta(\alpha)$ and
+builds $\beta$ from a shared scale, trigonometric geometric factors, a
+shear-extension factor, and specimen bias. The purpose of this exercise is to
+ask the FE model directly: *for fixed values of the uncontrollable parameters,
+what does the extension look like as a function of the controllable inputs?* The
+answer either supports the assumed form or suggests a better one.
+
+### Data and why a surrogate is needed
+
+Each direction has 100 FE runs. The `v` outputs are read as the **normal**
+extension and the `h` outputs as the **shear** extension (consistent with the
+DIC extensometer definitions used elsewhere in this document). Crucially, the FE
+design is a 100-point Latin-hypercube in which *all seven inputs vary at once*.
+There is therefore no subset of rows with $\theta$ held at a chosen value, so we
+cannot simply filter and plot. Instead we fit a surrogate over the full
+seven-dimensional input space and then *slice* the fitted surface at a fixed
+$\theta$.
+
+### Surrogate: anisotropic Gaussian process
+
+For each direction we fit a zero-mean Gaussian process with a squared-exponential
+kernel and a separate length scale per input (an anisotropic emulator, in the
+same spirit as the paper's FE emulator). Hyperparameters — seven length scales,
+a signal variance, and a noise variance — are estimated by maximising the log
+marginal likelihood.
+
+Before fitting, every input is **standardised** (each column mapped to a
+$z$-score: subtract its mean, divide by its standard deviation across the 100
+runs). This is a purely numerical device: the raw inputs span very different
+scales ($E_1 \approx 1.5\times10^5$, $P \approx 5$, $\nu_{12} \approx 0.33$), and
+a GP measures distance in input space through its length scales, so leaving the
+inputs on their raw scales makes the kernel matrix ill-conditioned and the
+length-scale optimisation unreliable. Standardisation puts all inputs on a common
+footing and makes the fitted length scales directly comparable as sensitivity
+indicators (a *small* length scale means the output changes quickly in that
+input, i.e. that input is influential). All plotted results are returned in
+original physical units (mm, kN, degrees).
+
+Because the FE outputs are deterministic, the surrogate essentially interpolates:
+the closed-form leave-one-out cross-validation $R^2$ is $1.000$ for both
+directions, so the sliced surfaces below can be read as faithful reconstructions
+of the FE response rather than noisy fits.
+
+The fitted length scales rank the inputs by influence. In both directions the two
+controllables $\alpha$ and $P$ have by far the smallest length scales (most
+influential), and among the uncontrollables only $E_1$ is materially influential;
+$E_2$, $\nu_{12}$, $\nu_{23}$, and $G_{12}$ have very large length scales and are
+effectively inert over their FE design ranges.
+
+### Slices: figures
+
+Each surrogate is sliced at the config-centred nominal material values
+$\theta_0 = (E_1, E_2, \nu_{12}, \nu_{23}, G_{12}) = (154900,\ 10285,\ 0.33,\
+0.435,\ 5115)$, matching `configs/default_config.py` (`theta.reparam` means). In
+every figure the axes are drawn with **extension on the horizontal axis** and the
+controllable input ($\alpha$ or $P$) on the vertical axis, to match the
+convention used for the experimental load-extension plots elsewhere in this work.
+
+The figures and the nominal-$\theta$ table below are regenerated on render by the
+standalone module `scripts/fe_functional_form.py` (this fits both GP surrogates
+and writes the outputs to `figures/fe_functional_form/`):
+
+```{python}
+#| label: fe-generate
+#| include: false
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path.cwd().parent / "scripts"))
+import fe_functional_form as ff
+ff.main()  # fits the surrogates and writes all figures + the CSV
+```
+
+*   **Extension vs angle** (`v_vs_angle.png`, `h_vs_angle.png`): extension as a
+    function of $\alpha$, at two fixed loads $P = 5$ kN (top row) and $P = 10$ kN
+    (bottom row). Each row has five panels, one per uncontrollable parameter;
+    within a panel that single parameter is swept to its FE-range low / nominal /
+    high value while the other four are held at nominal. This isolates *which*
+    uncontrollable moves the curve. Because the angle is on the vertical axis, the
+    three experimental angles $45^\circ, 90^\circ, 135^\circ$ appear as horizontal
+    reference lines.
+*   **Extension vs load** (`vs_load.png`): a single combined figure with the
+    normal direction on the top row and the shear direction on the bottom row, and
+    the three experimental angles $45^\circ, 90^\circ, 135^\circ$ across the
+    columns. The black line is the nominal-$\theta$ prediction; the shaded band is
+    the $5$–$95\%$ envelope obtained by sampling *all* uncontrollables uniformly
+    across their FE design ranges. This shows the total spread the uncontrollables
+    induce, together with the load dependence.
+*   **Extension vs load, with experiment** (`vs_load_with_experiment.png`): the
+    same combined layout with the measured experimental load-extension points
+    (DIC sensors averaged, matching the FE convention) scattered on each panel.
+    The FE surrogate is not extrapolated beyond its $\sim 10$ kN training range, so
+    the FE lines stop at $P = 10$ kN while the experiment continues to higher
+    loads.
+
+::: {.callout-note}
+## What the uncontrollable band is (and is not)
+
+The $5$–$95\%$ band in these two figures is **not** the model priors and **not**
+the MCMC posterior. It is a deliberately assumption-light design-box envelope:
+each of the five material parameters is drawn independently from a *uniform*
+distribution over its FE design range — the min and max of that parameter across
+the 100 Latin-hypercube runs — and $300$ such $\theta$ vectors are pushed through
+the surrogate. The band is the $5$th–$95$th percentile of the resulting
+predictions at each load. Sampling only inside the design box keeps the surrogate
+from extrapolating, and the independent-uniform choice makes the band a
+worst-case "how far can the FE output move as the materials range over the design
+box" spread. Two consequences follow: it is *wider and flatter* than the config
+priors would give (the priors are Gaussians centred on nominal, e.g.
+$E_1 \sim \mathcal{N}(154900, 5050)$, which would produce a narrower, bell-shaped
+band), and in practice it is dominated by $E_1$ since the other four parameters
+are inert.
+:::
+
+```{python}
+#| label: fig-v-angle
+#| echo: false
+#| fig-cap: "Normal extension vs loading angle at $P = 5$ kN (top) and $P = 10$ kN (bottom). Columns sweep each uncontrollable to its FE-range low/nominal/high value; horizontal dashed lines mark the experimental angles $45^\\circ, 90^\\circ, 135^\\circ$. Only $E_1$ separates the curves."
+from IPython.display import Image
+Image(filename=str(ff.OUTDIR / "v_vs_angle.png"))
+```
+
+```{python}
+#| label: fig-h-angle
+#| echo: false
+#| fig-cap: "Shear extension vs loading angle, same layout as @fig-v-angle."
+Image(filename=str(ff.OUTDIR / "h_vs_angle.png"))
+```
+
+```{python}
+#| label: fig-vs-load
+#| echo: false
+#| fig-cap: "Extension vs load at the experimental angles: normal (top row) and shear (bottom row). Black line is the nominal-$\\theta$ prediction; the band is the $5$–$95\\%$ spread as all uncontrollables vary over their FE ranges. All slices are linear through the origin."
+Image(filename=str(ff.OUTDIR / "vs_load.png"))
+```
+
+```{python}
+#| label: fig-vs-load-exp
+#| echo: false
+#| fig-cap: "The same combined layout with measured experimental load-extension points overlaid (DIC sensors averaged). FE and experiment agree closely up to $\\sim 10$ kN; the experiment then softens away from the linear FE prediction."
+Image(filename=str(ff.OUTDIR / "vs_load_with_experiment.png"))
+```
+
+### What the FE says about the empirical form
+
+The four figures support the empirical model's structural choices:
+
+*   **Linear through the origin in load.** At every angle and every $\theta$ the
+    extension-vs-load slices are straight lines through the origin. This directly
+    supports the core form $y = P\,\beta$ with no intercept.
+*   **Normal extension follows $\cos\alpha$.** The normal-vs-angle slices are
+    cosine-shaped: maximal at $0^\circ$, zero near $90^\circ$, and equal and
+    opposite at $180^\circ$. The nominal-$\theta$ normal slopes are $+0.00376$,
+    $+0.00011$, and $-0.00359$ mm/kN at $45^\circ$, $90^\circ$, and $135^\circ$.
+    This supports the geometric factor $\gamma_v \sim \mathcal{N}(\cos\alpha,
+    \cdot)$.
+*   **Shear extension follows $\sin\alpha$.** The shear-vs-angle slices are
+    sine-shaped: zero at $0^\circ$ and $180^\circ$, maximal at $90^\circ$. This
+    supports $\gamma_h \sim \mathcal{N}(\sin\alpha, \cdot)$.
+*   **Only $E_1$ matters among the uncontrollables.** In every figure the low /
+    nominal / high curves are visibly separated only in the $E_1$ panel, and the
+    load-slice envelopes are narrow. The empirical model's shared scale
+    $\mu_{emulator}$ therefore only needs to absorb an $E_1$-driven material
+    effect; the other four material parameters can reasonably be treated as
+    fixed for the purpose of the empirical parameterisation.
+
+### Nominal-$\theta$ extension table
+
+For a compact reference, the surrogate is evaluated at the three experimental
+angles for both loads at nominal $\theta$ (written to
+`figures/fe_functional_form/vs_angle_nominal_extension.csv`):
+
+| $P$ (kN) | direction | $45^\circ$ | $90^\circ$ | $135^\circ$ |
+|---|---|---|---|---|
+| 5  | Normal | $0.018700$ | $0.000415$ | $-0.018087$ |
+| 5  | Shear  | $0.037569$ | $0.053074$ | $0.037499$ |
+| 10 | Normal | $0.037641$ | $0.001125$ | $-0.035948$ |
+| 10 | Shear  | $0.075074$ | $0.106169$ | $0.075092$ |
+
+Every $P = 10$ value is twice its $P = 5$ counterpart, confirming linearity in
+load. The normal channel is near zero at $90^\circ$ and antisymmetric about it;
+the shear channel peaks at $90^\circ$ and is symmetric.
+
+### Sensitivity to $E_1$ (the only influential uncontrollable)
+
+Because $E_1$ is the only material parameter that moves the surface, the table
+above is recomputed at $E_1 =$ FE-range low ($141206$ MPa), nominal ($154900$
+MPa), and FE-range high ($166932$ MPa), with the other four parameters held at
+nominal. Relative to nominal, low $E_1$ raises **every** extension by about
+$+8\%$ and high $E_1$ lowers every extension by about $-6\%$. The percentage
+change is essentially identical across all angles and both directions, so $E_1$
+acts as a **near-uniform multiplicative scale** on the whole extension surface:
+it stretches or shrinks the response by a single factor (inversely with
+stiffness) without reshaping the $\cos\alpha$ / $\sin\alpha$ angle dependence.
+This is precisely the role of the shared scale $\mu_{emulator}$, and it justifies
+letting $\mu_{emulator}$ absorb the material effect while the geometric factors
+carry the angle dependence.
+
+| $P$ (kN) | direction | $E_1$ level | $45^\circ$ | $90^\circ$ | $135^\circ$ |
+|---|---|---|---|---|---|
+| 5  | Normal | low     | $0.020178$ | $0.000424$ | $-0.019539$ |
+| 5  | Normal | nominal | $0.018700$ | $0.000415$ | $-0.018087$ |
+| 5  | Normal | high    | $0.017575$ | $0.000405$ | $-0.016951$ |
+| 5  | Shear  | low     | $0.040540$ | $0.057305$ | $0.040505$ |
+| 5  | Shear  | nominal | $0.037569$ | $0.053074$ | $0.037499$ |
+| 5  | Shear  | high    | $0.035278$ | $0.049848$ | $0.035224$ |
+| 10 | Normal | low     | $0.040643$ | $0.001197$ | $-0.038759$ |
+| 10 | Normal | nominal | $0.037641$ | $0.001125$ | $-0.035948$ |
+| 10 | Normal | high    | $0.035326$ | $0.001078$ | $-0.033710$ |
+| 10 | Shear  | low     | $0.081102$ | $0.114558$ | $0.081142$ |
+| 10 | Shear  | nominal | $0.075074$ | $0.106169$ | $0.075092$ |
+| 10 | Shear  | high    | $0.070542$ | $0.099717$ | $0.070511$ |
+
+### What the FE says about the shear factor of two
+
+This exercise also speaks to the shear-extension factor of two. The
+nominal-$\theta$ shear slopes are $+0.00750$, $+0.01062$, and $+0.00751$ mm/kN at
+$45^\circ$, $90^\circ$, and $135^\circ$. Comparing shear to normal at the same
+angle:
+
+*   $45^\circ$: shear / normal $= 0.00750 / 0.00376 = 1.99$.
+*   $135^\circ$: shear / $|$normal$|$ $= 0.00751 / 0.00359 = 2.09$.
+
+Both ratios are close to two, so the FE surrogate independently supports a shear
+factor of about two at $45^\circ$ and $135^\circ$, consistent with the
+experimental origin-slope diagnostics. At $90^\circ$ the normal slope is
+essentially zero, so the shear-to-normal ratio is undefined there. This is the
+same caveat flagged for the implemented model, which currently applies the factor
+globally including at $90^\circ$: the FE evidence for the factor is an
+$45^\circ/135^\circ$ statement, not a $90^\circ$ one.
+
+### A cleaner provenance for $\mu_{emulator}$
+
+This exercise also gives a more direct derivation of the prior mean $0.0054$ for
+$\mu_{emulator}$ than the experimental $45^\circ$ route documented above. By
+construction the model sets $\beta_{h} = 2\mu_{emulator}\gamma_h$, and at
+$90^\circ$ the geometric factor is centred on $\sin 90^\circ = 1$, so
+
+$$ \beta_h(90^\circ) = 2\,\mu_{emulator} \quad\Longrightarrow\quad
+   \mu_{emulator} = \tfrac{1}{2}\,\beta_h(90^\circ). $$
+
+The FE surrogate gives a shear slope $\beta_h(90^\circ) = 0.010612$ mm/kN at
+nominal $\theta$ (equivalently, the shear extension at $\alpha = 90^\circ$,
+$P = 1$ kN is $0.010612$ mm). Halving gives $\mu_{emulator} \approx 0.00531$,
+essentially the value $0.0054$ already in `configs/default_config.py`. This route
+is tidier than the experimental one because it needs no $\cos$ projection and
+lands exactly on a model coefficient: $\mu_{emulator}$ *is* the FE shear
+compliance at $90^\circ$ divided by the engineering-shear factor of two. It is
+also the strongest internal-consistency check on that factor, though (as above)
+it pins $\mu_{emulator}$ through the shear channel alone, since the normal channel
+is $\approx 0$ at $90^\circ$.
+
+This nominal value depends on $E_1$, the one influential uncontrollable. Applying
+the same $\mu_{emulator} = \tfrac{1}{2}\beta_h(90^\circ)$ construction at the two
+extremes of the FE $E_1$ range gives:
+
+| $E_1$ (MPa) | $\beta_h(90^\circ)$ (mm/kN) | $\mu_{emulator} = \tfrac{1}{2}\beta_h(90^\circ)$ |
+|---|---|---|
+| low ($141206$)     | $0.011486$ | $0.005743$ |
+| nominal ($154900$) | $0.010612$ | $0.005306$ |
+| high ($166932$)    | $0.009980$ | $0.004990$ |
+
+So $E_1$ alone moves $\mu_{emulator}$ across roughly $0.0050$–$0.0057$, about
+$+8\%$ / $-6\%$ around the nominal $0.0053$ — the same near-uniform scaling seen
+in the extension tables. This spread is comfortably inside the prior scale
+($0.001$–$0.005$) already placed on $\mu_{emulator}$, so treating $E_1$ as fixed
+at nominal and letting the prior absorb this variation is reasonable.
 
 ## Implementation Details
 

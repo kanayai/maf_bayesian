@@ -1,5 +1,5 @@
 # Handoff — MAF Bayesian empirical workflow
-_Checkpoint 2026-07-29_
+_Checkpoint 2026-07-30_
 
 ## Objective
 Test a mechanics-informed empirical slope parameterisation for MAF normal/shear extensions, with shared `mu_emulator` and an explicit shear factor of two.
@@ -29,11 +29,34 @@ Test a mechanics-informed empirical slope parameterisation for MAF normal/shear 
 - Karim has an idea for using the FE simulation data next. Do not pre-emptively change the QMD files; resume by discussing that idea and deciding whether the empirical `mu_emulator` should be informed by FE-derived structural compliance/stiffness summaries.
 - Worktree note: `configs/default_config.py` currently has an unstaged change to the `mu_emulator` prior scale (`0.001` to `0.005`) that was not made by the agent in this handoff step. Confirm with Karim before committing or reverting it.
 
+## 2026-07-30 session notes
+Two threads this session: (A) an FE functional-form exercise, and (B) a brand-new "simplest empirical model". Both are STANDALONE diagnostic scripts — they do not touch the config-driven pipeline or `model_empirical`, and create no paper-evidence run bundles. Both are documented in `docs/empirical_model.qmd`, which is now a properly reproducible Quarto document (executable python chunks regenerate figures/tables on render).
+
+(A) FE functional-form exercise — `scripts/fe_functional_form.py`:
+- Purpose: learn a good functional form for the empirical model from the 100-point FE LHS design (controllable P, alpha vs uncontrollable E1,E2,v12,v23,G12). Fits an anisotropic GP surrogate per direction (v=normal, h=shear), standardised inputs, LOO-CV R^2 = 1.000 (FE deterministic → interpolation).
+- Findings: extension is linear in load through the origin; normal slope ∝ cos(alpha), shear slope ∝ sin(alpha) (slope/cos and slope/sin constant across angle to ~4% and ~0.1%); only E1 is influential among uncontrollables (E1 acts as a near-uniform ±8%/−6% multiplicative scale; other four inert).
+- Shear factor of two: FE supports ~2 at 45/135 (shear/normal = 1.99, 2.09) but it is undefined at 90 (normal ≈ 0). Same caveat as the implemented global factor.
+- Cleaner mu_emulator provenance: by construction beta_h(90) = 2*mu, so mu = shear(90)/2 = 0.010612/2 ≈ 0.00531 ≈ config 0.0054. At E1 low/nominal/high, mu = 0.005743 / 0.005306 / 0.004990 (spread well inside the prior scale).
+- Figures/CSV (git-ignored) in `figures/fe_functional_form/`: v_vs_angle.png, h_vs_angle.png (two loads P=5,10; axes swapped so extension is horizontal; alpha=45/90/135 drawn as horizontal reference lines), vs_load.png (combined normal-top/shear-bottom), vs_load_with_experiment.png (experiment overlaid; FE lines stop at 10 kN, no extrapolation; experiment softens beyond ~10 kN), vs_angle_nominal_extension.csv (4-row table, ordered by load then direction).
+- The 5–95% band = independent UNIFORM draws of each uncontrollable over its FE design range (NOT the priors, NOT the posterior). Documented as such in the QMD.
+
+(B) Simplest empirical model — `scripts/empirical_simple_model.py` (NEW). This is Karim's new baseline model to build on. Decisions (all confirmed by Karim):
+- Model, through the origin (no intercept): y_v = P·cos(alpha)·mu + eps ; y_h = 2·P·sin(alpha)·mu + eps. Fixed cos/sin (not random gamma), factor of two imposed exactly, no bias. Single scalar mu, single shared error. v ⟂ h, obs iid.
+- Error: PROPORTIONAL model eps ~ Normal(0, sigma^2 · P) (sd = sigma·sqrt(P); band fans with load, zero at origin). Zero-load rows excluded (zero variance).
+- Priors: mu ~ Normal(0.0054, 0.001); sigma ~ HalfNormal(0.02) (units mm·kN^−1/2).
+- Data: averaged (sensor-mean) experimental, angles 45/90/135, load ≤ 10 kN. 388 obs (normal {45:75,90:50,135:69}, shear same).
+- Inference: NUTS, 4 chains × 2000 (1000 warmup), seed 0. Posterior: mu = 0.005429 (sd 1e-5), sigma = 0.000540. Fits shear + normal-45/135 well; normal-90 predicted ≈0 (cos90=0) with proportional band absorbing the small non-zero spread.
+- Figure (git-ignored): `figures/empirical_simple_model/predictions_vs_data.png`.
+
+Workflow decision: both empirical models coexist WITHOUT a new branch — the simple model was kept as a standalone script, `model_empirical` untouched. If Karim wants the simple model in the config-driven MCMC pipeline (reproducible run bundles + standard analysis), promote it to a new `model_type = "model_empirical_simple"` in `src/core/models.py` + a config preset. NOT done yet.
+
+Dependency change (flagged): added a `docs` dependency group for Quarto's jupyter engine — `nbformat`, `jupyter-client`, `ipykernel`, `pyyaml`, `nbclient` (in `pyproject.toml`/`uv.lock`). Undo: `uv remove --group docs nbformat jupyter-client ipykernel pyyaml nbclient`. Render command needs the project python: `QUARTO_PYTHON=$(uv run python -c 'import sys;print(sys.executable)') quarto render docs/empirical_model.qmd`.
+
 ## Resume point
-Start from branch `feature/empirical-model`. The implementation is documented as the current candidate model, but the global shear factor at 90 deg is now flagged as a modelling issue. No full MCMC has been run after adding the shear factor and documentation cleanup.
+Start from branch `feature/empirical-model`. The simplest empirical model (proportional error, through-origin, single mu) is fitted and documented as a standalone script; `model_empirical` and `model_n_hv` are untouched. No config-pipeline MCMC / run bundle has been produced for the simple model.
 
 ## Next action
-Before running MCMC, discuss Karim's proposed use of the FE simulation data and decide whether the empirical shear multiplier should remain global, be angle-specific, or be replaced by a different FE-informed structural compliance/stiffness parameterisation. Then run a small experimental `model_empirical` inference, analyse the explicit run bundle, and inspect `posterior_generated_beta_grid_*`, `posterior_derived_slope_grid_*`, spaghetti grids, and diagnostics before deciding whether this parameterisation is viable.
+Decide with Karim whether to (1) keep iterating on the simplest model and build complexity onto it (his stated plan — "we're gonna start building on over it"), and/or (2) promote it to a config `model_type = "model_empirical_simple"` so it runs through `main.py` with reproducible run bundles and standard analysis/prediction outputs. Then take the next modelling step he specifies.
 
 ## Last safe commit
-Pending commit from this checkpoint should include only documentation/handoff updates. Leave unrelated local changes in `src/vis/plotting.py` alone unless Karim explicitly asks to commit them.
+This session's commit includes: `scripts/fe_functional_form.py` (new), `scripts/empirical_simple_model.py` (new), `docs/empirical_model.qmd` (FE + simple-model sections, reproducible chunks), `pyproject.toml`/`uv.lock` (docs jupyter group), and this handoff. Figures and `docs/_site/` are git-ignored and stay local. No changes to `src/` or configs.
