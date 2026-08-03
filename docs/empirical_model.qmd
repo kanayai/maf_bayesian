@@ -94,11 +94,11 @@ mu_s, sig_s = simple_res["mu"], simple_res["sigma"]
 c = simple_res["counts"]
 def _row(name, s):
     return (f"| {name} | {s.mean():.6f} | {s.std():.6f} | "
-            f"[{np.percentile(s,3):.6f}, {np.percentile(s,97):.6f}] |")
+            f"[{np.percentile(s,2.5):.6f}, {np.percentile(s,97.5):.6f}] |")
 tbl = ["**Posterior** (averaged data, $P\\le 10$ kN, "
        f"{simple_res['n_obs']} observations: "
        f"normal {c['v']}, shear {c['h']}):\n",
-       "| parameter | mean | sd | 94% HDI |",
+       "| parameter | mean | sd | 95% HDI |",
        "|---|---|---|---|",
        _row("$\\mu$", mu_s), _row("$\\sigma$", sig_s)]
 Markdown("\n".join(tbl))
@@ -113,7 +113,7 @@ scale.
 ```{python}
 #| label: fig-simple-pred
 #| echo: false
-#| fig-cap: "Simplest-model posterior predictions vs averaged experimental data (extension horizontal, load vertical): normal (top) and shear (bottom) at the three angles. Black line is the posterior mean; the darker band is the 94% credible interval for the mean and the lighter band the 94% posterior-predictive interval. Under the proportional error model the predictive band fans out with load (width $\\propto\\sqrt{P}$) and pinches to zero at the origin. The shear channel and the $45^\\circ/135^\\circ$ normal channels fit well; normal at $90^\\circ$ is predicted $\\approx 0$ (since $\\cos 90^\\circ = 0$) while the data show a small non-zero spread that the load-dependent $\\sigma$ absorbs."
+#| fig-cap: "Simplest-model posterior predictions vs averaged experimental data (extension horizontal, load vertical): normal (top) and shear (bottom) at the three angles. Black line is the posterior mean; the darker band is the 95% credible interval for the mean and the lighter band the 95% posterior-predictive interval. Under the proportional error model the predictive band fans out with load (width $\\propto\\sqrt{P}$) and pinches to zero at the origin. The shear channel and the $45^\\circ/135^\\circ$ normal channels fit well; normal at $90^\\circ$ is predicted $\\approx 0$ (since $\\cos 90^\\circ = 0$) while the data show a small non-zero spread that the load-dependent $\\sigma$ absorbs."
 from IPython.display import Image
 Image(filename=str(simple_res["fig"]))
 ```

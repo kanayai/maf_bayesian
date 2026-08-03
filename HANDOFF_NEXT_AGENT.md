@@ -1,4 +1,29 @@
 # Handoff — MAF Bayesian empirical workflow
+_Checkpoint 2026-08-03 (supersedes 2026-07-30 entry below, kept as history)_
+
+## Objective
+Build up complexity from the simplest empirical model (`scripts/empirical_simple_model.py`), starting from a Bayesian-refresher/explanation session — Karim is rusty on GP mechanics and CI-vs-predictive-interval distinctions, no new modelling step decided yet.
+
+## Done so far (2026-08-03)
+- Changed the credible/predictive interval convention from the ArviZ-default 94% (2.5th/97.5th... actually 3rd/97th percentile) to a proper 95% (2.5/97.5 percentile) in `scripts/empirical_simple_model.py` (posterior summary print + prediction-band plot) and `docs/empirical_model.qmd` (posterior table + figure caption).
+- Made the posterior-mean line in `predictions_vs_data.png` thinner (`lw=2.0` → `0.6`) so it doesn't visually cover the mean credible band, which is legitimately very narrow (mu's posterior sd ~1e-5).
+- Walked through (no code changes): the difference between the 95% mean-credible-interval vs 95% posterior-predictive interval in the simple model's figure; and, for `scripts/fe_functional_form.py`, that every shaded "band" in that folder's plots (`vs_load.png`, `vs_load_with_experiment.png`) is a material-parameter sensitivity band (300 uniform draws of E1/E2/v12/v23/G12 over their FE design range, pushed through the GP mean, 5th/95th percentile) — NOT GP posterior variance, which is never used. `v_vs_angle.png`/`h_vs_angle.png` are one-at-a-time low/nominal/high sweeps per material parameter; `vs_angle_nominal_extension.csv` is the nominal-theta numeric summary. Confirmed `GPSurrogate` is a hand-rolled anisotropic RBF GP (JAX, ARD lengthscales, type-II ML via L-BFGS-B, Cholesky solve, closed-form LOO-CV) whose `.predict()` returns posterior mean only.
+
+## Resume point
+`scripts/empirical_simple_model.py` and `docs/empirical_model.qmd` have the 95%-interval edit applied but **not yet re-run/re-rendered** — tree is dirty (see below). Run the script and re-render the qmd before trusting the printed numbers/figure.
+
+## Next action
+Re-run `uv run python scripts/empirical_simple_model.py` and re-render `docs/empirical_model.qmd` to refresh the 95% numbers/figure. Then decide with Karim which complexity to add first onto the simplest model (bias term? angle-dependent gamma instead of fixed cos/sin? hierarchical specimen effects?) — still open, same choice flagged in the 2026-07-30 entry below.
+
+## Last safe commit
+`1845e08` — **tree dirty**: `docs/empirical_model.qmd` and `scripts/empirical_simple_model.py` modified, uncommitted.
+
+## Blockers
+- None new. Modelling-direction choice (what to build onto the simple model) remains open per Karim.
+
+---
+
+# Handoff — MAF Bayesian empirical workflow (previous checkpoint)
 _Checkpoint 2026-07-30_
 
 ## Objective

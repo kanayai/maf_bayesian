@@ -129,7 +129,7 @@ def model(P, alpha, chan, y=None):
 
 def summarise(name, s):
     return (f"  {name:6s} mean={s.mean():.6f}  sd={s.std():.6f}  "
-            f"94% HDI=[{np.percentile(s,3):.6f}, {np.percentile(s,97):.6f}]")
+            f"95% HDI=[{np.percentile(s,2.5):.6f}, {np.percentile(s,97.5):.6f}]")
 
 
 # --------------------------------------------------------------------------- #
@@ -146,19 +146,19 @@ def plot_predictions(data, mu_s, sigma_s):
             # posterior of the mean line: P * trig * mu
             lines = np.outer(mu_s, P_grid * trig)          # (n_samples, n_grid)
             mean_line = lines.mean(0)
-            lo_m, hi_m = np.percentile(lines, [3, 97], axis=0)
+            lo_m, hi_m = np.percentile(lines, [2.5, 97.5], axis=0)
             # posterior predictive band: proportional noise, sd = sigma*sqrt(P).
             rng = np.random.default_rng(SEED)
             noise_sd = sigma_s[:, None] * np.sqrt(P_grid)[None, :]
             noise = rng.normal(0.0, 1.0, size=lines.shape) * noise_sd
             pred = lines + noise
-            lo_p, hi_p = np.percentile(pred, [3, 97], axis=0)
+            lo_p, hi_p = np.percentile(pred, [2.5, 97.5], axis=0)
 
             ax.fill_betweenx(P_grid, lo_p, hi_p, color="tab:orange", alpha=0.15,
-                             label="94% predictive")
+                             label="95% predictive")
             ax.fill_betweenx(P_grid, lo_m, hi_m, color="tab:orange", alpha=0.45,
-                             label="94% mean")
-            ax.plot(mean_line, P_grid, color="black", lw=2.0, label="posterior mean")
+                             label="95% mean")
+            ax.plot(mean_line, P_grid, color="black", lw=0.6, label="posterior mean")
             load, ext = data[d][a]
             ax.scatter(ext, load, s=8, color="tab:blue", alpha=0.5, label="experiment (avg)")
             ax.axvline(0.0, color="grey", lw=0.6, ls=":")
