@@ -60,6 +60,11 @@ NOMINAL_THETA = {
     "G12": 5115.0,
 }
 
+E1_REFERENCE_THETAS = {
+    "Irene E1": {"E1": 148800.0, "color": "tab:purple", "linestyle": "--"},
+    "Hexcel E1": {"E1": 161000.0, "color": "tab:green", "linestyle": "-."},
+}
+
 # Physical labels. v = normal extension, h = shear extension.
 DIRECTIONS = {"v": "Normal extension", "h": "Shear extension"}
 
@@ -322,6 +327,18 @@ def plot_vs_load(gps, ranges_by_dir, P_grid, overlay_experiment=False,
             ax.fill_betweenx(P_grid, gp_lo, gp_hi, color="tab:cyan", alpha=0.28,
                              label="GP 95% predictive at nominal theta")
             ax.plot(y_nom, P_grid, color="black", lw=0.6, label="FE nominal theta")
+            for label, spec in E1_REFERENCE_THETAS.items():
+                theta_ref = dict(NOMINAL_THETA)
+                theta_ref["E1"] = spec["E1"]
+                y_ref = gp.predict(make_rows(P_grid, arad, theta_ref))
+                ax.plot(
+                    y_ref,
+                    P_grid,
+                    color=spec["color"],
+                    ls=spec["linestyle"],
+                    lw=1.2,
+                    label=f"FE {label}",
+                )
             if overlay_experiment:
                 for j, (load_e, ext_e) in enumerate(load_experimental(direction, ang)):
                     ax.scatter(ext_e, load_e, s=8, color="tab:blue", alpha=0.5,
@@ -335,7 +352,7 @@ def plot_vs_load(gps, ranges_by_dir, P_grid, overlay_experiment=False,
     extra = " with experimental data" if overlay_experiment else ""
     fig.suptitle(
         f"Extension vs load at the experimental angles{extra} "
-        "(top: normal; bottom: shear; orange = FE-range spread; blue = GP interval)",
+        "(top: normal; bottom: shear; lines = nominal/Irene/Hexcel E1 slices)",
         fontsize=12,
     )
     fig.tight_layout(rect=[0, 0, 1, 0.96])

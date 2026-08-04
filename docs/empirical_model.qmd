@@ -399,11 +399,14 @@ ff.main()  # fits the surrogates and writes all figures + the CSV
 *   **Extension vs load** (`vs_load.png`): a single combined figure with the
     normal direction on the top row and the shear direction on the bottom row, and
     the three experimental angles $45^\circ, 90^\circ, 135^\circ$ across the
-    columns. The black line is the nominal-$\theta$ prediction. The orange band
-    is the $5$–$95\%$ envelope obtained by sampling *all* uncontrollables uniformly
-    across their FE design ranges. The blue band is the GP's own $2.5$–$97.5\%$
-    posterior predictive interval at nominal $\theta$, using the fitted normal
-    distribution from the GP surrogate.
+    columns. The black line is the nominal-$\theta$ prediction, using
+    $E_1=154900$ MPa. The dashed purple line uses the Irene value
+    $E_1=148800$ MPa and the dash-dot green line uses the Hexcel value
+    $E_1=161000$ MPa, with the other four material parameters fixed at their
+    nominal values. The orange band is the $5$–$95\%$ envelope obtained by
+    sampling *all* uncontrollables uniformly across their FE design ranges. The
+    blue band is the GP's own $2.5$–$97.5\%$ posterior predictive interval at
+    nominal $\theta$, using the fitted normal distribution from the GP surrogate.
 *   **Extension vs load, with experiment** (`vs_load_with_experiment.png`): the
     same combined layout with the measured experimental load-extension points
     (DIC sensors averaged, matching the FE convention) scattered on each panel.
@@ -454,7 +457,7 @@ Image(filename=str(ff.OUTDIR / "h_vs_angle.png"))
 ```{python}
 #| label: fig-vs-load
 #| echo: false
-#| fig-cap: "Extension vs load at the experimental angles: normal (top row) and shear (bottom row). Black line is the nominal-$\\theta$ prediction; orange is the $5$–$95\\%$ spread as all uncontrollables vary over their FE ranges; blue is the GP $2.5$–$97.5\\%$ posterior predictive interval at nominal $\\theta$."
+#| fig-cap: "Extension vs load at the experimental angles: normal (top row) and shear (bottom row). Mean-GP slices are shown for nominal $E_1=154900$ MPa (black), Irene $E_1=148800$ MPa (dashed purple), and Hexcel $E_1=161000$ MPa (dash-dot green), with the other material parameters fixed at nominal values. Orange is the $5$–$95\\%$ spread as all uncontrollables vary over their FE ranges; blue is the GP $2.5$–$97.5\\%$ posterior predictive interval at nominal $\\theta$."
 Image(filename=str(ff.OUTDIR / "vs_load.png"))
 ```
 
