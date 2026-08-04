@@ -321,7 +321,7 @@ def plot_vs_load(gps, ranges_by_dir, P_grid, overlay_experiment=False,
                              label="FE 5-95% over uncontrollables")
             ax.fill_betweenx(P_grid, gp_lo, gp_hi, color="tab:cyan", alpha=0.28,
                              label="GP 95% predictive at nominal theta")
-            ax.plot(y_nom, P_grid, color="black", lw=2.0, label="FE nominal theta")
+            ax.plot(y_nom, P_grid, color="black", lw=0.6, label="FE nominal theta")
             if overlay_experiment:
                 for j, (load_e, ext_e) in enumerate(load_experimental(direction, ang)):
                     ax.scatter(ext_e, load_e, s=8, color="tab:blue", alpha=0.5,
