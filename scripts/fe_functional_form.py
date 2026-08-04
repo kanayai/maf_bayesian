@@ -15,8 +15,8 @@ and sweep the controllables.
 Outputs four figures to ``figures/fe_functional_form/`` (git-ignored):
   1. normal extension vs angle   (per-uncontrollable low/nominal/high sweep)
   2. shear  extension vs angle   (per-uncontrollable low/nominal/high sweep)
-  3. normal extension vs load    (per experimental angle, uncontrollable envelope)
-  4. shear  extension vs load    (per experimental angle, uncontrollable envelope)
+  3. extension vs load           (uncontrollable envelope + GP interval)
+  4. extension vs load + experiment
 
 Run: ``uv run python scripts/fe_functional_form.py``
 """
@@ -32,6 +32,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import jax
 import jax.numpy as jnp
+from scipy.stats import norm
 from scipy.optimize import minimize
 
 jax.config.update("jax_enable_x64", True)
@@ -187,6 +188,27 @@ class GPSurrogate:
         mean_s = Ks @ self._alpha
         return np.asarray(mean_s) * self.y_std + self.y_mean
 
+    def predict_interval(self, Xnew, level=0.95, include_noise=True):
+        """Normal GP interval at raw inputs Xnew, returned in physical units.
+
+        If include_noise is True, this is the posterior predictive interval for
+        a new FE output. If False, it is the latent-mean uncertainty interval.
+        """
+        Xs = jnp.asarray((np.asarray(Xnew) - self.x_mean) / self.x_std)
+        log_ls, log_sf2, log_sn2 = (
+            self.params[: self.d], self.params[self.d], self.params[self.d + 1]
+        )
+        Ks = self._kernel(Xs, self.Xs, log_ls, log_sf2)
+        mean_s = Ks @ self._alpha
+        v = jax.scipy.linalg.solve_triangular(self._L, Ks.T, lower=True)
+        var_s = jnp.exp(log_sf2) - jnp.sum(v**2, axis=0)
+        if include_noise:
+            var_s = var_s + jnp.exp(log_sn2)
+        sd = np.sqrt(np.maximum(np.asarray(var_s), 0.0)) * self.y_std
+        mean = np.asarray(mean_s) * self.y_std + self.y_mean
+        z = norm.ppf(0.5 + level / 2.0)
+        return mean, mean - z * sd, mean + z * sd
+
     def loo_r2(self):
         """Closed-form GP leave-one-out CV R^2 (in standardised space == same R^2)."""
         Kinv = jnp.linalg.inv(self._K)
@@ -284,7 +306,10 @@ def plot_vs_load(gps, ranges_by_dir, P_grid, overlay_experiment=False,
         }
         for ax, ang in zip(axes[r], EXP_ANGLES_DEG):
             arad = np.radians(ang)
-            y_nom = gp.predict(make_rows(P_grid, arad, NOMINAL_THETA))
+            X_nom = make_rows(P_grid, arad, NOMINAL_THETA)
+            y_nom, gp_lo, gp_hi = gp.predict_interval(
+                X_nom, level=0.95, include_noise=True
+            )
             preds = np.empty((n_env, P_grid.size))
             for k in range(n_env):
                 theta_k = {t: theta_samples[t][k] for t in THETA_NAMES}
@@ -294,6 +319,8 @@ def plot_vs_load(gps, ranges_by_dir, P_grid, overlay_experiment=False,
             # Axes swapped: extension on x, load on y.
             ax.fill_betweenx(P_grid, lo, hi, color="tab:orange", alpha=0.25,
                              label="FE 5-95% over uncontrollables")
+            ax.fill_betweenx(P_grid, gp_lo, gp_hi, color="tab:cyan", alpha=0.28,
+                             label="GP 95% predictive at nominal theta")
             ax.plot(y_nom, P_grid, color="black", lw=2.0, label="FE nominal theta")
             if overlay_experiment:
                 for j, (load_e, ext_e) in enumerate(load_experimental(direction, ang)):
@@ -308,7 +335,7 @@ def plot_vs_load(gps, ranges_by_dir, P_grid, overlay_experiment=False,
     extra = " with experimental data" if overlay_experiment else ""
     fig.suptitle(
         f"Extension vs load at the experimental angles{extra} "
-        "(top: normal; bottom: shear; band = FE-range spread of uncontrollables)",
+        "(top: normal; bottom: shear; orange = FE-range spread; blue = GP interval)",
         fontsize=12,
     )
     fig.tight_layout(rect=[0, 0, 1, 0.96])
